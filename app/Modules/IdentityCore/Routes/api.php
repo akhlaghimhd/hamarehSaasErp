@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Modules\IdentityCore\Controllers\RoleController;
+use App\Modules\IdentityCore\Controllers\PermissionController;
 use App\Modules\IdentityCore\Controllers\AuthController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
@@ -13,14 +14,26 @@ Route::prefix('identity')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
     });
 
-    // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت)
+    // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت + Permission)
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum'])->group(function () {
+
+        // Permissions
+        Route::get('/permissions', [PermissionController::class, 'index'])
+            ->middleware('permission:identity.permission.view');
+
+        // Roles
         Route::prefix('roles')->group(function () {
-            Route::get('/', [RoleController::class, 'index']);
-            Route::post('/', [RoleController::class, 'store']);
-            Route::post('/assign', [RoleController::class, 'assign']);
-            Route::post('/assign-permissions', [RoleController::class, 'assignPermissions']);
+            Route::get('/', [RoleController::class, 'index'])
+                ->middleware('permission:identity.role.view');
+
+            Route::post('/', [RoleController::class, 'store'])
+                ->middleware('permission:identity.role.create');
+
+            Route::post('/assign', [RoleController::class, 'assign'])
+                ->middleware('permission:identity.role.assign');
+
+            Route::post('/assign-permissions', [RoleController::class, 'assignPermissions'])
+                ->middleware('permission:identity.role.assign-permissions');
         });
     });
-
 });

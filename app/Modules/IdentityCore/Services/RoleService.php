@@ -8,6 +8,7 @@ use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
+use App\Modules\IdentityCore\Models\TenantPermission;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Cache;
@@ -22,9 +23,23 @@ class RoleService
      */
     public function listRoles(): Collection
     {
-        $this->getTenantId(); // اطمینان از وجود Tenant Context
+        $this->getTenantId();
 
         return TenantRole::query()
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
+     * لیست مجوزهای مستأجر جاری
+     */
+    public function listPermissions(): Collection
+    {
+        $this->getTenantId();
+
+        return TenantPermission::query()
+            ->where('status', 1)
+            ->orderBy('module_name')
             ->orderBy('code')
             ->get();
     }
@@ -83,6 +98,7 @@ class RoleService
                 ]
             );
 
+            // Invalidate only the affected user's permission cache
             Cache::tags(["tenant:{$tenantId}"])->forget("user_permissions:{$dto->userId}");
 
             return $userRole;
@@ -119,6 +135,7 @@ class RoleService
                 'permission_ids'  => $dto->permissionIds,
             ]);
 
+            // Flush all permission caches of this tenant (roles affect multiple users)
             Cache::tags(["tenant:{$tenantId}"])->flush();
         });
     }
