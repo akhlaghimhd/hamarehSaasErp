@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Base\Http\Middleware\TenantContextMiddleware;
+use App\Base\Http\Middleware\RequirePermission;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -14,14 +15,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         
-        // ثبت میدل‌ور مدیریت کانتکست شرکت با نام مستعار
+        // ثبت میدل‌ورهای مشترک با نام مستعار
         $middleware->alias([
             'tenant.context' => TenantContextMiddleware::class,
+            'permission'     => RequirePermission::class,
         ]);
 
     })
     ->withCommands([
-        __DIR__.'/../app/Base/Console/Commands', // 🔴 اضافه شدن مسیر کامندهای Base
+        __DIR__.'/../app/Base/Console/Commands',
     ])
     ->withExceptions(function (Exceptions $exceptions) {
         //
