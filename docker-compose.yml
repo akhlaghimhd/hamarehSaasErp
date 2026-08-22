@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: hamareherp-php
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    tty: true
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    networks:
+      - hamareh-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hamareherp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hamareh_saas_core
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: rootpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hamareh-network
+
+networks:
+  hamareh-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

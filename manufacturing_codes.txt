@@ -1,0 +1,1427 @@
+﻿
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\BomController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreBomRequest;
+use App\Modules\Manufacturing\Services\BomService;
+use Illuminate\Http\JsonResponse;
+
+class BomController extends Controller
+{
+    public function __construct(private readonly BomService $bomService) {}
+
+    public function store(StoreBomRequest $request): JsonResponse
+    {
+        $bom = $this->bomService->createBom($request->toDTO());
+
+        return response()->json([
+            'message' => 'BOM created successfully.',
+            'data' => $bom
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\BomItemController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreBomItemRequest;
+use App\Modules\Manufacturing\DTOs\BomItemDTO;
+use App\Modules\Manufacturing\Services\BomItemService;
+use Illuminate\Http\JsonResponse;
+
+class BomItemController extends Controller
+{
+    public function __construct(
+        private readonly BomItemService $bomItemService
+    ) {}
+
+    public function store(StoreBomItemRequest $request): JsonResponse
+    {
+        $dto = BomItemDTO::fromRequest($request);
+        $bomItem = $this->bomItemService->addBomItem($dto);
+
+        return response()->json([
+            'message' => 'Material successfully added to BOM.',
+            'data' => $bomItem
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\ProductionLogController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreProductionLogRequest;
+use App\Modules\Manufacturing\DTOs\ProductionLogDTO;
+use App\Modules\Manufacturing\Services\ProductionLogService;
+use Illuminate\Http\JsonResponse;
+
+class ProductionLogController extends Controller
+{
+    public function __construct(
+        private readonly ProductionLogService $productionLogService
+    ) {}
+
+    public function store(StoreProductionLogRequest $request): JsonResponse
+    {
+        $dto = ProductionLogDTO::fromRequest($request);
+        $log = $this->productionLogService->createLog($dto);
+
+        return response()->json([
+            'message' => 'Production Log successfully recorded.',
+            'data' => $log
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\ProductionOrderController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreProductionOrderRequest;
+use App\Modules\Manufacturing\DTOs\ProductionOrderDTO;
+use App\Modules\Manufacturing\Services\ProductionOrderService;
+use Illuminate\Http\JsonResponse;
+
+class ProductionOrderController extends Controller
+{
+    public function __construct(
+        private readonly ProductionOrderService $productionOrderService
+    ) {}
+
+    public function store(StoreProductionOrderRequest $request): JsonResponse
+    {
+        $dto = ProductionOrderDTO::fromRequest($request);
+        $productionOrder = $this->productionOrderService->createProductionOrder($dto);
+
+        return response()->json([
+            'message' => 'Production Order successfully created.',
+            'data' => $productionOrder
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\ProductionRoutingController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreProductionRoutingRequest;
+use App\Modules\Manufacturing\DTOs\ProductionRoutingDTO;
+use App\Modules\Manufacturing\Services\ProductionRoutingService;
+use Illuminate\Http\JsonResponse;
+
+class ProductionRoutingController extends Controller
+{
+    public function __construct(
+        private readonly ProductionRoutingService $productionRoutingService
+    ) {}
+
+    public function store(StoreProductionRoutingRequest $request): JsonResponse
+    {
+        $dto = ProductionRoutingDTO::fromRequest($request);
+        $routing = $this->productionRoutingService->createRouting($dto);
+
+        return response()->json([
+            'message' => 'Production Routing successfully created.',
+            'data' => $routing
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\QualityInspectionController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreQualityInspectionRequest;
+use App\Modules\Manufacturing\DTOs\QualityInspectionDTO;
+use App\Modules\Manufacturing\Services\QualityInspectionService;
+use Illuminate\Http\JsonResponse;
+
+class QualityInspectionController extends Controller
+{
+    public function __construct(
+        private readonly QualityInspectionService $qualityInspectionService
+    ) {}
+
+    public function store(StoreQualityInspectionRequest $request): JsonResponse
+    {
+        $dto = QualityInspectionDTO::fromRequest($request);
+        $inspection = $this->qualityInspectionService->recordInspection($dto);
+
+        return response()->json([
+            'message' => 'Quality Inspection successfully recorded.',
+            'data' => $inspection
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Controllers\WorkCenterController.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Controllers;
+
+use App\Base\Controller;
+use App\Modules\Manufacturing\Requests\StoreWorkCenterRequest;
+use App\Modules\Manufacturing\Services\WorkCenterService;
+use Illuminate\Http\JsonResponse;
+
+class WorkCenterController extends Controller
+{
+    public function __construct(
+        private readonly WorkCenterService $workCenterService
+    ) {}
+
+    public function store(StoreWorkCenterRequest $request): JsonResponse
+    {
+        // Controller ONLY validates request, maps to DTO, and calls Service
+        $dto = $request->toDTO();
+        
+        $workCenter = $this->workCenterService->createWorkCenter($dto);
+
+        return response()->json([
+            'message' => 'Work center created successfully.',
+            'data' => $workCenter
+        ], 201);
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\BomDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+readonly class BomDTO
+{
+    /**
+     * @param BomItemDTO[] $items
+     */
+    public function __construct(
+        public string $item_id,
+        public string $bom_code,
+        public int $version_number,
+        public bool $is_active,
+        public float $batch_size,
+        public ?string $description,
+        public int $status,
+        public string $created_by,
+        public array $items
+    ) {}
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\BomItemDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+readonly class BomItemDTO
+{
+    public function __construct(
+        public string $component_item_id,
+        public string $uom_id,
+        public float $quantity,
+        public float $scrap_percentage,
+        public int $sort_order
+    ) {}
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\ProductionLogDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+use App\Modules\Manufacturing\Requests\StoreProductionLogRequest;
+
+readonly class ProductionLogDTO
+{
+    public function __construct(
+        public string $productionOrderId,
+        public ?string $routingId,
+        public int $logType,
+        public ?string $itemId,
+        public float $quantityConsumed,
+        public float $hoursSpent,
+        public string $loggedAt
+    ) {}
+
+    public static function fromRequest(StoreProductionLogRequest $request): self
+    {
+        return new self(
+            productionOrderId: $request->validated('production_order_id'),
+            routingId: $request->validated('routing_id'),
+            logType: (int) $request->validated('log_type'),
+            itemId: $request->validated('item_id'),
+            quantityConsumed: (float) $request->validated('quantity_consumed', 0.0000),
+            hoursSpent: (float) $request->validated('hours_spent', 0.0000),
+            loggedAt: $request->validated('logged_at')
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\ProductionOrderDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+use App\Modules\Manufacturing\Requests\StoreProductionOrderRequest;
+
+readonly class ProductionOrderDTO
+{
+    public function __construct(
+        public string $orderNumber,
+        public string $itemId,
+        public string $bomId,
+        public float $plannedQuantity,
+        public string $startDate,
+        public ?string $endDate,
+        public int $status
+    ) {}
+
+    public static function fromRequest(StoreProductionOrderRequest $request): self
+    {
+        return new self(
+            orderNumber: $request->validated('order_number'),
+            itemId: $request->validated('item_id'),
+            bomId: $request->validated('bom_id'),
+            plannedQuantity: (float) $request->validated('planned_quantity'),
+            startDate: $request->validated('start_date'),
+            endDate: $request->validated('end_date'),
+            status: (int) $request->validated('status', 1) // ظ¾غŒط´â€Œظپط±ط¶ Draft
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\ProductionRoutingDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+use App\Modules\Manufacturing\Requests\StoreProductionRoutingRequest;
+
+readonly class ProductionRoutingDTO
+{
+    public function __construct(
+        public string $productionOrderId,
+        public string $workCenterId,
+        public int $operationSequence,
+        public string $operationName,
+        public float $standardSetupTimeHours,
+        public float $standardRunTimeHours,
+        public int $status
+    ) {}
+
+    public static function fromRequest(StoreProductionRoutingRequest $request): self
+    {
+        return new self(
+            productionOrderId: $request->validated('production_order_id'),
+            workCenterId: $request->validated('work_center_id'),
+            operationSequence: (int) $request->validated('operation_sequence'),
+            operationName: $request->validated('operation_name'),
+            standardSetupTimeHours: (float) $request->validated('standard_setup_time_hours', 0.0000),
+            standardRunTimeHours: (float) $request->validated('standard_run_time_hours', 0.0000),
+            status: (int) $request->validated('status', 1)
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\QualityInspectionDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+use App\Modules\Manufacturing\Requests\StoreQualityInspectionRequest;
+
+readonly class QualityInspectionDTO
+{
+    public function __construct(
+        public int $inspectionType,
+        public ?string $sourceDocumentType,
+        public ?string $sourceDocumentId,
+        public string $itemId,
+        public ?string $batchId,
+        public string $inspectionNumber,
+        public string $inspectionDate,
+        public string $inspectorUserId,
+        public float $sampleQuantity,
+        public float $acceptedQuantity,
+        public float $rejectedQuantity,
+        public int $qcStatus,
+        public ?string $notes
+    ) {}
+
+    public static function fromRequest(StoreQualityInspectionRequest $request): self
+    {
+        return new self(
+            inspectionType: (int) $request->validated('inspection_type'),
+            sourceDocumentType: $request->validated('source_document_type'),
+            sourceDocumentId: $request->validated('source_document_id'),
+            itemId: $request->validated('item_id'),
+            batchId: $request->validated('batch_id'),
+            inspectionNumber: $request->validated('inspection_number'),
+            inspectionDate: $request->validated('inspection_date'),
+            inspectorUserId: $request->validated('inspector_user_id'),
+            sampleQuantity: (float) $request->validated('sample_quantity'),
+            acceptedQuantity: (float) $request->validated('accepted_quantity'),
+            rejectedQuantity: (float) $request->validated('rejected_quantity'),
+            qcStatus: (int) $request->validated('qc_status'),
+            notes: $request->validated('notes')
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\DTOs\WorkCenterDTO.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\DTOs;
+
+readonly class WorkCenterDTO
+{
+    public function __construct(
+        public string $code,
+        public string $name,
+        public float $capacity_hours_per_day,
+        public float $efficiency_percentage,
+        public float $cost_per_hour,
+        public int $status,
+        public string $created_by
+    ) {}
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\Bom.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Base\Traits\TenantScoped;
+
+class Bom extends Model
+{
+    use HasUuids, SoftDeletes, TenantScoped;
+
+    protected $table = 'mfg_boms';
+    protected $primaryKey = 'bom_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'item_id',
+        'bom_code',
+        'version_number',
+        'is_active',
+        'batch_size',
+        'description',
+        'status',
+        'created_by',
+        'updated_by',
+        'row_version'
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'batch_size' => 'decimal:4',
+        'version_number' => 'integer',
+        'status' => 'integer',
+        'row_version' => 'integer',
+    ];
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(BomItem::class, 'bom_id', 'bom_id');
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\BomItem.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class BomItem extends Model
+{
+    use HasUuids; // TenantScoped is inherently applied via BOM parent association context, but can be added if needed for direct queries.
+
+    protected $table = 'mfg_bom_items';
+    protected $primaryKey = 'bom_item_id';
+    
+    // No SoftDeletes as per schema definitions (deleted_at is absent)
+    public $timestamps = true;
+
+    protected $fillable = [
+        'bom_id',
+        'tenant_id',
+        'component_item_id',
+        'uom_id',
+        'quantity',
+        'scrap_percentage',
+        'sort_order',
+        'created_by',
+        'row_version'
+    ];
+
+    protected $casts = [
+        'quantity' => 'decimal:4',
+        'scrap_percentage' => 'decimal:4',
+        'sort_order' => 'integer',
+        'row_version' => 'integer',
+    ];
+
+    public function bom(): BelongsTo
+    {
+        return $this->belongsTo(Bom::class, 'bom_id', 'bom_id');
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\ProductionLog.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Base\Traits\TenantScoped;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ProductionLog extends Model
+{
+    use HasUuids, TenantScoped;
+
+    protected $table = 'mfg_production_logs';
+    
+    protected $primaryKey = 'production_log_id';
+
+    public $timestamps = false; // ط·ط¨ظ‚ ظ…ط§غŒع¯ط±غŒط´ظ† ظپظ‚ط· logged_at ط§ط³طھظپط§ط¯ظ‡ ظ…غŒâ€Œط´ظˆط¯
+
+    protected $fillable = [
+        'tenant_id',
+        'production_order_id', // Physical FK
+        'routing_id',          // Optional Physical FK
+        'log_type',            // 1: Material Consumption, 2: Labor/Machine Time, 3: Scrap
+        'item_id',             // Logical Reference to MasterData (inv_items)
+        'quantity_consumed',
+        'hours_spent',
+        'logged_at'
+    ];
+
+    protected $casts = [
+        'log_type' => 'integer',
+        'quantity_consumed' => 'decimal:4',
+        'hours_spent' => 'decimal:4',
+        'logged_at' => 'datetime',
+    ];
+
+    public function productionOrder(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOrder::class, 'production_order_id', 'production_order_id');
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\ProductionOrder.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Base\Traits\TenantScoped;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ProductionOrder extends Model
+{
+    use HasUuids, SoftDeletes, TenantScoped;
+
+    protected $table = 'mfg_production_orders';
+    
+    protected $primaryKey = 'production_order_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'order_number',
+        'item_id', // Logical Reference to MasterData (inv_items)
+        'bom_id',  // Physical FK to mfg_boms
+        'planned_quantity',
+        'produced_quantity',
+        'start_date',
+        'end_date',
+        'status', // 1: Draft, 2: Released, 3: In Progress, 4: Completed, 5: Cancelled
+        'row_version',
+        'created_by',
+        'updated_by'
+    ];
+
+    protected $casts = [
+        'planned_quantity' => 'decimal:4',
+        'produced_quantity' => 'decimal:4',
+        'start_date' => 'datetime',
+        'end_date' => 'datetime',
+        'status' => 'integer',
+        'row_version' => 'integer',
+    ];
+
+    /**
+     * ط§ط±طھط¨ط§ط· ط¨ط§ ط³ط±ط¨ط±ع¯ ظپط±ظ…ظˆظ„ط§ط³غŒظˆظ† (BOM)
+     */
+    public function bom(): BelongsTo
+    {
+        return $this->belongsTo(Bom::class, 'bom_id', 'bom_id');
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\ProductionRouting.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Base\Traits\TenantScoped;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class ProductionRouting extends Model
+{
+    use HasUuids, TenantScoped;
+
+    protected $table = 'mfg_production_routing';
+    
+    protected $primaryKey = 'routing_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'production_order_id', // Physical FK
+        'work_center_id',      // Physical FK
+        'operation_sequence',
+        'operation_name',
+        'standard_setup_time_hours',
+        'standard_run_time_hours',
+        'status', // 1: Pending, 2: Active, 3: Completed
+        'row_version',
+        'created_by',
+        'updated_by'
+    ];
+
+    protected $casts = [
+        'operation_sequence' => 'integer',
+        'standard_setup_time_hours' => 'decimal:4',
+        'standard_run_time_hours' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
+    ];
+
+    public function productionOrder(): BelongsTo
+    {
+        return $this->belongsTo(ProductionOrder::class, 'production_order_id', 'production_order_id');
+    }
+
+    public function workCenter(): BelongsTo
+    {
+        return $this->belongsTo(WorkCenter::class, 'work_center_id', 'work_center_id');
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\QualityInspection.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Base\Traits\TenantScoped;
+
+class QualityInspection extends Model
+{
+    use HasUuids, SoftDeletes, TenantScoped;
+
+    protected $table = 'mfg_quality_inspections';
+    
+    protected $primaryKey = 'inspection_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'inspection_type', // 1: Incoming, 2: Production Output, 3: Final Product
+        'source_document_type', // e.g., PRODUCTION_ORDER, PURCHASE_RECEIPT
+        'source_document_id', // Logical Reference
+        'item_id', // Logical Reference to inv_items
+        'batch_id', // Logical Reference to inv_stock_batches
+        'inspection_number',
+        'inspection_date',
+        'inspector_user_id', // Logical Reference to Identity layer
+        'sample_quantity',
+        'accepted_quantity',
+        'rejected_quantity',
+        'qc_status', // 1: Pending, 2: Approved, 3: Rejected, 4: Quarantine
+        'notes',
+        'row_version',
+        'created_by',
+        'updated_by'
+    ];
+
+    protected $casts = [
+        'inspection_type' => 'integer',
+        'inspection_date' => 'datetime',
+        'sample_quantity' => 'decimal:4',
+        'accepted_quantity' => 'decimal:4',
+        'rejected_quantity' => 'decimal:4',
+        'qc_status' => 'integer',
+        'row_version' => 'integer',
+    ];
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Models\WorkCenter.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use App\Base\Traits\TenantScoped;
+
+class WorkCenter extends Model
+{
+    use HasUuids, SoftDeletes, TenantScoped;
+
+    protected $table = 'mfg_work_centers';
+    protected $primaryKey = 'work_center_id';
+
+    protected $fillable = [
+        'tenant_id',
+        'code',
+        'name',
+        'capacity_hours_per_day',
+        'efficiency_percentage',
+        'cost_per_hour',
+        'status',
+        'created_by',
+        'row_version'
+    ];
+
+    protected $casts = [
+        'capacity_hours_per_day' => 'decimal:4',
+        'efficiency_percentage' => 'decimal:4',
+        'cost_per_hour' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
+    ];
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreBomItemRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreBomItemRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'bom_id' => ['required', 'uuid', 'exists:mfg_boms,bom_id'], // ط¨ط±ط±ط³غŒ ظˆط¬ظˆط¯ ط³ط±ط¨ط±ع¯ ظپط±ظ…ظˆظ„
+            'item_id' => ['required', 'uuid'], // ط´ظ†ط§ط³ظ‡ ظ…ظ†ط·ظ‚غŒ ع©ط§ظ„ط§ ط§ط² MasterData
+            'quantity' => ['required', 'numeric', 'min:0.0001'],
+            'scrap_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ];
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreBomRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use App\Modules\Manufacturing\DTOs\BomDTO;
+use App\Modules\Manufacturing\DTOs\BomItemDTO;
+
+class StoreBomRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'item_id' => ['required', 'uuid'],
+            'bom_code' => ['required', 'string', 'max:100'],
+            'version_number' => ['required', 'integer', 'min:1'],
+            'is_active' => ['required', 'boolean'],
+            'batch_size' => ['required', 'numeric', 'min:0.0001'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'status' => ['required', 'integer', 'in:1,2,3'], // 1: Draft, 2: Approved, 3: Obsolete
+            'items' => ['required', 'array', 'min:1'],
+            'items.*.component_item_id' => ['required', 'uuid'],
+            'items.*.uom_id' => ['required', 'uuid'],
+            'items.*.quantity' => ['required', 'numeric', 'min:0.0001'],
+            'items.*.scrap_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'items.*.sort_order' => ['required', 'integer', 'min:0'],
+        ];
+    }
+
+    public function toDTO(): BomDTO
+    {
+        $itemsDTO = array_map(function ($item) {
+            return new BomItemDTO(
+                component_item_id: $item['component_item_id'],
+                uom_id: $item['uom_id'],
+                quantity: (float) $item['quantity'],
+                scrap_percentage: (float) $item['scrap_percentage'],
+                sort_order: (int) $item['sort_order']
+            );
+        }, $this->validated('items'));
+
+        return new BomDTO(
+            item_id: $this->validated('item_id'),
+            bom_code: $this->validated('bom_code'),
+            version_number: (int) $this->validated('version_number'),
+            is_active: (bool) $this->validated('is_active'),
+            batch_size: (float) $this->validated('batch_size'),
+            description: $this->validated('description'),
+            status: (int) $this->validated('status'),
+            created_by: auth()->id(),
+            items: $itemsDTO
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreProductionLogRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreProductionLogRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'production_order_id' => ['required', 'uuid', 'exists:mfg_production_orders,production_order_id'],
+            'routing_id' => ['nullable', 'uuid'], // ط¯ط± طµظˆط±طھ ظˆط¬ظˆط¯ ظ…ط³غŒط±ط¯ظ‡غŒ
+            'log_type' => ['required', 'integer', 'in:1,2,3'],
+            'item_id' => ['nullable', 'uuid', 'required_if:log_type,1,3'], // ع©ط§ظ„ط§ ظپظ‚ط· ط¯ط± ظ…طµط±ظپ ظˆ ط¶ط§غŒط¹ط§طھ ط§ظ„ط²ط§ظ…غŒ ط§ط³طھ
+            'quantity_consumed' => ['nullable', 'numeric', 'min:0', 'required_if:log_type,1,3'],
+            'hours_spent' => ['nullable', 'numeric', 'min:0', 'required_if:log_type,2'],
+            'logged_at' => ['required', 'date'],
+        ];
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreProductionOrderRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreProductionOrderRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'order_number' => ['required', 'string', 'max:100'],
+            'item_id' => ['required', 'uuid'], // ط§ط±ط¬ط§ط¹ ظ…ظ†ط·ظ‚غŒ ط¨ظ‡ ع©ط§ظ„ط§
+            'bom_id' => ['required', 'uuid', 'exists:mfg_boms,bom_id'], // ط¨ط±ط±ط³غŒ ظˆط¬ظˆط¯ BOM
+            'planned_quantity' => ['required', 'numeric', 'min:0.0001'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'status' => ['nullable', 'integer', 'in:1,2,3,4,5'],
+        ];
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreProductionRoutingRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreProductionRoutingRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'production_order_id' => ['required', 'uuid', 'exists:mfg_production_orders,production_order_id'],
+            'work_center_id' => ['required', 'uuid', 'exists:mfg_work_centers,work_center_id'],
+            'operation_sequence' => ['required', 'integer', 'min:1'],
+            'operation_name' => ['required', 'string', 'max:200'],
+            'standard_setup_time_hours' => ['nullable', 'numeric', 'min:0'],
+            'standard_run_time_hours' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['nullable', 'integer', 'in:1,2,3'],
+        ];
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreQualityInspectionRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreQualityInspectionRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'inspection_type' => ['required', 'integer', 'in:1,2,3'],
+            'source_document_type' => ['nullable', 'string', 'max:100'],
+            'source_document_id' => ['nullable', 'uuid'],
+            'item_id' => ['required', 'uuid'],
+            'batch_id' => ['nullable', 'uuid'],
+            'inspection_number' => ['required', 'string', 'max:100'],
+            'inspection_date' => ['required', 'date'],
+            'inspector_user_id' => ['required', 'uuid'],
+            'sample_quantity' => ['required', 'numeric', 'min:0'],
+            'accepted_quantity' => ['required', 'numeric', 'min:0'],
+            'rejected_quantity' => ['required', 'numeric', 'min:0'],
+            'qc_status' => ['required', 'integer', 'in:1,2,3,4'],
+            'notes' => ['nullable', 'string'],
+        ];
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Requests\StoreWorkCenterRequest.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+use App\Modules\Manufacturing\DTOs\WorkCenterDTO;
+
+class StoreWorkCenterRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'code' => ['required', 'string', 'max:50'],
+            'name' => ['required', 'string', 'max:200'],
+            'capacity_hours_per_day' => ['required', 'numeric', 'min:0'],
+            'efficiency_percentage' => ['required', 'numeric', 'min:0', 'max:100'],
+            'cost_per_hour' => ['required', 'numeric', 'min:0'],
+            'status' => ['required', 'integer', 'in:1,2,3'],
+        ];
+    }
+
+    public function toDTO(): WorkCenterDTO
+    {
+        return new WorkCenterDTO(
+            code: $this->validated('code'),
+            name: $this->validated('name'),
+            capacity_hours_per_day: (float) $this->validated('capacity_hours_per_day'),
+            efficiency_percentage: (float) $this->validated('efficiency_percentage'),
+            cost_per_hour: (float) $this->validated('cost_per_hour'),
+            status: (int) $this->validated('status'),
+            created_by: auth()->id() ?? '' // ط¬ظ„ظˆع¯غŒط±غŒ ط§ط² ظ†ط§ظ„ ط¨ظˆط¯ظ† ط¯ط± ظ…ط­غŒط·â€Œظ‡ط§غŒ ط¨ط¯ظˆظ† auth (طھط³طھ)
+        );
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Routes\api.php ===
+
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Modules\Manufacturing\Controllers\WorkCenterController;
+use App\Modules\Manufacturing\Controllers\BomController;
+
+/*
+|--------------------------------------------------------------------------
+| Manufacturing Module API Routes
+|--------------------------------------------------------------------------
+|
+| All manufacturing domain endpoints are defined here.
+| Foreign keys across modules are prohibited (logical UUID references only).
+| Tenant context is enforced via 'tenant' middleware.
+|
+*/
+
+Route::prefix('api/manufacturing')->middleware(['api', 'auth:sanctum', 'tenant'])->group(function () {
+
+    // --------------------------------------------------------------------
+    // Work Centers (ط§غŒط³طھع¯ط§ظ‡â€Œظ‡ط§غŒ ع©ط§ط±غŒ ظˆ ط®ط·ظˆط· طھظˆظ„غŒط¯)
+    // --------------------------------------------------------------------
+    Route::post('/work-centers', [WorkCenterController::class, 'store']);
+
+    // --------------------------------------------------------------------
+    // Bill of Materials - BOM (ط¯ط±ط®طھظˆط§ط±ظ‡ ظ…ظˆط§ط¯ ظˆ ظپط±ظ…ظˆظ„ط§ط³غŒظˆظ† ط³ط§ط®طھ)
+    // --------------------------------------------------------------------
+    Route::post('/boms', [BomController::class, 'store']);
+
+});
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\BomItemService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\BomItem;
+use App\Modules\Manufacturing\Models\Bom;
+use App\Modules\Manufacturing\DTOs\BomItemDTO;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class BomItemService
+{
+    public function addBomItem(BomItemDTO $dto): BomItem
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            // 1. ط°ط®غŒط±ظ‡ ط¯ط± ط¯غŒطھط§ط¨غŒط³
+            $bomItem = BomItem::create([
+                'bom_id' => $dto->bomId,
+                'item_id' => $dto->itemId,
+                'quantity' => $dto->quantity,
+                'scrap_percentage' => $dto->scrapPercentage,
+                'row_version' => 1,
+            ]);
+
+            // 2. ط¢ظ¾ط¯غŒطھ ع©ط±ط¯ظ† version غŒط§ row_version ط¯ط± ط³ط±ط¨ط±ع¯ BOM (ط§ط®طھغŒط§ط±غŒ ط§ظ…ط§ طھظˆطµغŒظ‡ ط´ط¯ظ‡ ط¨ط±ط§غŒ ط­ظپط¸ غŒع©ظ¾ط§ط±ع†ع¯غŒ)
+            Bom::where('bom_id', $dto->bomId)->increment('row_version');
+
+            // 3. ط´ظ„غŒع© ط±ظˆغŒط¯ط§ط¯ طھط؛غŒغŒط± ظپط±ظ…ظˆظ„ط§ط³غŒظˆظ† ط¨ظ‡ Outbox
+            DB::table('event_outbox')->insert([
+                'event_id' => Str::uuid(),
+                'tenant_id' => $bomItem->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
+                'aggregate_type' => 'mfg_boms', // Aggregate Root is the BOM Header
+                'aggregate_id' => $bomItem->bom_id,
+                'event_type' => 'manufacturing.bom_item.added',
+                'payload' => json_encode($bomItem->toArray()),
+                'status' => 1, // Pending
+                'retry_count' => 0,
+                'created_at' => now(),
+            ]);
+
+            return $bomItem;
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\BomService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\Bom;
+use App\Modules\Manufacturing\DTOs\BomDTO;
+use Illuminate\Support\Facades\DB;
+
+class BomService
+{
+    public function createBom(BomDTO $dto): Bom
+    {
+        return DB::transaction(function () use ($dto) {
+            $tenantId = tenant()->id ?? null;
+
+            // ط³ط§ط®طھ ط³ط±ط¨ط±ع¯ BOM
+            $bom = Bom::create([
+                'tenant_id' => $tenantId,
+                'item_id' => $dto->item_id,
+                'bom_code' => $dto->bom_code,
+                'version_number' => $dto->version_number,
+                'is_active' => $dto->is_active,
+                'batch_size' => $dto->batch_size,
+                'description' => $dto->description,
+                'status' => $dto->status,
+                'created_by' => $dto->created_by,
+                'row_version' => 1
+            ]);
+
+            // ط³ط§ط®طھ ط§ظ‚ظ„ط§ظ… BOM
+            $itemsData = [];
+            foreach ($dto->items as $itemDTO) {
+                $itemsData[] = [
+                    'bom_item_id' => \Illuminate\Support\Str::uuid()->toString(),
+                    'bom_id' => $bom->bom_id,
+                    'tenant_id' => $tenantId,
+                    'component_item_id' => $itemDTO->component_item_id,
+                    'uom_id' => $itemDTO->uom_id,
+                    'quantity' => $itemDTO->quantity,
+                    'scrap_percentage' => $itemDTO->scrap_percentage,
+                    'sort_order' => $itemDTO->sort_order,
+                    'created_by' => $dto->created_by,
+                    'row_version' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+            }
+
+            // ط¯ط±ط¬ ع¯ط±ظˆظ‡غŒ ط¨ط±ط§غŒ ظ¾ط±ظپظˆط±ظ…ظ†ط³ ط¨ط§ظ„ط§طھط±
+            $bom->items()->insert($itemsData);
+
+            // ط¯ط± ط§غŒظ†ط¬ط§ ظ…غŒâ€Œطھظˆط§ظ† Event ط§غŒط¬ط§ط¯ BOM ط¬ط¯غŒط¯ ط±ط§ ط¯ط± event_outbox ط¯ط±ط¬ ع©ط±ط¯
+            
+            return $bom->load('items');
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\ProductionLogService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\ProductionLog;
+use App\Modules\Manufacturing\Models\ProductionOrder;
+use App\Modules\Manufacturing\DTOs\ProductionLogDTO;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class ProductionLogService
+{
+    public function createLog(ProductionLogDTO $dto): ProductionLog
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            $log = ProductionLog::create([
+                'production_order_id' => $dto->productionOrderId,
+                'routing_id' => $dto->routingId,
+                'log_type' => $dto->logType,
+                'item_id' => $dto->itemId,
+                'quantity_consumed' => $dto->quantityConsumed,
+                'hours_spent' => $dto->hoursSpent,
+                'logged_at' => $dto->loggedAt,
+            ]);
+
+            // ط§ع¯ط± ظ†ظˆط¹ ظ„ط§ع¯ ظ…طµط±ظپ ع©ط§ظ„ط§ (1) غŒط§ ط¶ط§غŒط¹ط§طھ (3) ط§ط³طھطŒ ط¨ظ‡ ط§ظ†ط¨ط§ط± ط§ط·ظ„ط§ط¹ ظ…غŒâ€Œط¯ظ‡غŒظ…
+            if (in_array($dto->logType, [1, 3]) && $dto->itemId) {
+                DB::table('event_outbox')->insert([
+                    'event_id' => Str::uuid(),
+                    'tenant_id' => $log->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
+                    'aggregate_type' => 'mfg_production_orders', 
+                    'aggregate_id' => $dto->productionOrderId,
+                    'event_type' => 'manufacturing.material.consumed',
+                    'payload' => json_encode([
+                        'log_id' => $log->production_log_id,
+                        'order_id' => $dto->productionOrderId,
+                        'item_id' => $dto->itemId,
+                        'quantity' => $dto->quantityConsumed,
+                        'type' => $dto->logType === 1 ? 'CONSUMPTION' : 'SCRAP',
+                        'logged_at' => $dto->loggedAt
+                    ]),
+                    'status' => 1,
+                    'retry_count' => 0,
+                    'created_at' => now(),
+                ]);
+            }
+
+            return $log;
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\ProductionOrderService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\ProductionOrder;
+use App\Modules\Manufacturing\DTOs\ProductionOrderDTO;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class ProductionOrderService
+{
+    public function createProductionOrder(ProductionOrderDTO $dto): ProductionOrder
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            // 1. ط°ط®غŒط±ظ‡ ط¯ط³طھظˆط± طھظˆظ„غŒط¯
+            $productionOrder = ProductionOrder::create([
+                'order_number' => $dto->orderNumber,
+                'item_id' => $dto->itemId,
+                'bom_id' => $dto->bomId,
+                'planned_quantity' => $dto->plannedQuantity,
+                'produced_quantity' => 0.0000, // ظ…ظ‚ط¯ط§ط± طھظˆظ„غŒط¯ ط´ط¯ظ‡ ط§ظˆظ„غŒظ‡ طµظپط± ط§ط³طھ
+                'start_date' => $dto->startDate,
+                'end_date' => $dto->endDate,
+                'status' => $dto->status,
+                'row_version' => 1,
+            ]);
+
+            // 2. ط´ظ„غŒع© ط±ظˆغŒط¯ط§ط¯ ط§غŒط¬ط§ط¯ ط¯ط³طھظˆط± طھظˆظ„غŒط¯ ط¨ظ‡ Outbox (طھط¶ظ…غŒظ† غŒع©ظ¾ط§ط±ع†ع¯غŒ ظ†ط§ظ‡ظ…ع¯ط§ظ…)
+            // ط§غŒظ† ط±ظˆغŒط¯ط§ط¯ ظ…غŒâ€Œطھظˆط§ظ†ط¯ ط¨ط§ط¹ط« ط±ط²ط±ظˆ ظ…ظˆط¬ظˆط¯غŒ ط¯ط± ط§ظ†ط¨ط§ط± (ظ…ط§عکظˆظ„ ProcurementSales/Inventory) ط´ظˆط¯
+            DB::table('event_outbox')->insert([
+                'event_id' => Str::uuid(),
+                'tenant_id' => $productionOrder->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
+                'aggregate_type' => 'mfg_production_orders',
+                'aggregate_id' => $productionOrder->production_order_id,
+                'event_type' => 'manufacturing.production_order.created',
+                'payload' => json_encode($productionOrder->toArray()),
+                'status' => 1, // Pending
+                'retry_count' => 0,
+                'created_at' => now(),
+            ]);
+
+            return $productionOrder;
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\ProductionRoutingService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\ProductionRouting;
+use App\Modules\Manufacturing\DTOs\ProductionRoutingDTO;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class ProductionRoutingService
+{
+    public function createRouting(ProductionRoutingDTO $dto): ProductionRouting
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            $routing = ProductionRouting::create([
+                'production_order_id' => $dto->productionOrderId,
+                'work_center_id' => $dto->workCenterId,
+                'operation_sequence' => $dto->operationSequence,
+                'operation_name' => $dto->operationName,
+                'standard_setup_time_hours' => $dto->standardSetupTimeHours,
+                'standard_run_time_hours' => $dto->standardRunTimeHours,
+                'status' => $dto->status,
+                'row_version' => 1,
+            ]);
+
+            // ط«ط¨طھ ط±ظˆغŒط¯ط§ط¯ طھظ†ط¸غŒظ… ظ…ط³غŒط±ط¯ظ‡غŒ ط¨ط±ط§غŒ ظ…ظˆطھظˆط± ع¯ط±ط¯ط´ ع©ط§ط± (Workflow) غŒط§ ط³ط§غŒط± ط³غŒط³طھظ…â€Œظ‡ط§
+            DB::table('event_outbox')->insert([
+                'event_id' => Str::uuid(),
+                'tenant_id' => $routing->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
+                'aggregate_type' => 'mfg_production_orders', 
+                'aggregate_id' => $dto->productionOrderId,
+                'event_type' => 'manufacturing.routing.created',
+                'payload' => json_encode($routing->toArray()),
+                'status' => 1,
+                'retry_count' => 0,
+                'created_at' => now(),
+            ]);
+
+            return $routing;
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\QualityInspectionService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\Models\QualityInspection;
+use App\Modules\Manufacturing\DTOs\QualityInspectionDTO;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class QualityInspectionService
+{
+    public function recordInspection(QualityInspectionDTO $dto): QualityInspection
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            $inspection = QualityInspection::create([
+                'inspection_type' => $dto->inspectionType,
+                'source_document_type' => $dto->sourceDocumentType,
+                'source_document_id' => $dto->sourceDocumentId,
+                'item_id' => $dto->itemId,
+                'batch_id' => $dto->batchId,
+                'inspection_number' => $dto->inspectionNumber,
+                'inspection_date' => $dto->inspectionDate,
+                'inspector_user_id' => $dto->inspectorUserId,
+                'sample_quantity' => $dto->sampleQuantity,
+                'accepted_quantity' => $dto->acceptedQuantity,
+                'rejected_quantity' => $dto->rejectedQuantity,
+                'qc_status' => $dto->qcStatus,
+                'notes' => $dto->notes,
+                'row_version' => 1,
+            ]);
+
+            // ط´ظ„غŒع© ط±ظˆغŒط¯ط§ط¯ ط¨ط§ط²ط±ط³غŒ ع©غŒظپغŒ ط¨ظ‡ ط³ظ…طھ Outbox
+            // ظ…ط§عکظˆظ„ ط§ظ†ط¨ط§ط± ط§غŒظ† ط±ط§ ظ…غŒâ€Œط´ظ†ظˆط¯ طھط§ ظ‚ط±ظ†ط·غŒظ†ظ‡ غŒط§ ط¶ط§غŒط¹ط§طھ ط±ط§ ظ…ط¯غŒط±غŒطھ ع©ظ†ط¯
+            DB::table('event_outbox')->insert([
+                'event_id' => Str::uuid(),
+                'tenant_id' => $inspection->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
+                'aggregate_type' => 'mfg_quality_inspections', 
+                'aggregate_id' => $inspection->inspection_id,
+                'event_type' => 'manufacturing.quality_inspection.recorded',
+                'payload' => json_encode($inspection->toArray()),
+                'status' => 1,
+                'retry_count' => 0,
+                'created_at' => now(),
+            ]);
+
+            return $inspection;
+        });
+    }
+}
+
+
+=== E:\myProject\hamareherp\app\Modules\Manufacturing\Services\WorkCenterService.php ===
+
+<?php
+
+namespace App\Modules\Manufacturing\Services;
+
+use App\Modules\Manufacturing\DTOs\WorkCenterDTO;
+use App\Modules\Manufacturing\Models\WorkCenter;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class WorkCenterService
+{
+    /**
+     * Create a new Work Center and dispatch an outbox event synchronously.
+     */
+    public function createWorkCenter(WorkCenterDTO $dto): WorkCenter
+    {
+        return DB::transaction(function () use ($dto) {
+            
+            // 1. Create the business entity
+            $workCenter = WorkCenter::create([
+                'code' => $dto->code,
+                'name' => $dto->name,
+                'capacity_hours_per_day' => $dto->capacity_hours_per_day,
+                'efficiency_percentage' => $dto->efficiency_percentage,
+                'cost_per_hour' => $dto->cost_per_hour,
+                'status' => $dto->status,
+                'created_by' => $dto->created_by,
+                // tenant_id will be automatically populated by TenantScoped trait
+            ]);
+
+            // 2. Insert into Event Outbox (Rule: Asynchronous module communication)
+            DB::table('event_outbox')->insert([
+                'event_id' => Str::uuid(),
+                'tenant_id' => $workCenter->tenant_id ?? app('tenant_id'), // Fetch from context
+                'aggregate_type' => 'mfg_work_centers',
+                'aggregate_id' => $workCenter->work_center_id,
+                'event_type' => 'manufacturing.work_center.created',
+                'payload' => json_encode($workCenter->toArray()),
+                'status' => 1, // 1: Pending
+                'created_at' => now(),
+            ]);
+
+            return $workCenter;
+        });
+    }
+}
