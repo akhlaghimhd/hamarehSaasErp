@@ -21,6 +21,9 @@ Route::prefix('identity')->group(function () {
         Route::get('/permissions', [PermissionController::class, 'index'])
             ->middleware('permission:identity.permission.view');
 
+        Route::post('/permissions', [PermissionController::class, 'store'])
+            ->middleware('permission:identity.permission.create');
+
         // Roles
         Route::prefix('roles')->group(function () {
             Route::get('/', [RoleController::class, 'index'])

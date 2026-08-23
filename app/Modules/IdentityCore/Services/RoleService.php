@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
+use App\Modules\IdentityCore\DTOs\CreatePermissionDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -19,7 +20,6 @@ class RoleService
 {
     /**
      * لیست نقش‌های مستأجر جاری
-     * فیلتر tenant_id توسط Global Scope (TenantScoped) اعمال می‌شود.
      */
     public function listRoles(): Collection
     {
@@ -42,6 +42,40 @@ class RoleService
             ->orderBy('module_name')
             ->orderBy('code')
             ->get();
+    }
+
+    /**
+     * ایجاد مجوز جدید برای مستأجر جاری
+     */
+    public function createPermission(CreatePermissionDTO $dto): TenantPermission
+    {
+        $tenantId = $this->getTenantId();
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $permission = TenantPermission::create([
+                'tenant_id'    => $tenantId,
+                'code'         => $dto->code,
+                'name'         => $dto->name,
+                'module_name'  => $dto->moduleName,
+                'action_type'  => $dto->actionType,
+                'description'  => $dto->description,
+                'status'       => 1,
+            ]);
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_permissions',
+                $permission->tenant_permission_id,
+                'identity.permission.created',
+                [
+                    'permission_id' => $permission->tenant_permission_id,
+                    'code'          => $permission->code,
+                    'module_name'   => $permission->module_name,
+                ]
+            );
+
+            return $permission;
+        });
     }
 
     public function createRole(CreateRoleDTO $dto): TenantRole
@@ -98,7 +132,6 @@ class RoleService
                 ]
             );
 
-            // Invalidate only the affected user's permission cache
             Cache::tags(["tenant:{$tenantId}"])->forget("user_permissions:{$dto->userId}");
 
             return $userRole;
@@ -135,7 +168,6 @@ class RoleService
                 'permission_ids'  => $dto->permissionIds,
             ]);
 
-            // Flush all permission caches of this tenant (roles affect multiple users)
             Cache::tags(["tenant:{$tenantId}"])->flush();
         });
     }
