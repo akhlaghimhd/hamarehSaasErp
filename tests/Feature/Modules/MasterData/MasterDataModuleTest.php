@@ -5,16 +5,30 @@ use App\Modules\MasterData\Models\BusinessPartner;
 use App\Modules\MasterData\Models\Item;
 use App\Modules\MasterData\Models\Warehouse;
 use App\Modules\MasterData\Models\CostCenter;
+use App\Modules\IdentityCore\Models\User;
+use App\Modules\IdentityCore\Models\TenantUser;
+use App\Modules\IdentityCore\Models\TenantRole;
+use App\Modules\IdentityCore\Models\TenantPermission;
+use App\Modules\IdentityCore\Models\TenantUserRole;
+use App\Modules\IdentityCore\Models\TenantRolePermission;
+use App\Modules\SaasAdmin\Models\Tenant;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 
 uses(TestCase::class, RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->tenantId = '11111111-1111-1111-1111-111111111111';
-    $this->userId = '22222222-2222-2222-2222-222222222222';
+    $this->tenant = Tenant::factory()->create([
+        'tenant_code' => 'SYS_TENANT',
+        'status'      => 1,
+    ]);
+    $this->tenantId = $this->tenant->tenant_id;
+
+    $this->user = User::factory()->create(['status' => 1]);
+    $this->userId = $this->user->user_id;
 
     // تنظیم Tenant Context به‌صورت کامل
     TenantContext::getInstance()->setTenantId($this->tenantId);
@@ -22,103 +36,71 @@ beforeEach(function () {
     Context::add('user_id', $this->userId);
     app()->instance('current_tenant_id', $this->tenantId);
 
-    // درج مستقیم مستأجر در دیتابیس
-    DB::table('tenants')->updateOrInsert(
-        ['tenant_id' => $this->tenantId],
-        [
-            'tenant_code' => 'SYS_TENANT',
-            'tenant_name' => 'مستأجر سیستم',
-            'slug'        => 'sys-tenant',
-            'status'      => 1,
-        ]
-    );
+    // عضویت کاربر در Tenant
+    TenantUser::factory()->create([
+        'tenant_id' => $this->tenantId,
+        'user_id'   => $this->userId,
+        'status'    => 1,
+    ]);
 
-    // ۱. ساخت رکورد کاربر در جدول پایه هویت
-    DB::table('users')->updateOrInsert(
-        ['user_id' => $this->userId],
-        ['first_name' => 'تست', 'last_name' => 'سیستم', 'status' => 1]
-    );
+    // نقش
+    $this->role = TenantRole::factory()->create([
+        'tenant_id' => $this->tenantId,
+        'code'      => 'admin',
+        'name'      => 'مدیر سیستم',
+        'status'    => 1,
+    ]);
 
-    // ۱.۵ ثبت عضویت کاربر در جدول tenant_users
-    DB::table('tenant_users')->updateOrInsert(
-        ['tenant_id' => $this->tenantId, 'user_id' => $this->userId],
-        [
-            'tenant_user_id' => (string) \Illuminate\Support\Str::uuid(),
-            'status'         => 1,
-        ]
-    );
-
-    // ۲. ساخت نقش تستی مستأجر
-    $roleId = '44444444-4444-4444-4444-444444444444';
-    DB::table('tenant_roles')->updateOrInsert(
-        ['tenant_role_id' => $roleId],
-        ['tenant_id' => $this->tenantId, 'code' => 'admin', 'name' => 'مدیر سیستم', 'status' => 1]
-    );
-
-    // ۳. اتصال کاربر به نقش
-    $tenantUserRoleId = '66666666-6666-6666-6666-666666666666';
-    DB::table('tenant_user_roles')->updateOrInsert(
-        ['tenant_user_role_id' => $tenantUserRoleId],
-        [
-            'tenant_id'      => $this->tenantId,
-            'user_id'        => $this->userId,
-            'tenant_role_id' => $roleId,
-        ]
-    );
-
-    // ۴. ثبت پرمیشن‌های مورد نیاز
-    $permissions = [
-        'business-partners.store', 'business-partners.create',
-        'items.store', 'items.create',
-        'warehouses.store', 'warehouses.create',
+    // permissionهای واقعی مطابق middleware
+    $permissionCodes = [
+        'master-data.business-partner.create',
+        'master-data.business-partner.view',
+        'master-data.item.create',
+        'master-data.item.view',
+        'master-data.warehouse.create',
+        'master-data.warehouse.view',
+        'master-data.cost-center.create',
+        'master-data.cost-center.view',
     ];
 
-    foreach ($permissions as $permCode) {
-        $permId = '55555555-5555-5555-5555-' . substr(md5($permCode), 0, 12);
+    foreach ($permissionCodes as $code) {
+        $permission = TenantPermission::create([
+            'tenant_permission_id' => (string) Str::uuid(),
+            'tenant_id'            => $this->tenantId,
+            'code'                 => $code,
+            'name'                 => $code,
+            'module_name'          => 'MasterData',
+            'status'               => 1,
+        ]);
 
-        DB::table('tenant_permissions')->updateOrInsert(
-            ['tenant_permission_id' => $permId],
-            ['tenant_id' => $this->tenantId, 'code' => $permCode, 'name' => $permCode, 'status' => 1]
-        );
-
-        DB::table('tenant_role_permissions')->updateOrInsert(
-            [
-                'tenant_id'            => $this->tenantId,
-                'tenant_role_id'       => $roleId,
-                'tenant_permission_id' => $permId,
-            ],
-            [
-                'tenant_role_permission_id' => \Illuminate\Support\Str::uuid()->toString(),
-            ]
-        );
+        TenantRolePermission::create([
+            'tenant_role_permission_id' => (string) Str::uuid(),
+            'tenant_id'                 => $this->tenantId,
+            'tenant_role_id'            => $this->role->tenant_role_id,
+            'tenant_permission_id'      => $permission->tenant_permission_id,
+        ]);
     }
 
-    // ساخت کاربر فرضی سازگار با لاراول
-    $userMock = new class extends \Illuminate\Database\Eloquent\Model implements \Illuminate\Contracts\Auth\Authenticatable {
-        protected $table = 'users';
-        protected $primaryKey = 'user_id';
-        public $incrementing = false;
-        protected $keyType = 'string';
+    // اتصال کاربر به نقش
+    TenantUserRole::create([
+        'tenant_user_role_id' => (string) Str::uuid(),
+        'tenant_id'           => $this->tenantId,
+        'user_id'             => $this->userId,
+        'tenant_role_id'      => $this->role->tenant_role_id,
+    ]);
 
-        public function getAuthIdentifierName() { return 'user_id'; }
-        public function getAuthIdentifier() { return $this->user_id; }
-        public function getAuthPassword() { return ''; }
-        public function getAuthPasswordName() { return 'password_hash'; }
-        public function getRememberToken() { return null; }
-        public function setRememberToken($value) {}
-        public function getRememberTokenName() { return ''; }
-    };
-
-    $userMock->user_id = $this->userId;
-    $userMock->exists = true;
-
-    $this->actingAs($userMock, 'api');
+    // توکن Sanctum
+    $this->token = $this->user->createToken(
+        'test-token-' . $this->tenantId,
+        ['tenant:' . $this->tenantId]
+    )->plainTextToken;
 });
 
 test('can create business partner and log event in outbox', function () {
     $response = $this->withHeaders([
-        'X-Tenant-ID' => $this->tenantId,
-        'Accept'      => 'application/json',
+        'Authorization' => 'Bearer ' . $this->token,
+        'X-Tenant-ID'   => $this->tenantId,
+        'Accept'        => 'application/json',
     ])->postJson('/api/master-data/business-partners', [
         'code'         => 'BP-001',
         'display_name' => 'شرکت تست پارس',
@@ -130,8 +112,8 @@ test('can create business partner and log event in outbox', function () {
 });
 
 test('tenant isolation prevents accessing other tenant data', function () {
-    $tenantA = '11111111-1111-1111-1111-111111111111';
-    $tenantB = '33333333-3333-3333-3333-333333333333';
+    $tenantA = $this->tenantId;
+    $tenantB = (string) Str::uuid();
 
     // تنظیم Context کامل برای مستأجر A
     TenantContext::getInstance()->setTenantId($tenantA);
@@ -158,8 +140,9 @@ test('tenant isolation prevents accessing other tenant data', function () {
 
 test('can create item successfully', function () {
     $response = $this->withHeaders([
-        'X-Tenant-ID' => $this->tenantId,
-        'Accept'      => 'application/json',
+        'Authorization' => 'Bearer ' . $this->token,
+        'X-Tenant-ID'   => $this->tenantId,
+        'Accept'        => 'application/json',
     ])->postJson('/api/master-data/items', [
         'code'      => 'MAT-100',
         'name'      => 'مفتول فولادی',
@@ -173,10 +156,10 @@ test('can create item successfully', function () {
 
 test('can create warehouse successfully', function () {
     $response = $this->withHeaders([
-        'X-Tenant-ID' => $this->tenantId,
-        'Accept'      => 'application/json',
+        'Authorization' => 'Bearer ' . $this->token,
+        'X-Tenant-ID'   => $this->tenantId,
+        'Accept'        => 'application/json',
     ])->postJson('/api/master-data/warehouses', [
-        'tenant_id' => $this->tenantId,
         'code'      => 'WH-CENTRAL',
         'name'      => 'انبار مرکزی',
         'location'  => 'تهران - کیلومتر جاده مخصوص',
