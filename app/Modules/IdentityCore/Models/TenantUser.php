@@ -6,10 +6,11 @@ use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TenantUser extends Model
 {
-    use HasUuids, HasFactory, TenantScoped;
+    use HasUuids, HasFactory, TenantScoped, SoftDeletes;
 
     protected $table = 'tenant_users';
     protected $primaryKey = 'tenant_user_id';
@@ -20,15 +21,19 @@ class TenantUser extends Model
     protected $fillable = [
         'tenant_id',
         'user_id',
-        'username',
-        'tenant_user_email',
+        'employee_id',
+        'is_owner',
         'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
     ];
 
     protected function casts(): array
     {
         return [
-            'status' => 'integer',
+            'status'   => 'integer',
+            'is_owner' => 'boolean',
         ];
     }
 
@@ -42,7 +47,6 @@ class TenantUser extends Model
         return $this->belongsTo(\App\Modules\SaasAdmin\Models\Tenant::class, 'tenant_id', 'tenant_id');
     }
 
-    // ✅ این متد را اضافه کنید تا لاراول فکتوری را در مسیر درست پیدا کند
     protected static function newFactory()
     {
         return \Database\Factories\TenantUserFactory::new();
