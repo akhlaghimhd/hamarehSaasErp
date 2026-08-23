@@ -150,6 +150,23 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.cost-center.create', 'name' => 'Create Cost Center', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.cost-center.update', 'name' => 'Update Cost Center', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.cost-center.delete', 'name' => 'Delete Cost Center', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            // Accounting
+            ['code' => 'accounting.fiscal-period.create', 'name' => 'Create Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.account.create', 'name' => 'Create Account', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.voucher.create', 'name' => 'Create Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.voucher-item.create', 'name' => 'Create Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.tax-transaction.create', 'name' => 'Create Tax Transaction', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+
+            // Document Management
+            ['code' => 'document-management.document.view', 'name' => 'View Documents', 'module_name' => 'DocumentManagement', 'action_type' => 'READ'],
+            ['code' => 'document-management.document.create', 'name' => 'Create Document', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
+            ['code' => 'document-management.document.update', 'name' => 'Update Document', 'module_name' => 'DocumentManagement', 'action_type' => 'UPDATE'],
+            ['code' => 'document-management.document.delete', 'name' => 'Delete Document', 'module_name' => 'DocumentManagement', 'action_type' => 'DELETE'],
+            ['code' => 'document-management.attachment.create', 'name' => 'Create Attachment', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
+            ['code' => 'document-management.attachment.delete', 'name' => 'Delete Attachment', 'module_name' => 'DocumentManagement', 'action_type' => 'DELETE'],
+            ['code' => 'document-management.sequence.create', 'name' => 'Create Document Sequence', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
+            ['code' => 'document-management.version.create', 'name' => 'Create Document Version', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
         ];
     }
 }

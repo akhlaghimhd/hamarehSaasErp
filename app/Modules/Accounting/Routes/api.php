@@ -13,19 +13,27 @@ use App\Modules\Accounting\Controllers\TaxTransactionController;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('accounting')->middleware(['auth:api', 'tenant.context'])->group(function () {
-    // Fiscal Periods
-    Route::post('/fiscal-periods', [FiscalPeriodController::class, 'store']);
+Route::prefix('accounting')
+    ->middleware(['auth:sanctum', 'tenant.context'])
+    ->group(function () {
 
-    // Chart of Accounts
-    Route::post('/accounts', [AccountController::class, 'store']);
+        // Fiscal Periods
+        Route::post('/fiscal-periods', [FiscalPeriodController::class, 'store'])
+            ->middleware('permission:accounting.fiscal-period.create');
 
-    // Vouchers (Headers)
-    Route::post('/vouchers', [FinancialVoucherController::class, 'store']);
-    
-    // Voucher Items (Lines)
-    Route::post('/voucher-items', [FinancialVoucherItemController::class, 'store']);
+        // Chart of Accounts
+        Route::post('/accounts', [AccountController::class, 'store'])
+            ->middleware('permission:accounting.account.create');
 
-    // Tax Transactions
-    Route::post('/tax-transactions', [TaxTransactionController::class, 'store']);
-});
+        // Vouchers (Headers)
+        Route::post('/vouchers', [FinancialVoucherController::class, 'store'])
+            ->middleware('permission:accounting.voucher.create');
+        
+        // Voucher Items (Lines)
+        Route::post('/voucher-items', [FinancialVoucherItemController::class, 'store'])
+            ->middleware('permission:accounting.voucher-item.create');
+
+        // Tax Transactions
+        Route::post('/tax-transactions', [TaxTransactionController::class, 'store'])
+            ->middleware('permission:accounting.tax-transaction.create');
+    });
