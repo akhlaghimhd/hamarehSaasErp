@@ -13,14 +13,19 @@ class TenantPermission extends Model
     protected $table = 'tenant_permissions';
     protected $primaryKey = 'tenant_permission_id';
 
-    // فیلدها دقیقاً با دیتابیس (code و module) تنظیم شد
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'code',
         'name',
-        'module',
+        'module_name',
+        'action_type',
         'description',
-        'status'
+        'status',
+        'created_by',
+        'updated_by',
     ];
 
     public function roles()

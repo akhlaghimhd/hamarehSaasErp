@@ -7,9 +7,12 @@ use App\Modules\SaasAdmin\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
+use App\Modules\IdentityCore\Models\TenantPermission;
+use App\Modules\IdentityCore\Models\TenantUserRole;
+use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Sanctum\Sanctum;
+use Illuminate\Support\Str;
 
 class TenantIsolationTest extends TestCase
 {
@@ -35,19 +38,50 @@ class TenantIsolationTest extends TestCase
         // ارتباط کاربرها با تننت‌ها
         TenantUser::factory()->create([
             'tenant_id' => $this->tenantA->tenant_id,
-            'user_id' => $this->globalUserA->user_id,
-            'status' => 1
+            'user_id'   => $this->globalUserA->user_id,
+            'status'    => 1
         ]);
 
         TenantUser::factory()->create([
             'tenant_id' => $this->tenantB->tenant_id,
-            'user_id' => $this->globalUserB->user_id,
-            'status' => 1
+            'user_id'   => $this->globalUserB->user_id,
+            'status'    => 1
         ]);
 
         // نقش‌ها رو بسازید
-        TenantRole::factory()->create(['tenant_id' => $this->tenantA->tenant_id, 'code' => 'ROLE_A']);
-        TenantRole::factory()->create(['tenant_id' => $this->tenantB->tenant_id, 'code' => 'ROLE_B']);
+        $roleA = TenantRole::factory()->create([
+            'tenant_id' => $this->tenantA->tenant_id,
+            'code'      => 'ROLE_A'
+        ]);
+
+        TenantRole::factory()->create([
+            'tenant_id' => $this->tenantB->tenant_id,
+            'code'      => 'ROLE_B'
+        ]);
+
+        // ایجاد permission مورد نیاز برای تست API و تخصیص آن به کاربر A
+        $permission = TenantPermission::create([
+            'tenant_permission_id' => (string) Str::uuid(),
+            'tenant_id'            => $this->tenantA->tenant_id,
+            'code'                 => 'identity.role.view',
+            'name'                 => 'View Roles',
+            'module_name'          => 'Identity',
+            'status'               => 1,
+        ]);
+
+        TenantRolePermission::create([
+            'tenant_role_permission_id' => (string) Str::uuid(),
+            'tenant_id'                 => $this->tenantA->tenant_id,
+            'tenant_role_id'            => $roleA->tenant_role_id,
+            'tenant_permission_id'      => $permission->tenant_permission_id,
+        ]);
+
+        TenantUserRole::create([
+            'tenant_user_role_id' => (string) Str::uuid(),
+            'tenant_id'           => $this->tenantA->tenant_id,
+            'user_id'             => $this->globalUserA->user_id,
+            'tenant_role_id'      => $roleA->tenant_role_id,
+        ]);
     }
 
     /** @test */
@@ -75,11 +109,14 @@ class TenantIsolationTest extends TestCase
     public function api_endpoints_block_cross_tenant_access_and_prevent_data_leakage()
     {
         // Create a token for user A in tenant A
-        $token = $this->globalUserA->createToken('test-token-' . $this->tenantA->tenant_id, ['tenant:' . $this->tenantA->tenant_id])->plainTextToken;
+        $token = $this->globalUserA->createToken(
+            'test-token-' . $this->tenantA->tenant_id,
+            ['tenant:' . $this->tenantA->tenant_id]
+        )->plainTextToken;
 
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $token,
-            'X-Tenant-ID' => $this->tenantA->tenant_id
+            'X-Tenant-ID'   => $this->tenantA->tenant_id
         ])->getJson('/api/identity-core/identity/roles');
 
         $response->assertStatus(200);
