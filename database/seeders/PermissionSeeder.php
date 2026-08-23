@@ -18,15 +18,34 @@ class PermissionSeeder extends Seeder
         $permissionIds = [];
 
         foreach ($permissions as $perm) {
-            $permissionId = (string) Str::uuid();
+            // ابتدا بررسی می‌کنیم آیا permission از قبل وجود دارد یا نه
+            $existing = DB::table('tenant_permissions')
+                ->where('tenant_id', $demoTenantId)
+                ->where('code', $perm['code'])
+                ->first();
 
-            DB::table('tenant_permissions')->updateOrInsert(
-                [
-                    'tenant_id' => $demoTenantId,
-                    'code'      => $perm['code'],
-                ],
-                [
+            if ($existing) {
+                // فقط فیلدهای غیر Primary Key را آپدیت می‌کنیم
+                DB::table('tenant_permissions')
+                    ->where('tenant_permission_id', $existing->tenant_permission_id)
+                    ->update([
+                        'name'        => $perm['name'],
+                        'module_name' => $perm['module_name'],
+                        'action_type' => $perm['action_type'] ?? null,
+                        'description' => $perm['description'] ?? null,
+                        'status'      => 1,
+                        'updated_at'  => now(),
+                    ]);
+
+                $permissionIds[] = $existing->tenant_permission_id;
+            } else {
+                // permission جدید → UUID جدید می‌سازیم
+                $permissionId = (string) Str::uuid();
+
+                DB::table('tenant_permissions')->insert([
                     'tenant_permission_id' => $permissionId,
+                    'tenant_id'            => $demoTenantId,
+                    'code'                 => $perm['code'],
                     'name'                 => $perm['name'],
                     'module_name'          => $perm['module_name'],
                     'action_type'          => $perm['action_type'] ?? null,
@@ -34,48 +53,43 @@ class PermissionSeeder extends Seeder
                     'status'               => 1,
                     'created_at'           => now(),
                     'updated_at'           => now(),
-                ]
-            );
+                ]);
 
-            // خواندن ID واقعی بعد از updateOrInsert
-            $existing = DB::table('tenant_permissions')
-                ->where('tenant_id', $demoTenantId)
-                ->where('code', $perm['code'])
-                ->first();
-
-            if ($existing) {
-                $permissionIds[] = $existing->tenant_permission_id;
+                $permissionIds[] = $permissionId;
             }
         }
 
         // ایجاد نقش tenant-admin
-        $roleId = (string) Str::uuid();
+        $existingRole = DB::table('tenant_roles')
+            ->where('tenant_id', $demoTenantId)
+            ->where('code', 'tenant-admin')
+            ->first();
 
-        DB::table('tenant_roles')->updateOrInsert(
-            [
-                'tenant_id' => $demoTenantId,
-                'code'      => 'tenant-admin',
-            ],
-            [
-                'tenant_role_id' => $roleId,
+        if ($existingRole) {
+            $actualRoleId = $existingRole->tenant_role_id;
+
+            DB::table('tenant_roles')
+                ->where('tenant_role_id', $actualRoleId)
+                ->update([
+                    'name'        => 'Tenant Administrator',
+                    'description' => 'Full access role for tenant administrators',
+                    'status'      => 1,
+                    'updated_at'  => now(),
+                ]);
+        } else {
+            $actualRoleId = (string) Str::uuid();
+
+            DB::table('tenant_roles')->insert([
+                'tenant_role_id' => $actualRoleId,
+                'tenant_id'      => $demoTenantId,
+                'code'           => 'tenant-admin',
                 'name'           => 'Tenant Administrator',
                 'description'    => 'Full access role for tenant administrators',
                 'status'         => 1,
                 'created_at'     => now(),
                 'updated_at'     => now(),
-            ]
-        );
-
-        $role = DB::table('tenant_roles')
-            ->where('tenant_id', $demoTenantId)
-            ->where('code', 'tenant-admin')
-            ->first();
-
-        if (!$role) {
-            return;
+            ]);
         }
-
-        $actualRoleId = $role->tenant_role_id;
 
         // پاک کردن permissionهای قبلی این نقش و تخصیص مجدد همه
         DB::table('tenant_role_permissions')
@@ -113,6 +127,13 @@ class PermissionSeeder extends Seeder
             ['code' => 'identity.user.view', 'name' => 'View Tenant Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.user.create', 'name' => 'Create Tenant User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.update', 'name' => 'Update Tenant User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+
+            // Scope
+            ['code' => 'identity.scope.view', 'name' => 'View Scopes', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.scope.create', 'name' => 'Create Scope', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.scope.update', 'name' => 'Update Scope', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.scope.delete', 'name' => 'Delete Scope', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+            ['code' => 'identity.scope.assign', 'name' => 'Assign Scope to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
             
             // Organization
             ['code' => 'organization.company.view', 'name' => 'View Companies', 'module_name' => 'Organization', 'action_type' => 'READ'],

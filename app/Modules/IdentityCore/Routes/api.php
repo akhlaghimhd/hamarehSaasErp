@@ -5,6 +5,7 @@ use App\Modules\IdentityCore\Controllers\RoleController;
 use App\Modules\IdentityCore\Controllers\PermissionController;
 use App\Modules\IdentityCore\Controllers\UserController;
 use App\Modules\IdentityCore\Controllers\AuthController;
+use App\Modules\IdentityCore\Controllers\ScopeController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -42,6 +43,24 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.assign');
             Route::post('/assign-permissions', [RoleController::class, 'assignPermissions'])
                 ->middleware('permission:identity.role.assign-permissions');
+        });
+
+        // Scopes
+        Route::prefix('scopes')->group(function () {
+            Route::get('/', [ScopeController::class, 'index'])
+                ->middleware('permission:identity.scope.view');
+            Route::post('/', [ScopeController::class, 'store'])
+                ->middleware('permission:identity.scope.create');
+            Route::get('/{id}', [ScopeController::class, 'show'])
+                ->middleware('permission:identity.scope.view');
+            Route::put('/{id}', [ScopeController::class, 'update'])
+                ->middleware('permission:identity.scope.update');
+            Route::delete('/{id}', [ScopeController::class, 'destroy'])
+                ->middleware('permission:identity.scope.delete');
+            Route::post('/assign', [ScopeController::class, 'assign'])
+                ->middleware('permission:identity.scope.assign');
+            Route::get('/user/{tenantUserId}', [ScopeController::class, 'userScopes'])
+                ->middleware('permission:identity.scope.view');
         });
     });
 });
