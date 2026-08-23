@@ -7,7 +7,7 @@ use App\Modules\DocumentManagement\Controllers\DocumentSequenceController;
 use App\Modules\DocumentManagement\Controllers\DocumentVersionController;
 
 Route::prefix('document-management')
-    ->middleware(['api', 'auth:sanctum', 'tenant.context'])
+    ->middleware(['api', 'auth:sanctum', 'tenant.context', 'load.scopes'])
     ->group(function () {
     
         // مسیرهای اسناد

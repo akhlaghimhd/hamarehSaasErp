@@ -6,7 +6,7 @@ use App\Modules\Organization\Controllers\BranchController;
 use App\Modules\Organization\Controllers\DepartmentController;
 
 Route::prefix('organization')
-    ->middleware(['api', 'auth:sanctum', 'tenant.context'])
+    ->middleware(['api', 'auth:sanctum', 'tenant.context', 'load.scopes'])
     ->group(function () {
 
         // Companies

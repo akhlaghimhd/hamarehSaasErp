@@ -13,7 +13,7 @@ use App\Modules\MasterData\Controllers\WarehouseController;
 | Prefix پیش‌فرض توسط ModuleServiceProvider: /api/master-data
 */
 
-Route::middleware(['auth:sanctum', 'tenant.context'])->group(function () {
+Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {
 
     // Business Partners
     Route::get('business-partners', [BusinessPartnerController::class, 'index'])

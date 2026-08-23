@@ -16,8 +16,8 @@ Route::prefix('identity')->group(function () {
         Route::post('/auth/login', [AuthController::class, 'login']);
     });
 
-    // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت + Permission)
-    Route::middleware([TenantContextMiddleware::class, 'auth:sanctum'])->group(function () {
+    // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت + بارگذاری Scope + Permission)
+    Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
 
         // Users (مدیریت کاربران مستأجر)
         Route::get('/users', [UserController::class, 'index'])

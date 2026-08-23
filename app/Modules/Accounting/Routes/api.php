@@ -14,7 +14,7 @@ use App\Modules\Accounting\Controllers\TaxTransactionController;
 */
 
 Route::prefix('accounting')
-    ->middleware(['auth:sanctum', 'tenant.context'])
+    ->middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])
     ->group(function () {
 
         // Fiscal Periods
