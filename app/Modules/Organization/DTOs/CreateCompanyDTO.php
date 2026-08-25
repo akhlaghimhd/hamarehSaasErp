@@ -2,13 +2,24 @@
 
 namespace App\Modules\Organization\DTOs;
 
-class CreateCompanyDTO
+readonly class CreateCompanyDTO
 {
     public function __construct(
-        public readonly string $code,
-        public readonly string $name,
-        public readonly ?string $registrationNumber = null,
-        public readonly ?string $economicCode = null,
-        public readonly bool $isActive = true
+        public string $code,
+        public string $name,
+        public ?string $registrationNumber = null,
+        public ?string $economicCode = null,
+        public bool $isActive = true,
     ) {}
+
+    public static function fromRequest(array $validatedData): self
+    {
+        return new self(
+            code: $validatedData['code'],
+            name: $validatedData['name'],
+            registrationNumber: $validatedData['registration_number'] ?? null,
+            economicCode: $validatedData['economic_code'] ?? null,
+            isActive: (bool) ($validatedData['is_active'] ?? true),
+        );
+    }
 }

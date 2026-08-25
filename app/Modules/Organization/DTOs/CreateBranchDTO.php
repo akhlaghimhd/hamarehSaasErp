@@ -5,21 +5,21 @@ namespace App\Modules\Organization\DTOs;
 readonly class CreateBranchDTO
 {
     public function __construct(
-        public string $name,
+        public string $companyId,
         public string $code,
-        public ?string $address,
-        public ?string $phone,
-        public int $status = 1,
+        public string $name,
+        public ?string $address = null,
+        public bool $isActive = true,
     ) {}
 
     public static function fromRequest(array $validatedData): self
     {
         return new self(
-            name: $validatedData['name'],
+            companyId: $validatedData['company_id'],
             code: $validatedData['code'],
+            name: $validatedData['name'],
             address: $validatedData['address'] ?? null,
-            phone: $validatedData['phone'] ?? null,
-            status: (int) ($validatedData['status'] ?? 1),
+            isActive: (bool) ($validatedData['is_active'] ?? true),
         );
     }
 }
