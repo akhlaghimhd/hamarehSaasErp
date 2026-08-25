@@ -7,7 +7,6 @@ use App\Modules\SaasAdmin\Requests\CreateTenantRequest;
 use App\Modules\SaasAdmin\DTOs\CreateTenantDTO;
 use App\Modules\SaasAdmin\Services\TenantService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 
 class TenantController extends Controller
 {
@@ -17,22 +16,35 @@ class TenantController extends Controller
     }
 
     /**
-     * ایجاد یک شرکت جدید
+     * Create a new tenant (company).
+     * Permission: saas-admin.tenant.create
      */
     public function store(CreateTenantRequest $request): JsonResponse
     {
-        // دریافت شناسه کاربر از توکن JWT
-        $userId = Auth::guard('api')->id();
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
 
-        // تبدیل ریکوئست به DTO
+        $userId = $user->user_id;
+
         $dto = CreateTenantDTO::fromRequest($request->validated());
 
-        // ارسال به سرویس بیزینسی
         $tenant = $this->tenantService->createTenant($dto, $userId);
 
         return response()->json([
-            'message' => 'شرکت جدید با موفقیت ایجاد شد و شما به عنوان مالک آن ثبت شدید.',
-            'data'    => $tenant
+            'status'  => 'success',
+            'message' => 'Tenant created successfully and you were assigned as owner.',
+            'data'    => [
+                'tenant_id'   => $tenant->tenant_id,
+                'tenant_code' => $tenant->tenant_code,
+                'tenant_name' => $tenant->tenant_name,
+                'slug'        => $tenant->slug,
+                'status'      => $tenant->status,
+            ],
         ], 201);
     }
 }
