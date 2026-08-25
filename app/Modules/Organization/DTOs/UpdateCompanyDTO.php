@@ -2,13 +2,22 @@
 
 namespace App\Modules\Organization\DTOs;
 
-class UpdateCompanyDTO
+readonly class UpdateCompanyDTO
 {
     public function __construct(
-        public readonly string $code,
-        public readonly string $name,
-        public readonly ?string $registrationNumber = null,
-        public readonly ?string $economicCode = null,
-        public readonly bool $isActive = true
+        public ?string $name,
+        public ?string $code,
+        public ?string $address,
+        public ?int $status,
     ) {}
+
+    public static function fromRequest(array $validatedData): self
+    {
+        return new self(
+            name: $validatedData['name'] ?? null,
+            code: $validatedData['code'] ?? null,
+            address: $validatedData['address'] ?? null,
+            status: $validatedData['status'] ?? null,
+        );
+    }
 }

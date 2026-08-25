@@ -4,7 +4,9 @@ namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
 use App\Modules\Organization\Requests\CreateDepartmentRequest;
+use App\Modules\Organization\Requests\UpdateDepartmentRequest;
 use App\Modules\Organization\DTOs\CreateDepartmentDTO;
+use App\Modules\Organization\DTOs\UpdateDepartmentDTO;
 use App\Modules\Organization\Services\DepartmentService;
 use Illuminate\Http\JsonResponse;
 
@@ -17,25 +19,18 @@ class DepartmentController extends Controller
 
     public function index(): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
-        $companyId = $this->request()->route('company');
-
-        $departments = $this->departmentService->getDepartmentsByCompany($companyId, $user, $tenantId);
+        $departments = $this->departmentService->getAllDepartments();
 
         return response()->json([
-            'status'  => 'success',
-            'data'    => $departments,
+            'status' => 'success',
+            'data'   => $departments,
         ]);
     }
 
     public function store(CreateDepartmentRequest $request): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
         $dto = CreateDepartmentDTO::fromRequest($request->validated());
-        $companyId = $this->request()->route('company');
-
-        $department = $this->departmentService->createDepartment($dto, $companyId, $user);
+        $department = $this->departmentService->createDepartment($dto);
 
         return response()->json([
             'status'  => 'success',
@@ -46,25 +41,26 @@ class DepartmentController extends Controller
 
     public function show(string $departmentId): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
-        $companyId = $this->request()->route('company');
+        $departments = $this->departmentService->getAllDepartments();
+        $department = $departments->firstWhere('department_id', $departmentId);
 
-        $department = $this->departmentService->getDepartmentById($departmentId, $companyId, $user, $tenantId);
+        if (!$department) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Department not found or access denied.',
+            ], 404);
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'data'    => $department,
+            'status' => 'success',
+            'data'   => $department,
         ]);
     }
 
     public function update(string $departmentId, UpdateDepartmentRequest $request): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
         $dto = UpdateDepartmentDTO::fromRequest($request->validated());
-        $companyId = $this->request()->route('company');
-
-        $department = $this->departmentService->updateDepartment($departmentId, $dto, $companyId, $user);
+        $department = $this->departmentService->updateDepartment($departmentId, $dto);
 
         return response()->json([
             'status'  => 'success',
@@ -75,25 +71,11 @@ class DepartmentController extends Controller
 
     public function destroy(string $departmentId): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
-        $companyId = $this->request()->route('company');
-
-        $this->departmentService->deleteDepartment($departmentId, $companyId, $user, $tenantId);
+        $this->departmentService->deleteDepartment($departmentId);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Department deleted successfully.',
         ]);
-    }
-
-    private function getAuthenticatedUser()
-    {
-        return $this->request()->user();
-    }
-
-    private function getCurrentTenantId()
-    {
-        return $this->request()->headers->get('X-Tenant-ID');
     }
 }

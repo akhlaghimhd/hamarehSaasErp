@@ -4,7 +4,9 @@ namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
 use App\Modules\Organization\Requests\CreateCompanyRequest;
+use App\Modules\Organization\Requests\UpdateCompanyRequest;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
+use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Modules\Organization\Services\CompanyService;
 use Illuminate\Http\JsonResponse;
 
@@ -17,23 +19,18 @@ class CompanyController extends Controller
 
     public function index(): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
-
-        $companies = $this->companyService->getCompaniesByUser($user, $tenantId);
+        $companies = $this->companyService->getAllCompanies();
 
         return response()->json([
-            'status'  => 'success',
-            'data'    => $companies,
+            'status' => 'success',
+            'data'   => $companies,
         ]);
     }
 
     public function store(CreateCompanyRequest $request): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
         $dto = CreateCompanyDTO::fromRequest($request->validated());
-
-        $company = $this->companyService->createCompany($dto, $user);
+        $company = $this->companyService->createCompany($dto);
 
         return response()->json([
             'status'  => 'success',
@@ -44,23 +41,27 @@ class CompanyController extends Controller
 
     public function show(string $companyId): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
+        // getAllCompanies already applies Scope; for single item we rely on service isolation
+        $companies = $this->companyService->getAllCompanies();
+        $company = $companies->firstWhere('company_id', $companyId);
 
-        $company = $this->companyService->getCompanyById($companyId, $user, $tenantId);
+        if (!$company) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Company not found or access denied.',
+            ], 404);
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'data'    => $company,
+            'status' => 'success',
+            'data'   => $company,
         ]);
     }
 
     public function update(string $companyId, UpdateCompanyRequest $request): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
         $dto = UpdateCompanyDTO::fromRequest($request->validated());
-
-        $company = $this->companyService->updateCompany($companyId, $dto, $user);
+        $company = $this->companyService->updateCompany($companyId, $dto);
 
         return response()->json([
             'status'  => 'success',
@@ -71,24 +72,11 @@ class CompanyController extends Controller
 
     public function destroy(string $companyId): JsonResponse
     {
-        $user = $this->getAuthenticatedUser();
-        $tenantId = $this->getCurrentTenantId();
-
-        $this->companyService->deleteCompany($companyId, $user, $tenantId);
+        $this->companyService->deleteCompany($companyId);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Company deleted successfully.',
         ]);
-    }
-
-    private function getAuthenticatedUser()
-    {
-        return $this->request()->user();
-    }
-
-    private function getCurrentTenantId()
-    {
-        return $this->request()->headers->get('X-Tenant-ID');
     }
 }
