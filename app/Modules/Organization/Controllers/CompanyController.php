@@ -2,59 +2,93 @@
 
 namespace App\Modules\Organization\Controllers;
 
-use App\Base\Controller; // کنترلر بیس پروژه شما
+use App\Base\Controller;
 use App\Modules\Organization\Requests\CreateCompanyRequest;
+use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Modules\Organization\Services\CompanyService;
 use Illuminate\Http\JsonResponse;
 
 class CompanyController extends Controller
 {
-    public function __construct(private readonly CompanyService $companyService)
-    {
+    public function __construct(
+        private readonly CompanyService $companyService
+    ) {
     }
 
     public function index(): JsonResponse
     {
-        $companies = $this->companyService->getAllCompanies();
-        return response()->json(['data' => $companies]);
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+
+        $companies = $this->companyService->getCompaniesByUser($user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'data'    => $companies,
+        ]);
     }
 
     public function store(CreateCompanyRequest $request): JsonResponse
     {
-        try {
-            $company = $this->companyService->createCompany($request->toDTO());
-            
-            return response()->json([
-                'message' => 'شرکت با موفقیت ثبت شد.',
-                'data' => $company
-            ], 201);
-            
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
-    }
-    public function update(\App\Modules\Organization\Requests\UpdateCompanyRequest $request, string $id): JsonResponse
-    {
-        try {
-            $company = $this->companyService->updateCompany($id, $request->toDTO());
-            
-            return response()->json([
-                'message' => 'اطلاعات شرکت با موفقیت ویرایش شد.',
-                'data' => $company
-            ], 200);
-            
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
+        $user = $this->getAuthenticatedUser();
+        $dto = CreateCompanyDTO::fromRequest($request->validated());
+
+        $company = $this->companyService->createCompany($dto, $user);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Company created successfully.',
+            'data'    => $company,
+        ], 201);
     }
 
-    public function destroy(string $id): JsonResponse
+    public function show(string $companyId): JsonResponse
     {
-        try {
-            $this->companyService->deleteCompany($id);
-            return response()->json(['message' => 'شرکت با موفقیت حذف شد.'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+
+        $company = $this->companyService->getCompanyById($companyId, $user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'data'    => $company,
+        ]);
+    }
+
+    public function update(string $companyId, UpdateCompanyRequest $request): JsonResponse
+    {
+        $user = $this->getAuthenticatedUser();
+        $dto = UpdateCompanyDTO::fromRequest($request->validated());
+
+        $company = $this->companyService->updateCompany($companyId, $dto, $user);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Company updated successfully.',
+            'data'    => $company,
+        ]);
+    }
+
+    public function destroy(string $companyId): JsonResponse
+    {
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+
+        $this->companyService->deleteCompany($companyId, $user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Company deleted successfully.',
+        ]);
+    }
+
+    private function getAuthenticatedUser()
+    {
+        return $this->request()->user();
+    }
+
+    private function getCurrentTenantId()
+    {
+        return $this->request()->headers->get('X-Tenant-ID');
     }
 }
