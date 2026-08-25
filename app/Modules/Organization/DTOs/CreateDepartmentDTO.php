@@ -2,14 +2,22 @@
 
 namespace App\Modules\Organization\DTOs;
 
-class CreateDepartmentDTO
+readonly class CreateDepartmentDTO
 {
     public function __construct(
-        public readonly string $branchId,
-        public readonly string $code,
-        public readonly string $name,
-        public readonly ?string $parentDepartmentId = null,
-        public readonly ?string $managerUserId = null, // Logical Reference to Identity
-        public readonly bool $isActive = true
+        public string $name,
+        public string $code,
+        public ?string $description,
+        public int $status = 1,
     ) {}
+
+    public static function fromRequest(array $validatedData): self
+    {
+        return new self(
+            name: $validatedData['name'],
+            code: $validatedData['code'],
+            description: $validatedData['description'] ?? null,
+            status: (int) ($validatedData['status'] ?? 1),
+        );
+    }
 }

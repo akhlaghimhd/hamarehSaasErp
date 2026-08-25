@@ -2,13 +2,12 @@
 
 namespace App\Modules\Organization\DTOs;
 
-readonly class CreateBranchDTO
+readonly class CreateAccountingDTO
 {
     public function __construct(
         public string $name,
         public string $code,
-        public ?string $address,
-        public ?string $phone,
+        public ?string $description,
         public int $status = 1,
     ) {}
 
@@ -17,8 +16,7 @@ readonly class CreateBranchDTO
         return new self(
             name: $validatedData['name'],
             code: $validatedData['code'],
-            address: $validatedData['address'] ?? null,
-            phone: $validatedData['phone'] ?? null,
+            description: $validatedData['description'] ?? null,
             status: (int) ($validatedData['status'] ?? 1),
         );
     }

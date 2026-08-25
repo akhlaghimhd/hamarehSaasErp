@@ -4,44 +4,96 @@ namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
 use App\Modules\Organization\Requests\CreateBranchRequest;
+use App\Modules\Organization\DTOs\CreateBranchDTO;
 use App\Modules\Organization\Services\BranchService;
 use Illuminate\Http\JsonResponse;
 
 class BranchController extends Controller
 {
-    public function __construct(private readonly BranchService $branchService) {}
+    public function __construct(
+        private readonly BranchService $branchService
+    ) {
+    }
 
     public function index(): JsonResponse
     {
-        return response()->json(['data' => $this->branchService->getAllBranches()]);
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+        $companyId = $this->request()->route('company');
+
+        $branches = $this->branchService->getBranchesByCompany($companyId, $user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'data'    => $branches,
+        ]);
     }
 
     public function store(CreateBranchRequest $request): JsonResponse
     {
-        try {
-            $branch = $this->branchService->createBranch($request->toDTO());
-            return response()->json(['message' => 'شعبه با موفقیت ثبت شد.', 'data' => $branch], 201);
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
-    }
-    public function update(\App\Modules\Organization\Requests\UpdateBranchRequest $request, string $id): JsonResponse
-    {
-        try {
-            $branch = $this->branchService->updateBranch($id, $request->toDTO());
-            return response()->json(['message' => 'اطلاعات شعبه با موفقیت ویرایش شد.', 'data' => $branch], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
+        $user = $this->getAuthenticatedUser();
+        $dto = CreateBranchDTO::fromRequest($request->validated());
+        $companyId = $this->request()->route('company');
+
+        $branch = $this->branchService->createBranch($dto, $companyId, $user);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Branch created successfully.',
+            'data'    => $branch,
+        ], 201);
     }
 
-    public function destroy(string $id): JsonResponse
+    public function show(string $branchId): JsonResponse
     {
-        try {
-            $this->branchService->deleteBranch($id);
-            return response()->json(['message' => 'شعبه با موفقیت حذف شد.'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 400);
-        }
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+        $companyId = $this->request()->route('company');
+
+        $branch = $this->branchService->getBranchById($branchId, $companyId, $user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'data'    => $branch,
+        ]);
+    }
+
+    public function update(string $branchId, UpdateBranchRequest $request): JsonResponse
+    {
+        $user = $this->getAuthenticatedUser();
+        $dto = UpdateBranchDTO::fromRequest($request->validated());
+        $companyId = $this->request()->route('company');
+
+        $branch = $this->branchService->updateBranch($branchId, $dto, $companyId, $user);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Branch updated successfully.',
+            'data'    => $branch,
+        ]);
+    }
+
+    public function destroy(string $branchId): JsonResponse
+    {
+        $user = $this->getAuthenticatedUser();
+        $tenantId = $this->getCurrentTenantId();
+        $companyId = $this->request()->route('company');
+
+        $this->branchService->deleteBranch($branchId, $companyId, $user, $tenantId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Branch deleted successfully.',
+        ]);
+    }
+
+    private function getAuthenticatedUser()
+    {
+        return $this->request()->user();
+    }
+
+    private function getCurrentTenantId()
+    {
+        return $this->request()->headers->get('X-Tenant-ID');
     }
 }
