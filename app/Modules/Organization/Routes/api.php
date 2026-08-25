@@ -4,7 +4,6 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\Organization\Controllers\CompanyController;
 use App\Modules\Organization\Controllers\BranchController;
 use App\Modules\Organization\Controllers\DepartmentController;
-use App\Modules\Organization\Controllers\AccountingController;
 
 /*
 |--------------------------------------------------------------------------
@@ -82,22 +81,5 @@ Route::middleware([
     Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
         ->middleware('permission:organization.department.delete')
         ->name('organization.departments.delete');
-
-    // Accounting
-    Route::post('/companies/{company}/accounting/fiscal-periods', [AccountingController::class, 'createFiscalPeriod'])
-        ->middleware('permission:accounting.fiscal-period.create')
-        ->name('organization.accounting.fiscal-period.create');
-
-    Route::post('/companies/{company}/accounting/accounts', [AccountingController::class, 'createAccount'])
-        ->middleware('permission:accounting.account.create')
-        ->name('organization.accounting.account.create');
-
-    Route::post('/companies/{company}/accounting/vouchers', [AccountingController::class, 'createVoucher'])
-        ->middleware('permission:accounting.voucher.create')
-        ->name('organization.accounting.voucher.create');
-
-    Route::post('/companies/{company}/accounting/tax-transactions', [AccountingController::class, 'createTaxTransaction'])
-        ->middleware('permission:accounting.tax-transaction.create')
-        ->name('organization.accounting.tax-transaction.create');
 
 });
