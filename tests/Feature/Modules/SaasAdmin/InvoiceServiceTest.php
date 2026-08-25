@@ -60,6 +60,14 @@ class InvoiceServiceTest extends TestCase
         ]);
 
         $this->assertCount(2, $invoice->items);
+
+        $this->assertDatabaseHas('event_outbox', [
+            'tenant_id'      => $this->tenant->tenant_id,
+            'aggregate_type' => 'platform_invoices',
+            'aggregate_id'   => $invoice->invoice_id,
+            'event_type'     => 'SaasAdmin.InvoiceCreated.v1',
+            'status'         => 1,
+        ]);
     }
 
     public function test_record_payment_marks_invoice_paid(): void
@@ -85,5 +93,13 @@ class InvoiceServiceTest extends TestCase
         ]);
 
         $this->assertEquals(InvoiceService::STATUS_PAID, $invoice->fresh()->status);
+
+        $this->assertDatabaseHas('event_outbox', [
+            'tenant_id'      => $this->tenant->tenant_id,
+            'aggregate_type' => 'platform_invoices',
+            'aggregate_id'   => $invoice->invoice_id,
+            'event_type'     => 'SaasAdmin.InvoicePaid.v1',
+            'status'         => 1,
+        ]);
     }
 }

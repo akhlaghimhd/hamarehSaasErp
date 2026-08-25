@@ -67,6 +67,20 @@ class InvoiceService
                 ]);
             }
 
+            $this->logEventOutbox(
+                $tenantId,
+                'platform_invoices',
+                $invoice->invoice_id,
+                'SaasAdmin.InvoiceCreated.v1',
+                [
+                    'invoice_id'     => $invoice->invoice_id,
+                    'tenant_id'      => $tenantId,
+                    'invoice_number' => $invoiceNumber,
+                    'final_amount'   => $finalAmount,
+                    'status'         => self::STATUS_ISSUED,
+                ]
+            );
+
             return $invoice->load('items');
         });
     }
@@ -100,9 +114,45 @@ class InvoiceService
                 $invoice->status = self::STATUS_PAID;
                 $invoice->updated_by = $createdBy;
                 $invoice->save();
+
+                $this->logEventOutbox(
+                    $invoice->tenant_id,
+                    'platform_invoices',
+                    $invoiceId,
+                    'SaasAdmin.InvoicePaid.v1',
+                    [
+                        'invoice_id'     => $invoiceId,
+                        'tenant_id'      => $invoice->tenant_id,
+                        'transaction_id' => $transaction->transaction_id,
+                        'amount'         => $amount,
+                        'status'         => self::STATUS_PAID,
+                    ]
+                );
             }
 
             return $transaction;
         });
+    }
+
+    /**
+     * Write integration event to shared outbox (same pattern as RoleService / SubscriptionService).
+     */
+    private function logEventOutbox(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 }
