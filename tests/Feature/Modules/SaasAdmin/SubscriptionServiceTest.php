@@ -57,6 +57,14 @@ class SubscriptionServiceTest extends TestCase
             'event_type'      => SubscriptionService::EVENT_CREATED,
         ]);
 
+        $this->assertDatabaseHas('event_outbox', [
+            'tenant_id'      => $this->tenant->tenant_id,
+            'aggregate_type' => 'subscriptions',
+            'aggregate_id'   => $subscription->subscription_id,
+            'event_type'     => 'SaasAdmin.SubscriptionCreated.v1',
+            'status'         => 1,
+        ]);
+
         $this->assertCount(1, $subscription->events);
     }
 
@@ -75,6 +83,14 @@ class SubscriptionServiceTest extends TestCase
         $this->assertDatabaseHas('subscription_events', [
             'subscription_id' => $subscription->subscription_id,
             'event_type'      => SubscriptionService::EVENT_CANCELLED,
+        ]);
+
+        $this->assertDatabaseHas('event_outbox', [
+            'tenant_id'      => $this->tenant->tenant_id,
+            'aggregate_type' => 'subscriptions',
+            'aggregate_id'   => $subscription->subscription_id,
+            'event_type'     => 'SaasAdmin.SubscriptionCancelled.v1',
+            'status'         => 1,
         ]);
     }
 

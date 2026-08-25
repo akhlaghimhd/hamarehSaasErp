@@ -7,6 +7,7 @@ use App\Modules\SaasAdmin\Models\SubscriptionEvent;
 use App\Modules\SaasAdmin\Models\PlanVersion;
 use App\Modules\SaasAdmin\Models\Tenant;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class SubscriptionService
@@ -47,6 +48,20 @@ class SubscriptionService
                 $createdBy
             );
 
+            $this->logEventOutbox(
+                $tenantId,
+                'subscriptions',
+                $subscription->subscription_id,
+                'SaasAdmin.SubscriptionCreated.v1',
+                [
+                    'subscription_id'  => $subscription->subscription_id,
+                    'tenant_id'        => $tenantId,
+                    'plan_version_id'  => $planVersionId,
+                    'status'           => 1,
+                    'start_date'       => $start->toIso8601String(),
+                ]
+            );
+
             return $subscription->load(['planVersion', 'events']);
         });
     }
@@ -84,6 +99,19 @@ class SubscriptionService
                 self::EVENT_CANCELLED,
                 'Subscription cancelled',
                 $cancelledBy
+            );
+
+            $this->logEventOutbox(
+                $subscription->tenant_id,
+                'subscriptions',
+                $subscriptionId,
+                'SaasAdmin.SubscriptionCancelled.v1',
+                [
+                    'subscription_id' => $subscriptionId,
+                    'tenant_id'       => $subscription->tenant_id,
+                    'status'          => 4,
+                    'end_date'        => $subscription->end_date?->toIso8601String(),
+                ]
             );
 
             return $subscription->fresh(['events']);
@@ -126,5 +154,28 @@ class SubscriptionService
             ->whereNull('deleted_at')
             ->latest('start_date')
             ->first();
+    }
+
+    /**
+     * Write integration event to shared outbox (same pattern as IdentityCore RoleService).
+     * Event types are versioned for backward compatibility (law 6.4).
+     */
+    private function logEventOutbox(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 }
