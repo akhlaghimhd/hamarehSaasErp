@@ -5,7 +5,6 @@ namespace App\Modules\SaasAdmin\Services;
 use App\Modules\SaasAdmin\Models\Coupon;
 use App\Modules\SaasAdmin\Models\CouponUsage;
 use App\Modules\SaasAdmin\Models\Tenant;
-use App\Modules\SaasAdmin\Models\PlatformInvoice;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use InvalidArgumentException;
@@ -40,6 +39,40 @@ class CouponService
         ]);
     }
 
+    public function updateCoupon(
+        string $couponId,
+        ?int $status = null,
+        ?float $discountValue = null,
+        ?Carbon $endDate = null,
+        ?string $updatedBy = null
+    ): Coupon {
+        $coupon = Coupon::where('coupon_id', $couponId)->whereNull('deleted_at')->firstOrFail();
+
+        if ($status !== null) {
+            $coupon->status = $status;
+        }
+        if ($discountValue !== null) {
+            $coupon->discount_value = $discountValue;
+        }
+        if ($endDate !== null) {
+            $coupon->end_date = $endDate;
+        }
+        $coupon->updated_by = $updatedBy;
+        $coupon->save();
+
+        return $coupon->fresh();
+    }
+
+    public function softDeleteCoupon(string $couponId, ?string $deletedBy = null): bool
+    {
+        $coupon = Coupon::where('coupon_id', $couponId)->whereNull('deleted_at')->firstOrFail();
+
+        $coupon->deleted_by = $deletedBy;
+        $coupon->save();
+
+        return (bool) $coupon->delete();
+    }
+
     public function applyCoupon(
         string $couponCode,
         string $tenantId,
@@ -53,7 +86,6 @@ class CouponService
                 ->where('status', 1)
                 ->firstOrFail();
 
-            // Simple validity check
             $now = Carbon::now();
             if ($coupon->start_date && $now->lt($coupon->start_date)) {
                 throw new InvalidArgumentException('Coupon is not yet valid.');

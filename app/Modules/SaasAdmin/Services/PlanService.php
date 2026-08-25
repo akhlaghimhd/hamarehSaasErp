@@ -10,13 +10,9 @@ use InvalidArgumentException;
 
 class PlanService
 {
-    /**
-     * Create a new Plan with its first version (version_number = 1).
-     */
     public function createPlan(string $code, string $name, ?string $createdBy = null): Plan
     {
         return DB::transaction(function () use ($code, $name, $createdBy) {
-            // Prevent duplicate active code
             $exists = Plan::where('code', $code)->whereNull('deleted_at')->exists();
             if ($exists) {
                 throw new InvalidArgumentException("Plan code [{$code}] already exists.");
@@ -30,7 +26,6 @@ class PlanService
                 'updated_by' => $createdBy,
             ]);
 
-            // Automatically create the first version
             PlanVersion::create([
                 'plan_id'        => $plan->plan_id,
                 'version_number' => 1,
@@ -43,9 +38,6 @@ class PlanService
         });
     }
 
-    /**
-     * Create a new version for an existing Plan.
-     */
     public function createPlanVersion(string $planId, int $versionNumber, ?string $createdBy = null): PlanVersion
     {
         return DB::transaction(function () use ($planId, $versionNumber, $createdBy) {
@@ -72,9 +64,30 @@ class PlanService
         });
     }
 
-    /**
-     * List all active plans with their versions.
-     */
+    public function updatePlan(string $planId, string $name, ?int $status = null, ?string $updatedBy = null): Plan
+    {
+        $plan = Plan::where('plan_id', $planId)->whereNull('deleted_at')->firstOrFail();
+
+        $plan->name = $name;
+        if ($status !== null) {
+            $plan->status = $status;
+        }
+        $plan->updated_by = $updatedBy;
+        $plan->save();
+
+        return $plan->fresh('versions');
+    }
+
+    public function softDeletePlan(string $planId, ?string $deletedBy = null): bool
+    {
+        $plan = Plan::where('plan_id', $planId)->whereNull('deleted_at')->firstOrFail();
+
+        $plan->deleted_by = $deletedBy;
+        $plan->save();
+
+        return (bool) $plan->delete();
+    }
+
     public function listActivePlans(): Collection
     {
         return Plan::with(['versions' => function ($query) {
@@ -84,18 +97,5 @@ class PlanService
             ->where('status', 1)
             ->orderBy('code')
             ->get();
-    }
-
-    /**
-     * Soft-delete a plan.
-     */
-    public function softDeletePlan(string $planId, ?string $deletedBy = null): bool
-    {
-        $plan = Plan::where('plan_id', $planId)->whereNull('deleted_at')->firstOrFail();
-
-        $plan->deleted_by = $deletedBy;
-        $plan->save();
-
-        return (bool) $plan->delete();
     }
 }
