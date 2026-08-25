@@ -5,19 +5,23 @@ namespace App\Modules\Organization\DTOs;
 readonly class CreateDepartmentDTO
 {
     public function __construct(
-        public string $name,
+        public string $branchId,
         public string $code,
-        public ?string $description,
-        public int $status = 1,
+        public string $name,
+        public ?string $parentDepartmentId = null,
+        public ?string $managerUserId = null,
+        public bool $isActive = true,
     ) {}
 
     public static function fromRequest(array $validatedData): self
     {
         return new self(
-            name: $validatedData['name'],
+            branchId: $validatedData['branch_id'],
             code: $validatedData['code'],
-            description: $validatedData['description'] ?? null,
-            status: (int) ($validatedData['status'] ?? 1),
+            name: $validatedData['name'],
+            parentDepartmentId: $validatedData['parent_department_id'] ?? null,
+            managerUserId: $validatedData['manager_user_id'] ?? null,
+            isActive: (bool) ($validatedData['is_active'] ?? true),
         );
     }
 }
