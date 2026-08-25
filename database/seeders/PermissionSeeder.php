@@ -188,6 +188,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'document-management.attachment.delete', 'name' => 'Delete Attachment', 'module_name' => 'DocumentManagement', 'action_type' => 'DELETE'],
             ['code' => 'document-management.sequence.create', 'name' => 'Create Document Sequence', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
             ['code' => 'document-management.version.create', 'name' => 'Create Document Version', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
+
+            // SaasAdmin (newly added for Permission Middleware enforcement)
+            ['code' => 'saas-admin.tenant.create', 'name' => 'Create Tenant', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE', 'description' => 'Permission to create a new tenant'],
+            ['code' => 'saas-admin.tenant.view', 'name' => 'View Tenants', 'module_name' => 'SaasAdmin', 'action_type' => 'READ', 'description' => 'Permission to view tenants'],
+            ['code' => 'saas-admin.tenant.update', 'name' => 'Update Tenant', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE', 'description' => 'Permission to update tenant'],
+            ['code' => 'saas-admin.tenant.delete', 'name' => 'Delete Tenant', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE', 'description' => 'Permission to soft-delete tenant'],
         ];
     }
 }
