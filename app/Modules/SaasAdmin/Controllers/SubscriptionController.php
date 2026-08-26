@@ -45,7 +45,7 @@ class SubscriptionController extends Controller
 
     public function cancel(string $subscriptionId): JsonResponse
     {
-        $user = request()->user();
+        $user = $this->request()->user();
         if (!$user) {
             return response()->json([
                 'status'  => 'error',
@@ -61,6 +61,55 @@ class SubscriptionController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Subscription cancelled successfully.',
+            'data'    => $subscription,
+        ]);
+    }
+
+    public function show(string $subscriptionId): JsonResponse
+    {
+        $user = $this->request()->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $subscription = $this->subscriptionService->getActiveSubscription($user->tenant_id ?? $this->request()->headers->get('X-Tenant-ID'));
+
+        if (!$subscription || $subscription->subscription_id !== $subscriptionId) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Subscription not found or access denied.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $subscription,
+        ]);
+    }
+
+    public function update(string $subscriptionId, UpdateSubscriptionRequest $request): JsonResponse
+    {
+        $user = $this->request()->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $dto = UpdateSubscriptionDTO::fromRequest($request->validated());
+        $subscription = $this->subscriptionService->updateSubscriptionStatus(
+            $subscriptionId,
+            $dto->status,
+            $user->user_id
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Subscription updated successfully.',
             'data'    => $subscription,
         ]);
     }

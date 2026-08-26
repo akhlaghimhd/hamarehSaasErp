@@ -44,4 +44,29 @@ class InvoiceController extends Controller
             'data'    => $invoice,
         ], 201);
     }
+
+    public function show(string $invoiceId): JsonResponse
+    {
+        $user = $this->request()->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
+
+        $invoice = $this->invoiceService->getInvoiceById($invoiceId, $user);
+
+        if (!$invoice) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Invoice not found or access denied.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $invoice,
+        ]);
+    }
 }
