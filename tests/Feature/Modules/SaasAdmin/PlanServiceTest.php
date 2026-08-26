@@ -37,6 +37,12 @@ class PlanServiceTest extends TestCase
             'status'         => 1,
         ]);
 
+        $this->assertDatabaseHas('event_outbox', [
+            'aggregate_type' => 'plans',
+            'event_type'     => 'SaasAdmin.PlanCreated.v1',
+            'status'         => 1,
+        ]);
+
         $this->assertCount(1, $plan->versions);
     }
 

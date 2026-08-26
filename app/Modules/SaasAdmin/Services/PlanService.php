@@ -5,6 +5,7 @@ namespace App\Modules\SaasAdmin\Services;
 use App\Modules\SaasAdmin\Models\Plan;
 use App\Modules\SaasAdmin\Models\PlanVersion;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
 
@@ -26,13 +27,28 @@ class PlanService
                 'updated_by' => $createdBy,
             ]);
 
-            PlanVersion::create([
+            $version = PlanVersion::create([
                 'plan_id'        => $plan->plan_id,
                 'version_number' => 1,
                 'status'         => 1,
                 'created_by'     => $createdBy,
                 'updated_by'     => $createdBy,
             ]);
+
+            $this->logEventOutbox(
+                null,
+                'plans',
+                $plan->plan_id,
+                'SaasAdmin.PlanCreated.v1',
+                [
+                    'plan_id'        => $plan->plan_id,
+                    'code'           => $plan->code,
+                    'name'           => $plan->name,
+                    'plan_version_id'=> $version->plan_version_id,
+                    'version_number' => 1,
+                    'status'         => 1,
+                ]
+            );
 
             return $plan->load('versions');
         });
@@ -54,13 +70,28 @@ class PlanService
                 );
             }
 
-            return PlanVersion::create([
+            $version = PlanVersion::create([
                 'plan_id'        => $planId,
                 'version_number' => $versionNumber,
                 'status'         => 1,
                 'created_by'     => $createdBy,
                 'updated_by'     => $createdBy,
             ]);
+
+            $this->logEventOutbox(
+                null,
+                'plan_versions',
+                $version->plan_version_id,
+                'SaasAdmin.PlanVersionCreated.v1',
+                [
+                    'plan_id'         => $planId,
+                    'plan_version_id' => $version->plan_version_id,
+                    'version_number'  => $versionNumber,
+                    'status'          => 1,
+                ]
+            );
+
+            return $version;
         });
     }
 
@@ -97,5 +128,28 @@ class PlanService
             ->where('status', 1)
             ->orderBy('code')
             ->get();
+    }
+
+    /**
+     * Platform-level entities (plans) may have null tenant_id in outbox.
+     * Uses empty string fallback if DB requires NOT NULL — adjust if schema differs.
+     */
+    private function logEventOutbox(
+        ?string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId ?? '00000000-0000-0000-0000-000000000000',
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 }
