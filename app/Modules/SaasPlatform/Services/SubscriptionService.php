@@ -52,7 +52,7 @@ class SubscriptionService
                 $tenantId,
                 'subscriptions',
                 $subscription->subscription_id,
-                'SaasAdmin.SubscriptionCreated.v1',
+                'SaasPlatform.SubscriptionCreated.v1',
                 [
                     'subscription_id'  => $subscription->subscription_id,
                     'tenant_id'        => $tenantId,
@@ -105,7 +105,7 @@ class SubscriptionService
                 $subscription->tenant_id,
                 'subscriptions',
                 $subscriptionId,
-                'SaasAdmin.SubscriptionCancelled.v1',
+                'SaasPlatform.SubscriptionCancelled.v1',
                 [
                     'subscription_id' => $subscriptionId,
                     'tenant_id'       => $subscription->tenant_id,

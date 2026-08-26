@@ -39,7 +39,7 @@ class PlanService
                 null,
                 'plans',
                 $plan->plan_id,
-                'SaasAdmin.PlanCreated.v1',
+                'SaasPlatform.PlanCreated.v1',
                 [
                     'plan_id'        => $plan->plan_id,
                     'code'           => $plan->code,
@@ -82,7 +82,7 @@ class PlanService
                 null,
                 'plan_versions',
                 $version->plan_version_id,
-                'SaasAdmin.PlanVersionCreated.v1',
+                'SaasPlatform.PlanVersionCreated.v1',
                 [
                     'plan_id'         => $planId,
                     'plan_version_id' => $version->plan_version_id,

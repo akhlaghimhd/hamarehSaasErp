@@ -71,7 +71,7 @@ class InvoiceService
                 $tenantId,
                 'platform_invoices',
                 $invoice->invoice_id,
-                'SaasAdmin.InvoiceCreated.v1',
+                'SaasPlatform.InvoiceCreated.v1',
                 [
                     'invoice_id'     => $invoice->invoice_id,
                     'tenant_id'      => $tenantId,
@@ -119,7 +119,7 @@ class InvoiceService
                     $invoice->tenant_id,
                     'platform_invoices',
                     $invoiceId,
-                    'SaasAdmin.InvoicePaid.v1',
+                    'SaasPlatform.InvoicePaid.v1',
                     [
                         'invoice_id'     => $invoiceId,
                         'tenant_id'      => $invoice->tenant_id,
