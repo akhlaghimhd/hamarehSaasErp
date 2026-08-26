@@ -1,116 +1,153 @@
 <?php
 
-namespace App\Modules\SaasAdmin\Controllers;
+namespace Tests\Feature\Modules\SaasAdmin;
 
-use App\Base\Controller;
-use App\Modules\SaasAdmin\Requests\CreateSubscriptionRequest;
-use App\Modules\SaasAdmin\DTOs\CreateSubscriptionDTO;
-use App\Modules\SaasAdmin\Services\SubscriptionService;
-use Illuminate\Http\JsonResponse;
+use Tests\TestCase;
+use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\IdentityCore\Models\User;
+use App\Modules\IdentityCore\Models\TenantUser;
+use App\Modules\IdentityCore\Models\TenantRole;
+use App\Modules\IdentityCore\Models\TenantPermission;
+use App\Modules\IdentityCore\Models\TenantUserRole;
+use App\Modules\IdentityCore\Models\TenantRolePermission;
+use App\Modules\SaasAdmin\Models\PlanVersion;
+use App\Modules\SaasAdmin\Services\PlanService;
+use App\Base\Context\TenantContext;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
-class SubscriptionController extends Controller
+class SubscriptionPermissionTest extends TestCase
 {
-    public function __construct(
-        private readonly SubscriptionService $subscriptionService
-    ) {
-    }
+    use RefreshDatabase;
 
-    public function store(CreateSubscriptionRequest $request): JsonResponse
+    protected Tenant $tenant;
+    protected User $authorizedUser;
+    protected User $unauthorizedUser;
+    protected string $authorizedToken;
+    protected string $unauthorizedToken;
+    protected PlanVersion $planVersion;
+
+    protected function setUp(): void
     {
-        $user = $request->user();
-        if (!$user) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Unauthorized.',
-            ], 401);
-        }
+        parent::setUp();
 
-        $dto = CreateSubscriptionDTO::fromRequest($request->validated());
-        $startDate = $dto->startDate ? Carbon::parse($dto->startDate) : null;
+        $this->tenant = Tenant::factory()->create(['status' => 1]);
 
-        $subscription = $this->subscriptionService->createSubscription(
-            $dto->tenantId,
-            $dto->planVersionId,
-            $startDate,
-            $user->user_id
-        );
+        $this->authorizedUser = User::factory()->create(['status' => 1]);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Subscription created successfully.',
-            'data'    => $subscription,
-        ], 201);
-    }
-
-    public function cancel(string $subscriptionId): JsonResponse
-    {
-        $user = $this->request()->user();
-        if (!$user) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Unauthorized.',
-            ], 401);
-        }
-
-        $subscription = $this->subscriptionService->cancelSubscription(
-            $subscriptionId,
-            $user->user_id
-        );
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Subscription cancelled successfully.',
-            'data'    => $subscription,
+        TenantUser::factory()->create([
+            'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => $this->authorizedUser->user_id,
+            'status'    => 1,
         ]);
+
+        $role = TenantRole::factory()->create([
+            'tenant_id' => $this->tenant->tenant_id,
+            'code'      => 'sub-manager',
+            'name'      => 'Subscription Manager',
+            'status'    => 1,
+        ]);
+
+        foreach (['saas-admin.subscription.create', 'saas-admin.subscription.cancel'] as $code) {
+            $perm = TenantPermission::create([
+                'tenant_permission_id' => (string) Str::uuid(),
+                'tenant_id'            => $this->tenant->tenant_id,
+                'code'                 => $code,
+                'name'                 => $code,
+                'module_name'          => 'SaasAdmin',
+                'action_type'          => 'CREATE',
+                'status'               => 1,
+            ]);
+
+            TenantRolePermission::create([
+                'tenant_role_permission_id' => (string) Str::uuid(),
+                'tenant_id'                 => $this->tenant->tenant_id,
+                'tenant_role_id'            => $role->tenant_role_id,
+                'tenant_permission_id'      => $perm->tenant_permission_id,
+            ]);
+        }
+
+        TenantUserRole::create([
+            'tenant_user_role_id' => (string) Str::uuid(),
+            'tenant_id'           => $this->tenant->tenant_id,
+            'user_id'             => $this->authorizedUser->user_id,
+            'tenant_role_id'      => $role->tenant_role_id,
+        ]);
+
+        $this->authorizedToken = $this->authorizedUser->createToken(
+            'sub-auth-token',
+            ['tenant:' . $this->tenant->tenant_id]
+        )->plainTextToken;
+
+        $this->unauthorizedUser = User::factory()->create(['status' => 1]);
+
+        TenantUser::factory()->create([
+            'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => $this->unauthorizedUser->user_id,
+            'status'    => 1,
+        ]);
+
+        $this->unauthorizedToken = $this->unauthorizedUser->createToken(
+            'sub-unauth-token',
+            ['tenant:' . $this->tenant->tenant_id]
+        )->plainTextToken;
+
+        TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
+        app()->instance('current_tenant_id', $this->tenant->tenant_id);
+
+        $plan = app(PlanService::class)->createPlan('BASIC', 'Basic Plan');
+        $this->planVersion = $plan->versions->first();
     }
 
-    public function show(string $subscriptionId): JsonResponse
+    public function test_authorized_user_can_create_and_cancel_subscription(): void
     {
-        $user = $this->request()->user();
-        if (!$user) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Unauthorized.',
-            ], 401);
-        }
-
-        $subscription = $this->subscriptionService->getActiveSubscription($user->tenant_id ?? $this->request()->headers->get('X-Tenant-ID'));
-
-        if (!$subscription || $subscription->subscription_id !== $subscriptionId) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Subscription not found or access denied.',
-            ], 404);
-        }
-
-        return response()->json([
-            'status' => 'success',
-            'data'   => $subscription,
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $this->authorizedToken,
+            'X-Tenant-ID'   => $this->tenant->tenant_id,
+            'Accept'        => 'application/json',
+        ])->postJson('/api/saas-admin/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
+            'start_date'      => Carbon::now()->toDateString(),
         ]);
+
+        $response->assertStatus(201);
+        $subId = $response->json('data.subscription_id');
+
+        $cancelResponse = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $this->authorizedToken,
+            'X-Tenant-ID'   => $this->tenant->tenant_id,
+            'Accept'        => 'application/json',
+        ])->postJson("/api/saas-admin/subscriptions/{$subId}/cancel");
+
+        $cancelResponse->assertStatus(200);
     }
 
-    public function update(string $subscriptionId, UpdateSubscriptionRequest $request): JsonResponse
+    public function test_unauthorized_user_cannot_create_or_cancel(): void
     {
-        $user = $this->request()->user();
-        if (!$user) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Unauthorized.',
-            ], 401);
-        }
-
-        $dto = UpdateSubscriptionDTO::fromRequest($request->validated());
-        $subscription = $this->subscriptionService->updateSubscriptionStatus(
-            $subscriptionId,
-            $dto->status,
-            $user->user_id
-        );
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Subscription updated successfully.',
-            'data'    => $subscription,
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $this->unauthorizedToken,
+            'X-Tenant-ID'   => $this->tenant->tenant_id,
+            'Accept'        => 'application/json',
+        ])->postJson('/api/saas-admin/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
         ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_unauthenticated_request_is_rejected(): void
+    {
+        $response = $this->withHeaders([
+            'X-Tenant-ID' => $this->tenant->tenant_id,
+            'Accept'      => 'application/json',
+        ])->postJson('/api/saas-admin/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
+        ]);
+
+        $response->assertStatus(401);
     }
 }

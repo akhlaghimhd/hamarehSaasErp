@@ -10,10 +10,8 @@ use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
-use App\Modules\SaasAdmin\Models\Plan;
 use App\Modules\SaasAdmin\Models\PlanVersion;
 use App\Modules\SaasAdmin\Services\PlanService;
-use App\Modules\SaasAdmin\Services\SubscriptionService;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -51,12 +49,7 @@ class SubscriptionPermissionTest extends TestCase
             'status'    => 1,
         ]);
 
-        $perms = [
-            'saas-admin.subscription.create',
-            'saas-admin.subscription.cancel',
-        ];
-
-        foreach ($perms as $code) {
+        foreach (['saas-admin.subscription.create', 'saas-admin.subscription.cancel'] as $code) {
             $perm = TenantPermission::create([
                 'tenant_permission_id' => (string) Str::uuid(),
                 'tenant_id'            => $this->tenant->tenant_id,
@@ -103,22 +96,20 @@ class SubscriptionPermissionTest extends TestCase
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
 
-        $planService = app(PlanService::class);
-        $plan = $planService->createPlan('BASIC', 'Basic Plan');
+        $plan = app(PlanService::class)->createPlan('BASIC', 'Basic Plan');
         $this->planVersion = $plan->versions->first();
     }
 
-    /** @test */
-    public function authorized_user_can_create_and_cancel_subscription(): void
+    public function test_authorized_user_can_create_and_cancel_subscription(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
         ])->postJson('/api/saas-admin/subscriptions', [
-            'tenant_id'        => $this->tenant->tenant_id,
-            'plan_version_id'  => $this->planVersion->plan_version_id,
-            'start_date'       => Carbon::now()->toDateString(),
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
+            'start_date'      => Carbon::now()->toDateString(),
         ]);
 
         $response->assertStatus(201);
@@ -133,23 +124,21 @@ class SubscriptionPermissionTest extends TestCase
         $cancelResponse->assertStatus(200);
     }
 
-    /** @test */
-    public function unauthorized_user_cannot_create_or_cancel(): void
+    public function test_unauthorized_user_cannot_create_or_cancel(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
         ])->postJson('/api/saas-admin/subscriptions', [
-            'tenant_id'        => $this->tenant->tenant_id,
-            'plan_version_id'  => $this->planVersion->plan_version_id,
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
         ]);
 
         $response->assertStatus(403);
     }
 
-    /** @test */
-    public function unauthenticated_request_is_rejected(): void
+    public function test_unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
