@@ -1,0 +1,47 @@
+﻿<?php
+
+namespace App\Modules\SaasPlatform\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class PlanPrice extends Model
+{
+    use HasFactory, HasUuids, SoftDeletes;
+
+    protected $table = 'plan_prices';
+    protected $primaryKey = 'plan_price_id';
+    public $incrementing = false;
+    protected $keyType = 'string';
+
+    protected $fillable = [
+        'plan_version_id',
+        'amount',
+        'billing_period_days',
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'amount' => 'decimal:4',
+            'billing_period_days' => 'integer',
+            'status' => 'integer',
+            'row_version' => 'integer',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
+        ];
+    }
+
+    public function planVersion(): BelongsTo
+    {
+        return $this->belongsTo(PlanVersion::class, 'plan_version_id', 'plan_version_id');
+    }
+}
