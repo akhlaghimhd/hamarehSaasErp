@@ -7,7 +7,6 @@ use App\Modules\SaasAdmin\Requests\CreatePlanRequest;
 use App\Modules\SaasAdmin\DTOs\CreatePlanDTO;
 use App\Modules\SaasAdmin\Services\PlanService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 
 class PlanController extends Controller
 {
@@ -18,12 +17,19 @@ class PlanController extends Controller
 
     public function store(CreatePlanRequest $request): JsonResponse
     {
-        $userId = Auth::guard('api')->id();
-        $dto = CreatePlanDTO::fromRequest($request->validated());
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
 
-        $plan = $this->planService->createPlan($dto->code, $dto->name, $userId);
+        $dto = CreatePlanDTO::fromRequest($request->validated());
+        $plan = $this->planService->createPlan($dto->code, $dto->name, $user->user_id);
 
         return response()->json([
+            'status'  => 'success',
             'message' => 'Plan created successfully.',
             'data'    => $plan,
         ], 201);
@@ -34,7 +40,8 @@ class PlanController extends Controller
         $plans = $this->planService->listActivePlans();
 
         return response()->json([
-            'data' => $plans,
+            'status' => 'success',
+            'data'   => $plans,
         ]);
     }
 }

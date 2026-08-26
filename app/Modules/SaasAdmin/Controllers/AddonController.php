@@ -7,7 +7,6 @@ use App\Modules\SaasAdmin\Requests\CreateAddonRequest;
 use App\Modules\SaasAdmin\DTOs\CreateAddonDTO;
 use App\Modules\SaasAdmin\Services\AddonService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 
 class AddonController extends Controller
 {
@@ -18,12 +17,19 @@ class AddonController extends Controller
 
     public function store(CreateAddonRequest $request): JsonResponse
     {
-        $userId = Auth::guard('api')->id();
-        $dto = CreateAddonDTO::fromRequest($request->validated());
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
 
-        $addon = $this->addonService->createAddon($dto->code, $dto->name, $userId);
+        $dto = CreateAddonDTO::fromRequest($request->validated());
+        $addon = $this->addonService->createAddon($dto->code, $dto->name, $user->user_id);
 
         return response()->json([
+            'status'  => 'success',
             'message' => 'Addon created successfully.',
             'data'    => $addon,
         ], 201);
@@ -34,7 +40,8 @@ class AddonController extends Controller
         $addons = $this->addonService->listActiveAddons();
 
         return response()->json([
-            'data' => $addons,
+            'status' => 'success',
+            'data'   => $addons,
         ]);
     }
 }

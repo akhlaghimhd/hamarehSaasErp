@@ -7,7 +7,6 @@ use App\Modules\SaasAdmin\Requests\CreateCouponRequest;
 use App\Modules\SaasAdmin\DTOs\CreateCouponDTO;
 use App\Modules\SaasAdmin\Services\CouponService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class CouponController extends Controller
@@ -19,9 +18,15 @@ class CouponController extends Controller
 
     public function store(CreateCouponRequest $request): JsonResponse
     {
-        $userId = Auth::guard('api')->id();
-        $dto = CreateCouponDTO::fromRequest($request->validated());
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
 
+        $dto = CreateCouponDTO::fromRequest($request->validated());
         $start = $dto->startDate ? Carbon::parse($dto->startDate) : null;
         $end   = $dto->endDate ? Carbon::parse($dto->endDate) : null;
 
@@ -31,10 +36,11 @@ class CouponController extends Controller
             $dto->discountValue,
             $start,
             $end,
-            $userId
+            $user->user_id
         );
 
         return response()->json([
+            'status'  => 'success',
             'message' => 'Coupon created successfully.',
             'data'    => $coupon,
         ], 201);

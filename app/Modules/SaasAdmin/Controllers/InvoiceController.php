@@ -7,7 +7,6 @@ use App\Modules\SaasAdmin\Requests\CreateInvoiceRequest;
 use App\Modules\SaasAdmin\DTOs\CreateInvoiceDTO;
 use App\Modules\SaasAdmin\Services\InvoiceService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class InvoiceController extends Controller
@@ -19,9 +18,15 @@ class InvoiceController extends Controller
 
     public function store(CreateInvoiceRequest $request): JsonResponse
     {
-        $userId = Auth::guard('api')->id();
-        $dto = CreateInvoiceDTO::fromRequest($request->validated());
+        $user = $request->user();
+        if (!$user) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Unauthorized.',
+            ], 401);
+        }
 
+        $dto = CreateInvoiceDTO::fromRequest($request->validated());
         $dueDate = $dto->dueDate ? Carbon::parse($dto->dueDate) : null;
 
         $invoice = $this->invoiceService->createInvoice(
@@ -30,10 +35,11 @@ class InvoiceController extends Controller
             $dto->discountAmount,
             $dto->taxAmount,
             $dueDate,
-            $userId
+            $user->user_id
         );
 
         return response()->json([
+            'status'  => 'success',
             'message' => 'Invoice created successfully.',
             'data'    => $invoice,
         ], 201);
