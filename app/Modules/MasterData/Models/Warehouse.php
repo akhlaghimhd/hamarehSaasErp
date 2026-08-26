@@ -43,6 +43,6 @@ class Warehouse extends Model
 
     public function tenant()
     {
-        return $this->belongsTo(\App\Modules\SaasAdmin\Models\Tenant::class, 'tenant_id', 'tenant_id');
+        return $this->belongsTo(\App\Modules\SaasPlatform\Models\Tenant::class, 'tenant_id', 'tenant_id');
     }
 }
