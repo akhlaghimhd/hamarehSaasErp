@@ -1,10 +1,10 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Plan;
-use App\Modules\SaasAdmin\Models\PlanVersion;
-use App\Modules\SaasAdmin\Services\PlanService;
+use App\Modules\SaasPlatform\Models\Plan;
+use App\Modules\SaasPlatform\Models\PlanVersion;
+use App\Modules\SaasPlatform\Services\PlanService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

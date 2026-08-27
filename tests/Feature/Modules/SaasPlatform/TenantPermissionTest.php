@@ -1,9 +1,9 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -28,13 +28,11 @@ class TenantPermissionTest extends TestCase
     {
         parent::setUp();
 
-        // Existing tenant context (the one the user belongs to)
         $this->tenant = Tenant::factory()->create([
             'tenant_code' => 'PERM_SAAS',
             'status'      => 1,
         ]);
 
-        // Authorized user (has saas-admin.tenant.create)
         $this->authorizedUser = User::factory()->create(['status' => 1]);
 
         TenantUser::factory()->create([
@@ -79,7 +77,6 @@ class TenantPermissionTest extends TestCase
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
-        // Unauthorized user (member of same tenant, but no permission)
         $this->unauthorizedUser = User::factory()->create(['status' => 1]);
 
         TenantUser::factory()->create([
@@ -93,7 +90,6 @@ class TenantPermissionTest extends TestCase
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
-        // Set TenantContext for application layer
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
@@ -113,7 +109,7 @@ class TenantPermissionTest extends TestCase
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', $payload);
+        ])->postJson('/api/saas-platform/tenants', $payload);
 
         $response->assertStatus(201)
             ->assertJsonPath('status', 'success')
@@ -151,7 +147,7 @@ class TenantPermissionTest extends TestCase
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', $payload);
+        ])->postJson('/api/saas-platform/tenants', $payload);
 
         $response->assertStatus(403)
             ->assertJsonPath('status', 'error');
@@ -167,7 +163,7 @@ class TenantPermissionTest extends TestCase
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', [
+        ])->postJson('/api/saas-platform/tenants', [
             'tenant_code' => 'NO_AUTH',
             'tenant_name' => 'No Auth Org',
             'slug'        => 'no-auth-org',
@@ -183,7 +179,7 @@ class TenantPermissionTest extends TestCase
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', [
+        ])->postJson('/api/saas-platform/tenants', [
             'tenant_name' => 'Missing Code And Slug',
         ]);
 
@@ -193,23 +189,21 @@ class TenantPermissionTest extends TestCase
     /** @test */
     public function create_tenant_rejects_duplicate_tenant_code(): void
     {
-        // First create
         $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', [
+        ])->postJson('/api/saas-platform/tenants', [
             'tenant_code' => 'DUP_CODE',
             'tenant_name' => 'First Org',
             'slug'        => 'first-org',
         ])->assertStatus(201);
 
-        // Duplicate code
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/tenants', [
+        ])->postJson('/api/saas-platform/tenants', [
             'tenant_code' => 'DUP_CODE',
             'tenant_name' => 'Second Org',
             'slug'        => 'second-org',

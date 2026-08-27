@@ -1,13 +1,13 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\PlanOffer;
-use App\Modules\SaasAdmin\Models\PlanOfferDiscount;
-use App\Modules\SaasAdmin\Models\OfferAvailableAddon;
-use App\Modules\SaasAdmin\Services\PlanService;
-use App\Modules\SaasAdmin\Services\AddonService;
-use App\Modules\SaasAdmin\Services\OfferService;
+use App\Modules\SaasPlatform\Models\PlanOffer;
+use App\Modules\SaasPlatform\Models\PlanOfferDiscount;
+use App\Modules\SaasPlatform\Models\OfferAvailableAddon;
+use App\Modules\SaasPlatform\Services\PlanService;
+use App\Modules\SaasPlatform\Services\AddonService;
+use App\Modules\SaasPlatform\Services\OfferService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Services\CouponService;
+use App\Modules\SaasPlatform\Services\CouponService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

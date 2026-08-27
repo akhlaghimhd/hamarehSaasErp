@@ -1,15 +1,15 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Plan;
-use App\Modules\SaasAdmin\Models\PlanVersion;
-use App\Modules\SaasAdmin\Models\PlanPrice;
-use App\Modules\SaasAdmin\Models\PlanModule;
-use App\Modules\SaasAdmin\Models\PlanFeature;
-use App\Modules\SaasAdmin\Models\PlanVersionFeature;
-use App\Modules\SaasAdmin\Services\PlanService;
-use App\Modules\SaasAdmin\Services\PlanPricingService;
+use App\Modules\SaasPlatform\Models\Plan;
+use App\Modules\SaasPlatform\Models\PlanVersion;
+use App\Modules\SaasPlatform\Models\PlanPrice;
+use App\Modules\SaasPlatform\Models\PlanModule;
+use App\Modules\SaasPlatform\Models\PlanFeature;
+use App\Modules\SaasPlatform\Models\PlanVersionFeature;
+use App\Modules\SaasPlatform\Services\PlanService;
+use App\Modules\SaasPlatform\Services\PlanPricingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

@@ -1,0 +1,37 @@
+<?php
+
+namespace Database\Factories;
+
+use App\Modules\SaasPlatform\Models\Tenant;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
+
+class TenantFactory extends Factory
+{
+    // متصل کردن دقیق فکتوری به مدل Tenant در لایه ماژول‌ها
+    protected $model = Tenant::class;
+
+    public function definition(): array
+    {
+        $companyName = $this->faker->unique()->company;
+
+        return [
+            // ساخت UUID اختصاصی برای شناسه تننت
+            'tenant_id'              => Str::uuid()->toString(),
+
+            // اصلاح نام ستون از name به tenant_name بر اساس معماری پایگاه داده
+            'tenant_name'            => $companyName,
+
+            // تولید فیلدهای اجباری و کلیدی
+            'tenant_code'            => 'TENANT_' . strtoupper($this->faker->unique()->lexify('????')),
+            'slug'                   => Str::slug($companyName), // فیلد اجباری جا افتاده
+
+            // فیلدهای تکمیلی بر اساس ساختار جدول
+            'legal_name'             => $companyName . ' Ltd',
+            'tenant_type'            => 1,
+            'primary_domain_enabled' => false,
+            'domain_status'          => 1,
+            'status'                 => 1,
+        ];
+    }
+}

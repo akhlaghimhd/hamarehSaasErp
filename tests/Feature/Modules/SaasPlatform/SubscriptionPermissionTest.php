@@ -1,21 +1,23 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
-use App\Modules\SaasAdmin\Services\InvoiceService;
+use App\Modules\SaasPlatform\Models\PlanVersion;
+use App\Modules\SaasPlatform\Services\PlanService;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Carbon\Carbon;
 
-class InvoicePermissionTest extends TestCase
+class SubscriptionPermissionTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -24,6 +26,7 @@ class InvoicePermissionTest extends TestCase
     protected User $unauthorizedUser;
     protected string $authorizedToken;
     protected string $unauthorizedToken;
+    protected PlanVersion $planVersion;
 
     protected function setUp(): void
     {
@@ -41,27 +44,29 @@ class InvoicePermissionTest extends TestCase
 
         $role = TenantRole::factory()->create([
             'tenant_id' => $this->tenant->tenant_id,
-            'code'      => 'inv-manager',
-            'name'      => 'Invoice Manager',
+            'code'      => 'sub-manager',
+            'name'      => 'Subscription Manager',
             'status'    => 1,
         ]);
 
-        $perm = TenantPermission::create([
-            'tenant_permission_id' => (string) Str::uuid(),
-            'tenant_id'            => $this->tenant->tenant_id,
-            'code'                 => 'saas-admin.invoice.create',
-            'name'                 => 'Create Invoice',
-            'module_name'          => 'SaasAdmin',
-            'action_type'          => 'CREATE',
-            'status'               => 1,
-        ]);
+        foreach (['saas-admin.subscription.create', 'saas-admin.subscription.cancel'] as $code) {
+            $perm = TenantPermission::create([
+                'tenant_permission_id' => (string) Str::uuid(),
+                'tenant_id'            => $this->tenant->tenant_id,
+                'code'                 => $code,
+                'name'                 => $code,
+                'module_name'          => 'SaasAdmin',
+                'action_type'          => 'CREATE',
+                'status'               => 1,
+            ]);
 
-        TenantRolePermission::create([
-            'tenant_role_permission_id' => (string) Str::uuid(),
-            'tenant_id'                 => $this->tenant->tenant_id,
-            'tenant_role_id'            => $role->tenant_role_id,
-            'tenant_permission_id'      => $perm->tenant_permission_id,
-        ]);
+            TenantRolePermission::create([
+                'tenant_role_permission_id' => (string) Str::uuid(),
+                'tenant_id'                 => $this->tenant->tenant_id,
+                'tenant_role_id'            => $role->tenant_role_id,
+                'tenant_permission_id'      => $perm->tenant_permission_id,
+            ]);
+        }
 
         TenantUserRole::create([
             'tenant_user_role_id' => (string) Str::uuid(),
@@ -71,7 +76,7 @@ class InvoicePermissionTest extends TestCase
         ]);
 
         $this->authorizedToken = $this->authorizedUser->createToken(
-            'inv-auth-token',
+            'sub-auth-token',
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
@@ -84,61 +89,63 @@ class InvoicePermissionTest extends TestCase
         ]);
 
         $this->unauthorizedToken = $this->unauthorizedUser->createToken(
-            'inv-unauth-token',
+            'sub-unauth-token',
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
+
+        $plan = app(PlanService::class)->createPlan('BASIC', 'Basic Plan');
+        $this->planVersion = $plan->versions->first();
     }
 
-    /** @test */
-    public function authorized_user_can_create_invoice(): void
+    public function test_authorized_user_can_create_and_cancel_subscription(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/invoices', [
-            'tenant_id' => $this->tenant->tenant_id,
-            'items' => [
-                ['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]
-            ],
-            'discount_amount' => 0,
-            'tax_amount'      => 9.99,
+        ])->postJson('/api/saas-platform/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
+            'start_date'      => Carbon::now()->toDateString(),
         ]);
 
         $response->assertStatus(201);
+        $subId = $response->json('data.subscription_id');
+
+        $cancelResponse = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $this->authorizedToken,
+            'X-Tenant-ID'   => $this->tenant->tenant_id,
+            'Accept'        => 'application/json',
+        ])->postJson("/api/saas-platform/subscriptions/{$subId}/cancel");
+
+        $cancelResponse->assertStatus(200);
     }
 
-    /** @test */
-    public function unauthorized_user_cannot_create_invoice(): void
+    public function test_unauthorized_user_cannot_create_or_cancel(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/invoices', [
-            'tenant_id' => $this->tenant->tenant_id,
-            'items' => [['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]],
-            'discount_amount' => 0,
-            'tax_amount'      => 9.99,
+        ])->postJson('/api/saas-platform/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
         ]);
 
         $response->assertStatus(403);
     }
 
-    /** @test */
-    public function unauthenticated_request_is_rejected(): void
+    public function test_unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
-        ])->postJson('/api/saas-admin/invoices', [
-            'tenant_id' => $this->tenant->tenant_id,
-            'items' => [['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]],
-            'discount_amount' => 0,
-            'tax_amount'      => 9.99,
+        ])->postJson('/api/saas-platform/subscriptions', [
+            'tenant_id'       => $this->tenant->tenant_id,
+            'plan_version_id' => $this->planVersion->plan_version_id,
         ]);
 
         $response->assertStatus(401);

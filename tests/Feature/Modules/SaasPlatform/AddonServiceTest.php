@@ -1,13 +1,13 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Tenant;
-use App\Modules\SaasAdmin\Models\Addon;
-use App\Modules\SaasAdmin\Models\SubscriptionAddon;
-use App\Modules\SaasAdmin\Services\PlanService;
-use App\Modules\SaasAdmin\Services\SubscriptionService;
-use App\Modules\SaasAdmin\Services\AddonService;
+use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Addon;
+use App\Modules\SaasPlatform\Models\SubscriptionAddon;
+use App\Modules\SaasPlatform\Services\PlanService;
+use App\Modules\SaasPlatform\Services\SubscriptionService;
+use App\Modules\SaasPlatform\Services\AddonService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

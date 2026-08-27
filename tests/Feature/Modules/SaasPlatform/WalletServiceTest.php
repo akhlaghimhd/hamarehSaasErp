@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Tenant;
-use App\Modules\SaasAdmin\Models\TenantWallet;
-use App\Modules\SaasAdmin\Models\TenantWalletTransaction;
-use App\Modules\SaasAdmin\Services\WalletService;
+use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Models\TenantWallet;
+use App\Modules\SaasPlatform\Models\TenantWalletTransaction;
+use App\Modules\SaasPlatform\Services\WalletService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

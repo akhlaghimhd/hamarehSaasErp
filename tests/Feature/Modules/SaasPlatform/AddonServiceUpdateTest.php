@@ -1,8 +1,8 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Services\AddonService;
+use App\Modules\SaasPlatform\Services\AddonService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 

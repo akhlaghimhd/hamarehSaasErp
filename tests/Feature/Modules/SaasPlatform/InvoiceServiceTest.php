@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Tenant;
-use App\Modules\SaasAdmin\Models\PlatformInvoice;
-use App\Modules\SaasAdmin\Models\PlatformInvoiceItem;
-use App\Modules\SaasAdmin\Models\PlatformTransaction;
-use App\Modules\SaasAdmin\Services\InvoiceService;
+use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Models\PlatformInvoice;
+use App\Modules\SaasPlatform\Models\PlatformInvoiceItem;
+use App\Modules\SaasPlatform\Models\PlatformTransaction;
+use App\Modules\SaasPlatform\Services\InvoiceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -45,8 +45,8 @@ class InvoiceServiceTest extends TestCase
         $invoice = $this->invoiceService->createInvoice(
             $this->tenant->tenant_id,
             $items,
-            5.0000, // discount
-            10.0000 // tax
+            5.0000,
+            10.0000
         );
 
         $this->assertDatabaseHas('platform_invoices', [

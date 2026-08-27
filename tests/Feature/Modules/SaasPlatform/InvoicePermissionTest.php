@@ -1,20 +1,21 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
+use App\Modules\SaasPlatform\Services\InvoiceService;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
-class PlanPermissionTest extends TestCase
+class InvoicePermissionTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -28,10 +29,7 @@ class PlanPermissionTest extends TestCase
     {
         parent::setUp();
 
-        $this->tenant = Tenant::factory()->create([
-            'tenant_code' => 'PLAN_PERM',
-            'status'      => 1,
-        ]);
+        $this->tenant = Tenant::factory()->create(['status' => 1]);
 
         $this->authorizedUser = User::factory()->create(['status' => 1]);
 
@@ -43,16 +41,16 @@ class PlanPermissionTest extends TestCase
 
         $role = TenantRole::factory()->create([
             'tenant_id' => $this->tenant->tenant_id,
-            'code'      => 'plan-manager',
-            'name'      => 'Plan Manager',
+            'code'      => 'inv-manager',
+            'name'      => 'Invoice Manager',
             'status'    => 1,
         ]);
 
-        $createPerm = TenantPermission::create([
+        $perm = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenant->tenant_id,
-            'code'                 => 'saas-admin.plan.create',
-            'name'                 => 'Create Plan',
+            'code'                 => 'saas-admin.invoice.create',
+            'name'                 => 'Create Invoice',
             'module_name'          => 'SaasAdmin',
             'action_type'          => 'CREATE',
             'status'               => 1,
@@ -62,7 +60,7 @@ class PlanPermissionTest extends TestCase
             'tenant_role_permission_id' => (string) Str::uuid(),
             'tenant_id'                 => $this->tenant->tenant_id,
             'tenant_role_id'            => $role->tenant_role_id,
-            'tenant_permission_id'      => $createPerm->tenant_permission_id,
+            'tenant_permission_id'      => $perm->tenant_permission_id,
         ]);
 
         TenantUserRole::create([
@@ -73,7 +71,7 @@ class PlanPermissionTest extends TestCase
         ]);
 
         $this->authorizedToken = $this->authorizedUser->createToken(
-            'plan-auth-token',
+            'inv-auth-token',
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
@@ -86,7 +84,7 @@ class PlanPermissionTest extends TestCase
         ]);
 
         $this->unauthorizedToken = $this->unauthorizedUser->createToken(
-            'plan-unauth-token',
+            'inv-unauth-token',
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
@@ -95,31 +93,36 @@ class PlanPermissionTest extends TestCase
     }
 
     /** @test */
-    public function authorized_user_with_permission_can_create_plan(): void
+    public function authorized_user_can_create_invoice(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->authorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/plans', [
-            'code' => 'PRO-PLAN',
-            'name' => 'Professional Plan',
+        ])->postJson('/api/saas-platform/invoices', [
+            'tenant_id' => $this->tenant->tenant_id,
+            'items' => [
+                ['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]
+            ],
+            'discount_amount' => 0,
+            'tax_amount'      => 9.99,
         ]);
 
-        $response->assertStatus(201)
-            ->assertJsonPath('status', 'success');
+        $response->assertStatus(201);
     }
 
     /** @test */
-    public function unauthorized_user_without_permission_cannot_create_plan(): void
+    public function unauthorized_user_cannot_create_invoice(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/saas-admin/plans', [
-            'code' => 'FORBIDDEN',
-            'name' => 'Forbidden Plan',
+        ])->postJson('/api/saas-platform/invoices', [
+            'tenant_id' => $this->tenant->tenant_id,
+            'items' => [['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]],
+            'discount_amount' => 0,
+            'tax_amount'      => 9.99,
         ]);
 
         $response->assertStatus(403);
@@ -131,9 +134,11 @@ class PlanPermissionTest extends TestCase
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
-        ])->postJson('/api/saas-admin/plans', [
-            'code' => 'NOAUTH',
-            'name' => 'No Auth Plan',
+        ])->postJson('/api/saas-platform/invoices', [
+            'tenant_id' => $this->tenant->tenant_id,
+            'items' => [['item_type' => 'subscription', 'description' => 'Basic', 'amount' => 99.99]],
+            'discount_amount' => 0,
+            'tax_amount'      => 9.99,
         ]);
 
         $response->assertStatus(401);

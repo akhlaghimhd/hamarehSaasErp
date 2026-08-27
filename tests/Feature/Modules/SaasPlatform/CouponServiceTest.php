@@ -1,11 +1,11 @@
 <?php
 
-namespace Tests\Feature\Modules\SaasAdmin;
+namespace Tests\Feature\Modules\SaasPlatform;
 
-use App\Modules\SaasAdmin\Models\Tenant;
-use App\Modules\SaasAdmin\Models\Coupon;
-use App\Modules\SaasAdmin\Models\CouponUsage;
-use App\Modules\SaasAdmin\Services\CouponService;
+use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Coupon;
+use App\Modules\SaasPlatform\Models\CouponUsage;
+use App\Modules\SaasPlatform\Services\CouponService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Carbon\Carbon;
