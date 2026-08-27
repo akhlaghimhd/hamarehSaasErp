@@ -1,9 +1,9 @@
-<?php
+﻿<?php
 
 namespace Tests\Feature;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -27,15 +27,15 @@ class TenantIsolationTest extends TestCase
     {
         parent::setUp();
 
-        // اول کاربرها رو بسازید
+        // ط§ظˆظ„ ع©ط§ط±ط¨ط±ظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $this->globalUserA = User::factory()->create();
         $this->globalUserB = User::factory()->create();
 
-        // سپس تننت‌ها رو بسازید
+        // ط³ظ¾ط³ طھظ†ظ†طھâ€Œظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $this->tenantA = Tenant::factory()->create(['tenant_code' => 'TENANT_A']);
         $this->tenantB = Tenant::factory()->create(['tenant_code' => 'TENANT_B']);
 
-        // ارتباط کاربرها با تننت‌ها
+        // ط§ط±طھط¨ط§ط· ع©ط§ط±ط¨ط±ظ‡ط§ ط¨ط§ طھظ†ظ†طھâ€Œظ‡ط§
         TenantUser::factory()->create([
             'tenant_id' => $this->tenantA->tenant_id,
             'user_id'   => $this->globalUserA->user_id,
@@ -48,7 +48,7 @@ class TenantIsolationTest extends TestCase
             'status'    => 1
         ]);
 
-        // نقش‌ها رو بسازید
+        // ظ†ظ‚ط´â€Œظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $roleA = TenantRole::factory()->create([
             'tenant_id' => $this->tenantA->tenant_id,
             'code'      => 'ROLE_A'
@@ -59,7 +59,7 @@ class TenantIsolationTest extends TestCase
             'code'      => 'ROLE_B'
         ]);
 
-        // ایجاد permission مورد نیاز برای تست API و تخصیص آن به کاربر A
+        // ط§غŒط¬ط§ط¯ permission ظ…ظˆط±ط¯ ظ†غŒط§ط² ط¨ط±ط§غŒ طھط³طھ API ظˆ طھط®طµغŒطµ ط¢ظ† ط¨ظ‡ ع©ط§ط±ط¨ط± A
         $permission = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenantA->tenant_id,
