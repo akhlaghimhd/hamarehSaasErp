@@ -23,7 +23,7 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // 2. بررسی وجود و فعال بودن مستأجر (بدون string interpolation)
+        // 2. بررسی وجود و فعال بودن مستأجر
         $isValidTenant = DB::table('tenants')
             ->where('tenant_id', $tenantId)
             ->where('status', 1)
@@ -55,7 +55,6 @@ class TenantContextMiddleware
         }
 
         // 4. تنظیم امن شناسه مستأجر در سطح PostgreSQL برای RLS (parameter binding)
-        // استفاده از set_config با binding برای جلوگیری از SQL Injection
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
         // 5. تنظیم شناسه مستأجر در لاراول
