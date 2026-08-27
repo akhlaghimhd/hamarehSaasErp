@@ -23,12 +23,13 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // 2. بررسی وجود و فعال بودن مستأجر
+        // 2. بررسی وجود و فعال بودن مستأجر (بدون string interpolation)
         $isValidTenant = DB::table('tenants')
             ->where('tenant_id', $tenantId)
             ->where('status', 1)
+            ->whereNull('deleted_at')
             ->exists();
-            
+
         if (! $isValidTenant) {
             return response()->json([
                 'success' => false,
@@ -36,12 +37,13 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // 3. اعتبارسنجی عضویت کاربر در مستأجر
+        // 3. اعتبارسنجی عضویت کاربر در مستأجر (در صورت وجود کاربر احراز هویت‌شده)
         if ($user = $request->user()) {
             $isMember = DB::table('tenant_users')
                 ->where('tenant_id', $tenantId)
                 ->where('user_id', $user->user_id)
                 ->where('status', 1)
+                ->whereNull('deleted_at')
                 ->exists();
 
             if (! $isMember) {
@@ -52,8 +54,9 @@ class TenantContextMiddleware
             }
         }
 
-        // 4. تنظیم شناسه مستأجر در سطح PostgreSQL برای RLS
-        DB::statement("SET app.current_tenant_id = '{$tenantId}'");
+        // 4. تنظیم امن شناسه مستأجر در سطح PostgreSQL برای RLS (parameter binding)
+        // استفاده از set_config با binding برای جلوگیری از SQL Injection
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
         // 5. تنظیم شناسه مستأجر در لاراول
         Context::add('tenant_id', $tenantId);
@@ -68,9 +71,9 @@ class TenantContextMiddleware
     /**
      * پاکسازی تنظیمات پس از پایان درخواست
      */
-    public function terminate($request, $response)
+    public function terminate($request, $response): void
     {
-        DB::statement("RESET app.current_tenant_id");
+        DB::statement("SELECT set_config('app.current_tenant_id', '', false)");
         TenantContext::resetInstance();
     }
 }
