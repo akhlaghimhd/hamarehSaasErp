@@ -2,19 +2,25 @@
 
 namespace App\Modules\MasterData\Models;
 
-use App\Base\Models\BaseModel; // فرض بر این است که یک مدل پایه برای UUID و غیره دارید
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
+use App\Base\Traits\ScopeScoped;
 
 class CostCenter extends Model
 {
-    use HasUuids, SoftDeletes, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped, ScopeScoped;
 
     protected $table = 'cost_centers';
-    
-    // کلید اصلی از نوع UUID
+    protected $primaryKey = 'cost_center_id';
+
+    /**
+     * Scope type and column for Resource-level filtering (Law 4.2 / 4.3)
+     */
+    protected static string $scopeType = 'COST_CENTER';
+    protected static string $scopeColumn = 'cost_center_id';
+
     protected $keyType = 'string';
     public $incrementing = false;
 
@@ -27,6 +33,10 @@ class CostCenter extends Model
         'name',
         'type',    // 1:Company, 2:Branch, 3:Department, 4:CostCenter, 5:Project
         'status',  // 1: Active, 0: Inactive
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     /**
@@ -34,7 +44,7 @@ class CostCenter extends Model
      */
     public function parent()
     {
-        return $this->belongsTo(CostCenter::class, 'parent_cost_center_id');
+        return $this->belongsTo(CostCenter::class, 'parent_cost_center_id', 'cost_center_id');
     }
 
     /**
@@ -42,6 +52,6 @@ class CostCenter extends Model
      */
     public function children()
     {
-        return $this->hasMany(CostCenter::class, 'parent_cost_center_id');
+        return $this->hasMany(CostCenter::class, 'parent_cost_center_id', 'cost_center_id');
     }
 }

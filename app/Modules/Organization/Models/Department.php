@@ -5,14 +5,24 @@ namespace App\Modules\Organization\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Base\Traits\TenantScoped;
+use App\Base\Traits\ScopeScoped;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Department extends Model
 {
-    use HasUuids, TenantScoped, SoftDeletes;
+    use HasUuids, TenantScoped, ScopeScoped, SoftDeletes;
 
     protected $table = 'erp_departments';
     protected $primaryKey = 'department_id';
+
+    /**
+     * Scope type and column for Resource-level filtering (Law 4.2 / 4.3)
+     */
+    protected static string $scopeType = 'DEPARTMENT';
+    protected static string $scopeColumn = 'department_id';
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
