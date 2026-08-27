@@ -65,7 +65,7 @@ class InvoiceServiceTest extends TestCase
             'tenant_id'      => $this->tenant->tenant_id,
             'aggregate_type' => 'platform_invoices',
             'aggregate_id'   => $invoice->invoice_id,
-            'event_type'     => 'SaasAdmin.InvoiceCreated.v1',
+            'event_type'     => 'SaasPlatform.InvoiceCreated.v1',
             'status'         => 1,
         ]);
     }
@@ -98,7 +98,7 @@ class InvoiceServiceTest extends TestCase
             'tenant_id'      => $this->tenant->tenant_id,
             'aggregate_type' => 'platform_invoices',
             'aggregate_id'   => $invoice->invoice_id,
-            'event_type'     => 'SaasAdmin.InvoicePaid.v1',
+            'event_type'     => 'SaasPlatform.InvoicePaid.v1',
             'status'         => 1,
         ]);
     }

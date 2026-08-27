@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace Tests\Feature;
 
@@ -27,15 +27,12 @@ class TenantIsolationTest extends TestCase
     {
         parent::setUp();
 
-        // ط§ظˆظ„ ع©ط§ط±ط¨ط±ظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $this->globalUserA = User::factory()->create();
         $this->globalUserB = User::factory()->create();
 
-        // ط³ظ¾ط³ طھظ†ظ†طھâ€Œظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $this->tenantA = Tenant::factory()->create(['tenant_code' => 'TENANT_A']);
         $this->tenantB = Tenant::factory()->create(['tenant_code' => 'TENANT_B']);
 
-        // ط§ط±طھط¨ط§ط· ع©ط§ط±ط¨ط±ظ‡ط§ ط¨ط§ طھظ†ظ†طھâ€Œظ‡ط§
         TenantUser::factory()->create([
             'tenant_id' => $this->tenantA->tenant_id,
             'user_id'   => $this->globalUserA->user_id,
@@ -48,7 +45,6 @@ class TenantIsolationTest extends TestCase
             'status'    => 1
         ]);
 
-        // ظ†ظ‚ط´â€Œظ‡ط§ ط±ظˆ ط¨ط³ط§ط²غŒط¯
         $roleA = TenantRole::factory()->create([
             'tenant_id' => $this->tenantA->tenant_id,
             'code'      => 'ROLE_A'
@@ -59,7 +55,6 @@ class TenantIsolationTest extends TestCase
             'code'      => 'ROLE_B'
         ]);
 
-        // ط§غŒط¬ط§ط¯ permission ظ…ظˆط±ط¯ ظ†غŒط§ط² ط¨ط±ط§غŒ طھط³طھ API ظˆ طھط®طµغŒطµ ط¢ظ† ط¨ظ‡ ع©ط§ط±ط¨ط± A
         $permission = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenantA->tenant_id,
@@ -108,7 +103,6 @@ class TenantIsolationTest extends TestCase
     /** @test */
     public function api_endpoints_block_cross_tenant_access_and_prevent_data_leakage()
     {
-        // Create a token for user A in tenant A
         $token = $this->globalUserA->createToken(
             'test-token-' . $this->tenantA->tenant_id,
             ['tenant:' . $this->tenantA->tenant_id]

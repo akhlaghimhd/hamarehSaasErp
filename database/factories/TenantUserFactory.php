@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Modules\IdentityCore\Models\TenantUser;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -16,10 +16,9 @@ class TenantUserFactory extends Factory
     {
         return [
             'tenant_user_id' => (string) Str::uuid(),
-            'tenant_id' => Tenant::factory(),
-            'user_id' => User::factory(),
-            'status' => 1, // 1: Active
-            // فیلدهای username و tenant_user_email حذف شدند چون در مهاجرت (Migration) وجود ندارند
+            'tenant_id'      => Tenant::factory(),
+            'user_id'        => User::factory(),
+            'status'         => 1,
         ];
     }
 }

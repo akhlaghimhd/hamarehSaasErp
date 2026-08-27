@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Modules\IdentityCore\Models\TenantRole;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -15,10 +15,10 @@ class TenantRoleFactory extends Factory
     {
         return [
             'tenant_role_id' => (string) Str::uuid(),
-            'tenant_id' => Tenant::factory(),
-            'code' => 'ROLE_' . strtoupper($this->faker->unique()->word()),
-            'name' => $this->faker->word() . ' Role',
-            'status' => 1, 
+            'tenant_id'      => Tenant::factory(),
+            'code'           => 'ROLE_' . strtoupper($this->faker->unique()->word()),
+            'name'           => $this->faker->word() . ' Role',
+            'status'         => 1,
         ];
     }
 }

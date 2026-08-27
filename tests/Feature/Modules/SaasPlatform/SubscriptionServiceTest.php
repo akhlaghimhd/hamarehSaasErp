@@ -61,7 +61,7 @@ class SubscriptionServiceTest extends TestCase
             'tenant_id'      => $this->tenant->tenant_id,
             'aggregate_type' => 'subscriptions',
             'aggregate_id'   => $subscription->subscription_id,
-            'event_type'     => 'SaasAdmin.SubscriptionCreated.v1',
+            'event_type'     => 'SaasPlatform.SubscriptionCreated.v1',
             'status'         => 1,
         ]);
 
@@ -89,7 +89,7 @@ class SubscriptionServiceTest extends TestCase
             'tenant_id'      => $this->tenant->tenant_id,
             'aggregate_type' => 'subscriptions',
             'aggregate_id'   => $subscription->subscription_id,
-            'event_type'     => 'SaasAdmin.SubscriptionCancelled.v1',
+            'event_type'     => 'SaasPlatform.SubscriptionCancelled.v1',
             'status'         => 1,
         ]);
     }
