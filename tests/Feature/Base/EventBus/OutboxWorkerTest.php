@@ -3,7 +3,7 @@
 namespace Tests\Feature\Base\EventBus;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\DB;

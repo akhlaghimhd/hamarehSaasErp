@@ -6,7 +6,7 @@ use Tests\TestCase;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 

@@ -23,12 +23,10 @@ class LoadUserScopesMiddleware
         $user = $request->user();
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        // اگر کاربر لاگین نباشد یا TenantContext تنظیم نشده باشد، چیزی بارگذاری نمی‌کنیم
         if (!$user || !$tenantId) {
             return $next($request);
         }
 
-        // پیدا کردن tenant_user مربوط به این کاربر در مستأجر جاری
         $tenantUser = DB::table('tenant_users')
             ->where('tenant_id', $tenantId)
             ->where('user_id', $user->user_id)
@@ -37,13 +35,10 @@ class LoadUserScopesMiddleware
             ->first();
 
         if (!$tenantUser) {
-            // کاربر عضو این مستأجر نیست (نباید به اینجا برسد چون TenantContextMiddleware چک کرده)
             return $next($request);
         }
 
-        // -------------------------------------------------
-        // 1. بارگذاری Scopes فعال کاربر
-        // -------------------------------------------------
+        // 1. Scopes
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantId)
@@ -62,9 +57,7 @@ class LoadUserScopesMiddleware
             ->map(fn ($item) => (array) $item)
             ->toArray();
 
-        // -------------------------------------------------
-        // 2. بارگذاری Roles کاربر
-        // -------------------------------------------------
+        // 2. Roles — columns must match migration (NO role_type)
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantId)
@@ -76,24 +69,22 @@ class LoadUserScopesMiddleware
                 'tenant_roles.tenant_role_id',
                 'tenant_roles.code',
                 'tenant_roles.name',
-                'tenant_roles.role_type',
+                'tenant_roles.is_system_default',
             ])
             ->get();
 
         $roles = $roleRows->map(function ($role) {
             return [
-                'role_id'   => $role->tenant_role_id,
-                'code'      => $role->code,
-                'name'      => $role->name,
-                'role_type' => $role->role_type,
+                'role_id'           => $role->tenant_role_id,
+                'code'              => $role->code,
+                'name'              => $role->name,
+                'is_system_default' => (bool) $role->is_system_default,
             ];
         })->values()->toArray();
 
         $roleIds = $roleRows->pluck('tenant_role_id')->unique()->values()->toArray();
 
-        // -------------------------------------------------
-        // 3. بارگذاری Permissions از طریق Roles
-        // -------------------------------------------------
+        // 3. Permissions
         $permissions = [];
         if (!empty($roleIds)) {
             $permissions = DB::table('tenant_role_permissions')
@@ -109,15 +100,10 @@ class LoadUserScopesMiddleware
                 ->toArray();
         }
 
-        // -------------------------------------------------
-        // 4. تنظیم ScopeContext
-        // -------------------------------------------------
+        // 4. ScopeContext
         ScopeContext::getInstance()->setScopes($scopes, $tenantUser->tenant_user_id);
 
-        // -------------------------------------------------
-        // 5. تنظیم کامل Security Context در Laravel Context و Container
-        //    مطابق قانون ۴.۴
-        // -------------------------------------------------
+        // 5. Full security context (Law 4.4)
         $securityContext = [
             'user_id'        => $user->user_id,
             'tenant_id'      => $tenantId,
@@ -143,9 +129,6 @@ class LoadUserScopesMiddleware
         return $next($request);
     }
 
-    /**
-     * پاکسازی پس از پایان درخواست
-     */
     public function terminate($request, $response): void
     {
         ScopeContext::resetInstance();

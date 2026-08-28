@@ -11,7 +11,7 @@ use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;

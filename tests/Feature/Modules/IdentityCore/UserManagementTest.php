@@ -3,7 +3,7 @@
 namespace Tests\Feature\Modules\IdentityCore;
 
 use Tests\TestCase;
-use App\Modules\SaasAdmin\Models\Tenant;
+use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
