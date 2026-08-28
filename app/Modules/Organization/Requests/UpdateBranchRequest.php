@@ -14,10 +14,11 @@ class UpdateBranchRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code'      => ['required', 'string', 'max:50'],
-            'name'      => ['required', 'string', 'max:200'],
-            'address'   => ['nullable', 'string'],
-            'is_active' => ['boolean'],
+            'code'       => ['required', 'string', 'max:50'],
+            'name'       => ['required', 'string', 'max:200'],
+            'company_id' => ['nullable', 'uuid'],
+            'address'    => ['nullable', 'string'],
+            'is_active'  => ['boolean'],
         ];
     }
 }

@@ -16,7 +16,6 @@ class BranchService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        // Security Check: آیا شرکت مبدأ متعلق به همین مستأجر است؟
         $companyExists = Company::where('tenant_id', $tenantId)
             ->where('company_id', $dto->companyId)
             ->exists();
@@ -25,10 +24,8 @@ class BranchService
             throw new Exception("شرکت نامعتبر است یا شما دسترسی به آن ندارید.");
         }
 
-        // بررسی دسترسی Scope به شرکت
         $this->ensureScopeAccess('COMPANY', $dto->companyId);
 
-        // بررسی یکتا بودن کد شعبه درون همان شرکت
         if (Branch::where('tenant_id', $tenantId)
                   ->where('company_id', $dto->companyId)
                   ->where('code', $dto->code)->exists()) {
@@ -49,13 +46,11 @@ class BranchService
     {
         $query = Branch::with('company')->orderBy('created_at', 'desc');
 
-        // اعمال فیلتر Scope در صورت وجود Scope از نوع BRANCH
         $branchReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('BRANCH');
 
         if (!empty($branchReferenceIds)) {
             $query->whereIn('branch_id', $branchReferenceIds);
         } else {
-            // اگر Scope از نوع COMPANY وجود دارد، شعبه‌های همان شرکت‌ها را محدود کن
             $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
             if (!empty($companyReferenceIds)) {
                 $query->whereIn('company_id', $companyReferenceIds);
@@ -73,13 +68,28 @@ class BranchService
             ->where('branch_id', $branchId)
             ->firstOrFail();
 
-        // بررسی دسترسی Scope
         $this->ensureScopeAccess('BRANCH', $branchId);
 
-        // بررسی یکتا بودن کد درون همان شرکت (در صورت تغییر کد)
-        if ($branch->code !== $dto->code) {
+        // تعیین شرکت نهایی (اگر ارسال نشده، شرکت فعلی حفظ می‌شود)
+        $targetCompanyId = $dto->companyId ?? $branch->company_id;
+
+        // اگر شرکت تغییر کرده، اعتبارسنجی امنیتی انجام شود
+        if ($targetCompanyId !== $branch->company_id) {
+            $companyExists = Company::where('tenant_id', $tenantId)
+                ->where('company_id', $targetCompanyId)
+                ->exists();
+
+            if (!$companyExists) {
+                throw new Exception("شرکت انتخاب شده نامعتبر است.");
+            }
+
+            $this->ensureScopeAccess('COMPANY', $targetCompanyId);
+        }
+
+        // بررسی یکتا بودن کد درون شرکت هدف
+        if ($branch->code !== $dto->code || $branch->company_id !== $targetCompanyId) {
             if (Branch::where('tenant_id', $tenantId)
-                      ->where('company_id', $branch->company_id)
+                      ->where('company_id', $targetCompanyId)
                       ->where('code', $dto->code)
                       ->where('branch_id', '!=', $branchId)
                       ->exists()) {
@@ -88,10 +98,11 @@ class BranchService
         }
 
         $branch->update([
-            'code'      => $dto->code,
-            'name'      => $dto->name,
-            'address'   => $dto->address,
-            'is_active' => $dto->isActive,
+            'company_id' => $targetCompanyId,
+            'code'       => $dto->code,
+            'name'       => $dto->name,
+            'address'    => $dto->address,
+            'is_active'  => $dto->isActive,
         ]);
 
         return $branch;
@@ -105,7 +116,6 @@ class BranchService
             ->where('branch_id', $branchId)
             ->firstOrFail();
 
-        // بررسی دسترسی Scope
         $this->ensureScopeAccess('BRANCH', $branchId);
 
         if ($branch->departments()->exists()) {

@@ -16,7 +16,6 @@ class DepartmentService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        // Security Check: آیا شعبه مبدأ متعلق به همین مستأجر است؟
         $branchExists = Branch::where('tenant_id', $tenantId)
             ->where('branch_id', $dto->branchId)
             ->exists();
@@ -25,17 +24,14 @@ class DepartmentService
             throw new Exception("شعبه نامعتبر است یا شما دسترسی به آن ندارید.");
         }
 
-        // بررسی دسترسی Scope به شعبه
         $this->ensureScopeAccess('BRANCH', $dto->branchId);
 
-        // بررسی یکتا بودن کد دپارتمان درون همان شعبه
         if (Department::where('tenant_id', $tenantId)
                       ->where('branch_id', $dto->branchId)
                       ->where('code', $dto->code)->exists()) {
             throw new Exception("کد دپارتمان وارد شده برای این شعبه قبلاً ثبت شده است.");
         }
 
-        // بررسی والد (در صورت ارسال)
         if ($dto->parentDepartmentId) {
             $parentExists = Department::where('tenant_id', $tenantId)
                 ->where('department_id', $dto->parentDepartmentId)
@@ -61,13 +57,11 @@ class DepartmentService
     {
         $query = Department::with(['branch', 'parent'])->orderBy('created_at', 'desc');
 
-        // اعمال فیلتر Scope در صورت وجود Scope از نوع DEPARTMENT
         $departmentReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('DEPARTMENT');
 
         if (!empty($departmentReferenceIds)) {
             $query->whereIn('department_id', $departmentReferenceIds);
         } else {
-            // اگر Scope از نوع BRANCH وجود دارد، دپارتمان‌های همان شعبه‌ها را محدود کن
             $branchReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('BRANCH');
             if (!empty($branchReferenceIds)) {
                 $query->whereIn('branch_id', $branchReferenceIds);
@@ -85,21 +79,25 @@ class DepartmentService
             ->where('department_id', $departmentId)
             ->firstOrFail();
 
-        // بررسی دسترسی Scope
         $this->ensureScopeAccess('DEPARTMENT', $departmentId);
 
-        // بررسی یکتا بودن کد درون همان شعبه (در صورت تغییر کد)
-        if ($department->code !== $dto->code) {
-            if (Department::where('tenant_id', $tenantId)
-                          ->where('branch_id', $department->branch_id)
-                          ->where('code', $dto->code)
-                          ->where('department_id', '!=', $departmentId)
-                          ->exists()) {
-                throw new Exception("کد دپارتمان وارد شده برای این شعبه قبلاً ثبت شده است.");
+        // تعیین شعبه نهایی (اگر ارسال نشده، شعبه فعلی حفظ می‌شود)
+        $targetBranchId = $dto->branchId ?? $department->branch_id;
+
+        // اگر شعبه تغییر کرده، اعتبارسنجی امنیتی انجام شود
+        if ($targetBranchId !== $department->branch_id) {
+            $branchExists = Branch::where('tenant_id', $tenantId)
+                ->where('branch_id', $targetBranchId)
+                ->exists();
+
+            if (!$branchExists) {
+                throw new Exception("شعبه انتخاب شده نامعتبر است.");
             }
+
+            $this->ensureScopeAccess('BRANCH', $targetBranchId);
         }
 
-        // بررسی والد (در صورت ارسال و تغییر)
+        // بررسی والد
         if ($dto->parentDepartmentId && $department->parent_department_id !== $dto->parentDepartmentId) {
             if ($dto->parentDepartmentId === $departmentId) {
                 throw new Exception("یک دپارتمان نمی‌تواند والد خودش باشد.");
@@ -114,7 +112,19 @@ class DepartmentService
             }
         }
 
+        // بررسی یکتا بودن کد درون شعبه هدف
+        if ($department->code !== $dto->code || $department->branch_id !== $targetBranchId) {
+            if (Department::where('tenant_id', $tenantId)
+                          ->where('branch_id', $targetBranchId)
+                          ->where('code', $dto->code)
+                          ->where('department_id', '!=', $departmentId)
+                          ->exists()) {
+                throw new Exception("کد دپارتمان وارد شده برای این شعبه قبلاً ثبت شده است.");
+            }
+        }
+
         $department->update([
+            'branch_id'            => $targetBranchId,
             'parent_department_id' => $dto->parentDepartmentId,
             'code'                 => $dto->code,
             'name'                 => $dto->name,
@@ -133,7 +143,6 @@ class DepartmentService
             ->where('department_id', $departmentId)
             ->firstOrFail();
 
-        // بررسی دسترسی Scope
         $this->ensureScopeAccess('DEPARTMENT', $departmentId);
 
         if ($department->children()->exists()) {

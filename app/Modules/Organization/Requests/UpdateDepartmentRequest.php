@@ -16,6 +16,7 @@ class UpdateDepartmentRequest extends FormRequest
         return [
             'code'                 => ['required', 'string', 'max:50'],
             'name'                 => ['required', 'string', 'max:200'],
+            'branch_id'            => ['nullable', 'uuid'],
             'parent_department_id' => ['nullable', 'uuid'],
             'manager_user_id'      => ['nullable', 'uuid'],
             'is_active'            => ['boolean'],
