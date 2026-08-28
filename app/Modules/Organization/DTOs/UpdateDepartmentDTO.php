@@ -2,14 +2,24 @@
 
 namespace App\Modules\Organization\DTOs;
 
-class UpdateDepartmentDTO
+readonly class UpdateDepartmentDTO
 {
     public function __construct(
-        public readonly string $branchId,
-        public readonly string $code,
-        public readonly string $name,
-        public readonly ?string $parentDepartmentId = null,
-        public readonly ?string $managerUserId = null,
-        public readonly bool $isActive = true
+        public string $code,
+        public string $name,
+        public ?string $parentDepartmentId = null,
+        public ?string $managerUserId = null,
+        public bool $isActive = true,
     ) {}
+
+    public static function fromRequest(array $validatedData): self
+    {
+        return new self(
+            code: $validatedData['code'],
+            name: $validatedData['name'],
+            parentDepartmentId: $validatedData['parent_department_id'] ?? null,
+            managerUserId: $validatedData['manager_user_id'] ?? null,
+            isActive: (bool) ($validatedData['is_active'] ?? true),
+        );
+    }
 }

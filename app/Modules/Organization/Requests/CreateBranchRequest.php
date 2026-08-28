@@ -9,17 +9,27 @@ class CreateBranchRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; 
+        return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        // اگر company_id در body نبود، از route parameter بگیر
+        if (!$this->has('company_id') && $this->route('company')) {
+            $this->merge([
+                'company_id' => $this->route('company'),
+            ]);
+        }
     }
 
     public function rules(): array
     {
         return [
             'company_id' => ['required', 'uuid'],
-            'code' => ['required', 'string', 'max:50'],
-            'name' => ['required', 'string', 'max:200'],
-            'address' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
+            'code'       => ['required', 'string', 'max:50'],
+            'name'       => ['required', 'string', 'max:200'],
+            'address'    => ['nullable', 'string'],
+            'is_active'  => ['boolean'],
         ];
     }
 

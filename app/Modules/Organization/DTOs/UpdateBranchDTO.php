@@ -2,13 +2,22 @@
 
 namespace App\Modules\Organization\DTOs;
 
-class UpdateBranchDTO
+readonly class UpdateBranchDTO
 {
     public function __construct(
-        public readonly string $companyId,
-        public readonly string $code,
-        public readonly string $name,
-        public readonly ?string $address = null,
-        public readonly bool $isActive = true
+        public string $code,
+        public string $name,
+        public ?string $address = null,
+        public bool $isActive = true,
     ) {}
+
+    public static function fromRequest(array $validatedData): self
+    {
+        return new self(
+            code: $validatedData['code'],
+            name: $validatedData['name'],
+            address: $validatedData['address'] ?? null,
+            isActive: (bool) ($validatedData['is_active'] ?? true),
+        );
+    }
 }

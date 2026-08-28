@@ -3,7 +3,6 @@
 namespace App\Modules\Organization\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class UpdateDepartmentRequest extends FormRequest
 {
@@ -15,10 +14,11 @@ class UpdateDepartmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name'        => ['sometimes', 'string', 'max:200'],
-            'code'        => ['sometimes', 'string', 'max:100'],
-            'description' => ['nullable', 'string', 'max:500'],
-            'status'      => ['sometimes', 'integer', 'in:0,1'],
+            'code'                 => ['required', 'string', 'max:50'],
+            'name'                 => ['required', 'string', 'max:200'],
+            'parent_department_id' => ['nullable', 'uuid'],
+            'manager_user_id'      => ['nullable', 'uuid'],
+            'is_active'            => ['boolean'],
         ];
     }
 }
