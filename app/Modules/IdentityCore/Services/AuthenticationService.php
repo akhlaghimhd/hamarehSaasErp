@@ -44,7 +44,6 @@ class AuthenticationService
         $credential = $user->credential;
 
         if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
-            // Optional: increment failed_login_count here if desired
             throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
         }
 
@@ -70,7 +69,6 @@ class AuthenticationService
                 throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
             }
 
-            // status: 1 = Active, 2 = Suspended
             if ((int) $tenantUser->status === 2) {
                 throw new HttpException(403, 'Your account is suspended in this organization.');
             }
@@ -79,7 +77,7 @@ class AuthenticationService
                 throw new HttpException(403, 'Your account is not active in this organization.');
             }
 
-            // 3.1 Load Roles for this tenant membership
+            // 3.1 Load Roles (columns match migration: no role_type)
             $roleIds = TenantUserRole::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('user_id', $user->user_id)
@@ -95,14 +93,14 @@ class AuthenticationService
                     ->whereIn('tenant_role_id', $roleIds)
                     ->where('status', 1)
                     ->whereNull('deleted_at')
-                    ->get(['tenant_role_id', 'code', 'name', 'role_type']);
+                    ->get(['tenant_role_id', 'code', 'name', 'is_system_default']);
 
                 $roles = $roleModels->map(function ($role) {
                     return [
-                        'role_id'   => $role->tenant_role_id,
-                        'code'      => $role->code,
-                        'name'      => $role->name,
-                        'role_type' => $role->role_type,
+                        'role_id'           => $role->tenant_role_id,
+                        'code'              => $role->code,
+                        'name'              => $role->name,
+                        'is_system_default' => (bool) $role->is_system_default,
                     ];
                 })->values()->toArray();
 
@@ -157,7 +155,7 @@ class AuthenticationService
             }
         }
 
-        // 4. Issue Token (Laravel Sanctum) with tenant ability
+        // 4. Issue Token (Laravel Sanctum)
         $tokenAbilities = ['*'];
         $tokenName = 'auth_token';
 
@@ -172,16 +170,15 @@ class AuthenticationService
         $user->last_login_at = now();
         $user->save();
 
-        // 6. Build full Security Context according to Law 4.4
-        // Required: user_id, tenant_id, roles, scopes
+        // 6. Full Security Context (Law 4.4)
         $securityContext = [
-            'user_id'         => $user->user_id,
-            'tenant_id'       => $tenantIdToLogin,
-            'tenant_user_id'  => $tenantUser?->tenant_user_id,
-            'roles'           => $roles,
-            'permissions'     => $permissions,
-            'scopes'          => $scopes,
-            'is_owner'        => $tenantUser ? (bool) $tenantUser->is_owner : false,
+            'user_id'        => $user->user_id,
+            'tenant_id'      => $tenantIdToLogin,
+            'tenant_user_id' => $tenantUser?->tenant_user_id,
+            'roles'          => $roles,
+            'permissions'    => $permissions,
+            'scopes'         => $scopes,
+            'is_owner'       => $tenantUser ? (bool) $tenantUser->is_owner : false,
         ];
 
         return [
@@ -196,7 +193,6 @@ class AuthenticationService
                 'email'          => $user->email,
             ],
             'active_tenant_id' => $tenantIdToLogin,
-            // Full security context required by Architecture Law 4.4
             'security_context' => $securityContext,
         ];
     }

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Context;
 use App\Base\Context\TenantContext;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class TenantContextMiddleware
 {
@@ -15,7 +16,6 @@ class TenantContextMiddleware
     {
         $tenantId = $request->header('X-Tenant-ID');
 
-        // 1. بررسی ارسال شناسه مستأجر
         if (! $tenantId) {
             return response()->json([
                 'success' => false,
@@ -23,7 +23,6 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // 2. بررسی وجود و فعال بودن مستأجر
         $isValidTenant = DB::table('tenants')
             ->where('tenant_id', $tenantId)
             ->where('status', 1)
@@ -37,7 +36,6 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // 3. اعتبارسنجی عضویت کاربر در مستأجر (در صورت وجود کاربر احراز هویت‌شده)
         if ($user = $request->user()) {
             $isMember = DB::table('tenant_users')
                 ->where('tenant_id', $tenantId)
@@ -54,25 +52,28 @@ class TenantContextMiddleware
             }
         }
 
-        // 4. تنظیم امن شناسه مستأجر در سطح PostgreSQL برای RLS (parameter binding)
+        // Secure RLS context (parameter binding)
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
-        // 5. تنظیم شناسه مستأجر در لاراول
         Context::add('tenant_id', $tenantId);
         app()->instance('current_tenant_id', $tenantId);
-
-        // Set up TenantContext singleton
         TenantContext::getInstance()->setTenantId($tenantId);
 
         return $next($request);
     }
 
     /**
-     * پاکسازی تنظیمات پس از پایان درخواست
+     * Cleanup after request.
+     * Must not throw if the request transaction was already aborted (PostgreSQL 25P02).
      */
     public function terminate($request, $response): void
     {
-        DB::statement("SELECT set_config('app.current_tenant_id', '', false)");
+        try {
+            DB::statement("SELECT set_config('app.current_tenant_id', '', false)");
+        } catch (Throwable $e) {
+            // Ignore: connection/transaction may already be aborted after a prior SQL error
+        }
+
         TenantContext::resetInstance();
     }
 }
