@@ -215,13 +215,11 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $deleteResponse->assertStatus(200)
             ->assertJsonPath('status', 'success');
 
-        // Record still exists but soft-deleted
         $this->assertSoftDeleted('erp_companies', [
             'company_id' => $companyId,
             'tenant_id'  => $this->tenantA->tenant_id,
         ]);
 
-        // Should no longer appear in index
         $indexAfterDelete = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies');
 
@@ -242,7 +240,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->postJson('/api/organization/companies', $payload)
             ->assertStatus(201);
 
-        // Same code in same tenant → must fail
         $duplicateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->postJson('/api/organization/companies', [
                 'code'      => 'UNIQUE-CODE',
@@ -250,8 +247,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
                 'is_active' => true,
             ]);
 
-        // Service throws Exception → expected 500 or handled as error (depending on exception handler)
-        // We assert it does not return 201
         $this->assertNotEquals(201, $duplicateResponse->status());
     }
 
@@ -276,7 +271,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $response = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/companies/' . $company->company_id);
 
-        // Service throws → not successful delete
         $this->assertNotEquals(200, $response->status());
         $this->assertDatabaseHas('erp_companies', [
             'company_id' => $company->company_id,
@@ -423,7 +417,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
     /** @test */
     public function tenant_a_cannot_see_or_modify_companies_of_tenant_b(): void
     {
-        // Data belonging to Tenant B
         $companyB = Company::withoutGlobalScopes()->create([
             'company_id' => (string) Str::uuid(),
             'tenant_id'  => $this->tenantB->tenant_id,
@@ -432,7 +425,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'is_active'  => true,
         ]);
 
-        // Tenant A tries to list → must not see Tenant B data
         $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies');
 
@@ -440,13 +432,11 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $ids = collect($indexResponse->json('data'))->pluck('company_id')->toArray();
         $this->assertNotContains($companyB->company_id, $ids);
 
-        // Tenant A tries to show Tenant B company → 404
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies/' . $companyB->company_id);
 
         $showResponse->assertStatus(404);
 
-        // Tenant A tries to update Tenant B company → must fail
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->putJson('/api/organization/companies/' . $companyB->company_id, [
                 'code'      => 'HACKED',
@@ -456,7 +446,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
 
         $this->assertNotEquals(200, $updateResponse->status());
 
-        // Data of Tenant B remains untouched
         $this->assertDatabaseHas('erp_companies', [
             'company_id' => $companyB->company_id,
             'tenant_id'  => $this->tenantB->tenant_id,
@@ -468,7 +457,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
     /** @test */
     public function tenant_a_cannot_create_company_under_tenant_b_context(): void
     {
-        // Even if someone tries to force wrong tenant header, context middleware + TenantScoped protect
         $response = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantB->tenant_id))
             ->postJson('/api/organization/companies', [
                 'code'      => 'CROSS-TENANT',
@@ -476,8 +464,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
                 'is_active' => true,
             ]);
 
-        // Depending on middleware strictness this may be 401/403 or still isolated
-        // Critical: no record must be created under tenant B by user A
         $this->assertDatabaseMissing('erp_companies', [
             'code'      => 'CROSS-TENANT',
             'tenant_id' => $this->tenantB->tenant_id,
