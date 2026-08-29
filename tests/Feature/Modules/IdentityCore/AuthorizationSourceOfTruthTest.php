@@ -29,7 +29,7 @@ class AuthorizationSourceOfTruthTest extends TestCase
     protected string $plainPassword = 'SecurePassword123!';
     protected string $userEmail = 'auth.sot@example.com';
     protected string $token;
-    protected string $rolePermissionId;
+    protected string $tenantRoleId;
 
     protected function setUp(): void
     {
@@ -68,6 +68,8 @@ class AuthorizationSourceOfTruthTest extends TestCase
             'status'    => 1,
         ]);
 
+        $this->tenantRoleId = $role->tenant_role_id;
+
         $permission = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenant->tenant_id,
@@ -77,10 +79,8 @@ class AuthorizationSourceOfTruthTest extends TestCase
             'status'               => 1,
         ]);
 
-        $this->rolePermissionId = (string) Str::uuid();
-
         TenantRolePermission::create([
-            'tenant_role_permission_id' => $this->rolePermissionId,
+            'tenant_role_permission_id' => (string) Str::uuid(),
             'tenant_id'                 => $this->tenant->tenant_id,
             'tenant_role_id'            => $role->tenant_role_id,
             'tenant_permission_id'      => $permission->tenant_permission_id,
@@ -123,12 +123,29 @@ class AuthorizationSourceOfTruthTest extends TestCase
     /** @test */
     public function same_token_is_denied_after_permission_revoked_in_db(): void
     {
-        // TenantRolePermission has no SoftDeletes — hard-delete is the real revoke path.
-        DB::table('tenant_role_permissions')
-            ->where('tenant_role_permission_id', $this->rolePermissionId)
+        // Remove every assignment path that could still grant identity.role.view
+        $deletedRp = DB::table('tenant_role_permissions')
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('tenant_role_id', $this->tenantRoleId)
             ->delete();
 
-        // Drop any derived permission cache (tags may be no-op on array store).
+        $deletedUr = DB::table('tenant_user_roles')
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('user_id', $this->user->user_id)
+            ->delete();
+
+        $this->assertGreaterThan(0, $deletedRp, 'role-permission rows must be deleted');
+        $this->assertGreaterThan(0, $deletedUr, 'user-role rows must be deleted');
+
+        $this->assertSame(
+            0,
+            (int) DB::table('tenant_role_permissions')->where('tenant_id', $this->tenant->tenant_id)->count()
+        );
+        $this->assertSame(
+            0,
+            (int) DB::table('tenant_user_roles')->where('tenant_id', $this->tenant->tenant_id)->where('user_id', $this->user->user_id)->count()
+        );
+
         Cache::flush();
 
         $response = $this->withHeaders([
