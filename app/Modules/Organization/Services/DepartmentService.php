@@ -8,10 +8,16 @@ use App\Modules\Organization\DTOs\CreateDepartmentDTO;
 use App\Modules\Organization\DTOs\UpdateDepartmentDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
+use App\Base\Services\ScopeAccessGuard;
 use Exception;
 
 class DepartmentService
 {
+    public function __construct(
+        protected ScopeAccessGuard $scopeAccessGuard = new ScopeAccessGuard()
+    ) {
+    }
+
     public function createDepartment(CreateDepartmentDTO $dto): Department
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
@@ -24,7 +30,7 @@ class DepartmentService
             throw new Exception("شعبه نامعتبر است یا شما دسترسی به آن ندارید.");
         }
 
-        $this->ensureScopeAccess('BRANCH', $dto->branchId);
+        $this->scopeAccessGuard->assertAccess('BRANCH', $dto->branchId);
 
         if (Department::where('tenant_id', $tenantId)
                       ->where('branch_id', $dto->branchId)
@@ -79,12 +85,11 @@ class DepartmentService
             ->where('department_id', $departmentId)
             ->firstOrFail();
 
-        $this->ensureScopeAccess('DEPARTMENT', $departmentId);
+        // Prefer BRANCH parent for department action when DEPARTMENT scopes absent
+        $this->scopeAccessGuard->assertAccess('BRANCH', $department->branch_id);
 
-        // تعیین شعبه نهایی (اگر ارسال نشده، شعبه فعلی حفظ می‌شود)
         $targetBranchId = $dto->branchId ?? $department->branch_id;
 
-        // اگر شعبه تغییر کرده، اعتبارسنجی امنیتی انجام شود
         if ($targetBranchId !== $department->branch_id) {
             $branchExists = Branch::where('tenant_id', $tenantId)
                 ->where('branch_id', $targetBranchId)
@@ -94,10 +99,9 @@ class DepartmentService
                 throw new Exception("شعبه انتخاب شده نامعتبر است.");
             }
 
-            $this->ensureScopeAccess('BRANCH', $targetBranchId);
+            $this->scopeAccessGuard->assertAccess('BRANCH', $targetBranchId);
         }
 
-        // بررسی والد
         if ($dto->parentDepartmentId && $department->parent_department_id !== $dto->parentDepartmentId) {
             if ($dto->parentDepartmentId === $departmentId) {
                 throw new Exception("یک دپارتمان نمی‌تواند والد خودش باشد.");
@@ -112,7 +116,6 @@ class DepartmentService
             }
         }
 
-        // بررسی یکتا بودن کد درون شعبه هدف
         if ($department->code !== $dto->code || $department->branch_id !== $targetBranchId) {
             if (Department::where('tenant_id', $tenantId)
                           ->where('branch_id', $targetBranchId)
@@ -143,22 +146,12 @@ class DepartmentService
             ->where('department_id', $departmentId)
             ->firstOrFail();
 
-        $this->ensureScopeAccess('DEPARTMENT', $departmentId);
+        $this->scopeAccessGuard->assertAccess('BRANCH', $department->branch_id);
 
         if ($department->children()->exists()) {
             throw new Exception("این دپارتمان دارای زیرمجموعه است و قابل حذف نیست.");
         }
 
         $department->delete();
-    }
-
-    private function ensureScopeAccess(string $scopeType, string $referenceId): void
-    {
-        $scopeContext = ScopeContext::getInstance();
-        $referenceIds = $scopeContext->getReferenceIdsByType($scopeType);
-
-        if (!empty($referenceIds) && !in_array($referenceId, $referenceIds, true)) {
-            throw new Exception("شما دسترسی لازم به این منبع را ندارید.");
-        }
     }
 }
