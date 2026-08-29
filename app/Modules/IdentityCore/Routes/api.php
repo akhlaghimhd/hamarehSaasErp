@@ -48,22 +48,26 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.assign-permissions');
         });
 
-        // Scopes
+        // Scopes — specific paths BEFORE /{id}
         Route::prefix('scopes')->group(function () {
             Route::get('/', [ScopeController::class, 'index'])
                 ->middleware('permission:identity.scope.view');
             Route::post('/', [ScopeController::class, 'store'])
                 ->middleware('permission:identity.scope.create');
+
+            Route::post('/assign', [ScopeController::class, 'assign'])
+                ->middleware('permission:identity.scope.assign');
+            Route::post('/unassign', [ScopeController::class, 'unassign'])
+                ->middleware('permission:identity.scope.assign');
+            Route::get('/user/{tenantUserId}', [ScopeController::class, 'userScopes'])
+                ->middleware('permission:identity.scope.view');
+
             Route::get('/{id}', [ScopeController::class, 'show'])
                 ->middleware('permission:identity.scope.view');
             Route::put('/{id}', [ScopeController::class, 'update'])
                 ->middleware('permission:identity.scope.update');
             Route::delete('/{id}', [ScopeController::class, 'destroy'])
                 ->middleware('permission:identity.scope.delete');
-            Route::post('/assign', [ScopeController::class, 'assign'])
-                ->middleware('permission:identity.scope.assign');
-            Route::get('/user/{tenantUserId}', [ScopeController::class, 'userScopes'])
-                ->middleware('permission:identity.scope.view');
         });
     });
 });
