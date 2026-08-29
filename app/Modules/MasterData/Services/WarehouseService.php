@@ -6,6 +6,7 @@ use App\Modules\MasterData\Models\Warehouse;
 use App\Modules\MasterData\DTOs\CreateWarehouseDTO;
 use App\Modules\MasterData\DTOs\UpdateWarehouseDTO;
 use App\Base\Context\ScopeContext;
+use App\Base\Services\ScopeAccessGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Context;
@@ -15,11 +16,15 @@ use Illuminate\Database\Eloquent\Collection;
 
 class WarehouseService
 {
+    public function __construct(
+        protected ScopeAccessGuard $scopeAccessGuard = new ScopeAccessGuard()
+    ) {
+    }
+
     public function getAllWarehouses(): Collection
     {
         $query = Warehouse::query();
 
-        // اعمال فیلتر Scope در صورت وجود Scope از نوع WAREHOUSE
         $warehouseReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('WAREHOUSE');
 
         if (!empty($warehouseReferenceIds)) {
@@ -33,7 +38,7 @@ class WarehouseService
     {
         $warehouse = Warehouse::findOrFail($id);
 
-        $this->ensureScopeAccess('WAREHOUSE', $id);
+        $this->scopeAccessGuard->assertAccess('WAREHOUSE', $id);
 
         return $warehouse;
     }
@@ -53,7 +58,6 @@ class WarehouseService
                     'created_by' => Context::get('user_id'),
                 ]);
 
-                // ⚡ ثبت رویداد ایجاد انبار در Outbox
                 $this->dispatchOutboxEvent('master_data.warehouse.created', $warehouse, $tenantId);
 
                 Log::info("Warehouse created successfully.", ['id' => $warehouse->warehouse_id, 'tenant_id' => $tenantId]);
@@ -73,8 +77,7 @@ class WarehouseService
                 $warehouse = Warehouse::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
 
-                // بررسی دسترسی Scope
-                $this->ensureScopeAccess('WAREHOUSE', $id);
+                $this->scopeAccessGuard->assertAccess('WAREHOUSE', $id);
 
                 $updateData = array_filter([
                     'name'       => $dto->name,
@@ -85,7 +88,6 @@ class WarehouseService
 
                 $warehouse->update($updateData);
 
-                // ⚡ ثبت رویداد ویرایش انبار در Outbox
                 $this->dispatchOutboxEvent('master_data.warehouse.updated', $warehouse, $tenantId);
 
                 return $warehouse;
@@ -103,28 +105,16 @@ class WarehouseService
                 $warehouse = Warehouse::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
 
-                // بررسی دسترسی Scope
-                $this->ensureScopeAccess('WAREHOUSE', $id);
+                $this->scopeAccessGuard->assertAccess('WAREHOUSE', $id);
 
                 $warehouse->update(['deleted_by' => Context::get('user_id')]);
                 $warehouse->delete();
 
-                // ⚡ ثبت رویداد حذف انبار در Outbox
                 $this->dispatchOutboxEvent('master_data.warehouse.deleted', $warehouse, $tenantId);
             });
         } catch (Exception $e) {
             Log::error("Failed to delete Warehouse: " . $e->getMessage());
             throw $e;
-        }
-    }
-
-    private function ensureScopeAccess(string $scopeType, string $referenceId): void
-    {
-        $scopeContext = ScopeContext::getInstance();
-        $referenceIds = $scopeContext->getReferenceIdsByType($scopeType);
-
-        if (!empty($referenceIds) && !in_array($referenceId, $referenceIds, true)) {
-            throw new Exception("شما دسترسی لازم به این منبع را ندارید.");
         }
     }
 

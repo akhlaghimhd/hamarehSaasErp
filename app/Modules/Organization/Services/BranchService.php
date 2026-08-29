@@ -8,10 +8,16 @@ use App\Modules\Organization\DTOs\CreateBranchDTO;
 use App\Modules\Organization\DTOs\UpdateBranchDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
+use App\Base\Services\ScopeAccessGuard;
 use Exception;
 
 class BranchService
 {
+    public function __construct(
+        protected ScopeAccessGuard $scopeAccessGuard = new ScopeAccessGuard()
+    ) {
+    }
+
     public function createBranch(CreateBranchDTO $dto): Branch
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
@@ -24,7 +30,7 @@ class BranchService
             throw new Exception("شرکت نامعتبر است یا شما دسترسی به آن ندارید.");
         }
 
-        $this->ensureScopeAccess('COMPANY', $dto->companyId);
+        $this->scopeAccessGuard->assertAccess('COMPANY', $dto->companyId);
 
         if (Branch::where('tenant_id', $tenantId)
                   ->where('company_id', $dto->companyId)
@@ -68,12 +74,10 @@ class BranchService
             ->where('branch_id', $branchId)
             ->firstOrFail();
 
-        $this->ensureScopeAccess('BRANCH', $branchId);
+        $this->scopeAccessGuard->assertAccess('BRANCH', $branchId);
 
-        // تعیین شرکت نهایی (اگر ارسال نشده، شرکت فعلی حفظ می‌شود)
         $targetCompanyId = $dto->companyId ?? $branch->company_id;
 
-        // اگر شرکت تغییر کرده، اعتبارسنجی امنیتی انجام شود
         if ($targetCompanyId !== $branch->company_id) {
             $companyExists = Company::where('tenant_id', $tenantId)
                 ->where('company_id', $targetCompanyId)
@@ -83,10 +87,9 @@ class BranchService
                 throw new Exception("شرکت انتخاب شده نامعتبر است.");
             }
 
-            $this->ensureScopeAccess('COMPANY', $targetCompanyId);
+            $this->scopeAccessGuard->assertAccess('COMPANY', $targetCompanyId);
         }
 
-        // بررسی یکتا بودن کد درون شرکت هدف
         if ($branch->code !== $dto->code || $branch->company_id !== $targetCompanyId) {
             if (Branch::where('tenant_id', $tenantId)
                       ->where('company_id', $targetCompanyId)
@@ -116,22 +119,12 @@ class BranchService
             ->where('branch_id', $branchId)
             ->firstOrFail();
 
-        $this->ensureScopeAccess('BRANCH', $branchId);
+        $this->scopeAccessGuard->assertAccess('BRANCH', $branchId);
 
         if ($branch->departments()->exists()) {
             throw new Exception("این شعبه دارای دپارتمان‌های زیرمجموعه است و قابل حذف نیست.");
         }
 
         $branch->delete();
-    }
-
-    private function ensureScopeAccess(string $scopeType, string $referenceId): void
-    {
-        $scopeContext = ScopeContext::getInstance();
-        $referenceIds = $scopeContext->getReferenceIdsByType($scopeType);
-
-        if (!empty($referenceIds) && !in_array($referenceId, $referenceIds, true)) {
-            throw new Exception("شما دسترسی لازم به این منبع را ندارید.");
-        }
     }
 }
