@@ -48,15 +48,29 @@ class BranchService
         ]);
     }
 
-    public function getAllBranches()
+    /**
+     * List branches for current tenant, filtered by:
+     * 1. ScopeScoped global scope (BRANCH reference_ids when present)
+     * 2. Explicit BRANCH scopes from ScopeContext (defense in depth)
+     * 3. Fallback: COMPANY scopes → filter by company_id
+     * 4. Optional route company filter (nested /companies/{company}/branches)
+     *
+     * @param  string|null  $companyId  Optional company filter from route
+     */
+    public function getAllBranches(?string $companyId = null)
     {
         $query = Branch::with('company')->orderBy('created_at', 'desc');
+
+        if ($companyId !== null && $companyId !== '') {
+            $query->where('company_id', $companyId);
+        }
 
         $branchReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('BRANCH');
 
         if (!empty($branchReferenceIds)) {
             $query->whereIn('branch_id', $branchReferenceIds);
         } else {
+            // No BRANCH scopes: fall back to COMPANY scopes (gradual-friendly)
             $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
             if (!empty($companyReferenceIds)) {
                 $query->whereIn('company_id', $companyReferenceIds);
