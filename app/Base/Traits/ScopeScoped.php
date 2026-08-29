@@ -5,6 +5,7 @@ namespace App\Base\Traits;
 use App\Base\Context\ScopeContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Context;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * ScopeScoped Trait
@@ -34,6 +35,12 @@ use Illuminate\Support\Facades\Context;
  * - Scopes of type exist but reference_ids empty → zero rows.
  * - Without ScopeContext (Artisan/Queue): gradual skips filter;
  *   strict applies zero rows for listed types.
+ *
+ * F3 — Validate Scope on actions:
+ * - currentUserHasAccessTo(): soft check (bool)
+ * - assertCurrentUserHasAccessTo(): hard check (throws 403)
+ * Use assert* inside services/controllers before mutating a specific resource.
+ * Prefer middleware `scope:TYPE,param` on routes when the reference_id comes from the URL.
  *
  * Config: config/scope.php | env SCOPE_ENFORCEMENT_MODE=gradual|strict
  */
@@ -145,7 +152,8 @@ trait ScopeScoped
     }
 
     /**
-     * Whether the current user may access a specific reference_id.
+     * Whether the current user may access a specific reference_id (soft check).
+     * Aligns with F2 gradual/strict policy.
      */
     public static function currentUserHasAccessTo(string $referenceId): bool
     {
@@ -162,6 +170,24 @@ trait ScopeScoped
         }
 
         return in_array($referenceId, $allowed, true);
+    }
+
+    /**
+     * F3 — Hard assert for action-level Scope validation.
+     * Throws HTTP 403 when the current user is not allowed to act on $referenceId.
+     *
+     * Use in services/controllers before update/delete/show of a concrete resource:
+     *
+     *   Branch::assertCurrentUserHasAccessTo($branchId);
+     */
+    public static function assertCurrentUserHasAccessTo(string $referenceId): void
+    {
+        if (!static::currentUserHasAccessTo($referenceId)) {
+            throw new HttpException(
+                403,
+                'You do not have scope access to this resource.'
+            );
+        }
     }
 
     /**
