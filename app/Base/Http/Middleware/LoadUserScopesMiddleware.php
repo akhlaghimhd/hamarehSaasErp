@@ -23,6 +23,10 @@ class LoadUserScopesMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Always start clean: PHPUnit keeps the process alive across HTTP calls,
+        // so a previous request's singleton must not leak into this one.
+        ScopeContext::resetInstance();
+
         $user = $request->user();
         $tenantId = TenantContext::getInstance()->getTenantId();
 
@@ -59,6 +63,14 @@ class LoadUserScopesMiddleware
             ->get()
             ->map(fn ($item) => (array) $item)
             ->toArray();
+
+        // Normalize scope_type to uppercase for consistent matching
+        $scopes = array_map(function (array $scope) {
+            if (isset($scope['scope_type'])) {
+                $scope['scope_type'] = strtoupper((string) $scope['scope_type']);
+            }
+            return $scope;
+        }, $scopes);
 
         // 2. Roles (DB)
         $roleRows = DB::table('tenant_user_roles')
