@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -122,12 +123,13 @@ class AuthorizationSourceOfTruthTest extends TestCase
     /** @test */
     public function same_token_is_denied_after_permission_revoked_in_db(): void
     {
-        // Revoke permission in DB (source of truth)
-        TenantRolePermission::where('tenant_role_permission_id', $this->rolePermissionId)
-            ->update(['deleted_at' => now()]);
+        // TenantRolePermission has no SoftDeletes — hard-delete is the real revoke path.
+        DB::table('tenant_role_permissions')
+            ->where('tenant_role_permission_id', $this->rolePermissionId)
+            ->delete();
 
-        // Clear derived permission cache so next request hits DB
-        Cache::tags(["tenant:{$this->tenant->tenant_id}"])->flush();
+        // Drop any derived permission cache (tags may be no-op on array store).
+        Cache::flush();
 
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->token,
