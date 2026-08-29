@@ -134,27 +134,20 @@ class ScopeService
         });
     }
 
+    /**
+     * Full replace of user scope assignments (operational assign).
+     * Soft-deletes previous rows; restores or inserts target set.
+     */
     public function assignScopesToUser(AssignScopeToUserDTO $dto): void
     {
         $tenantId = $this->getTenantId();
 
         DB::transaction(function () use ($dto, $tenantId) {
-            $tenantUser = TenantUser::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_user_id', $dto->tenantUserId)
-                ->whereNull('deleted_at')
-                ->first();
+            $this->assertTenantUserBelongsToTenant($tenantId, $dto->tenantUserId);
 
-            if (!$tenantUser) {
-                throw new Exception('tenant_user_id is invalid for the current tenant.');
-            }
+            $desiredScopeIds = array_values(array_unique($dto->scopeIds));
 
-            TenantUserScope::where('tenant_user_id', $dto->tenantUserId)
-                ->where('tenant_id', $tenantId)
-                ->delete();
-
-            $insertData = [];
-            foreach ($dto->scopeIds as $scopeId) {
+            foreach ($desiredScopeIds as $scopeId) {
                 $scope = TenantScope::where('scope_id', $scopeId)
                     ->where('tenant_id', $tenantId)
                     ->where('is_active', true)
@@ -163,20 +156,39 @@ class ScopeService
                 if (!$scope) {
                     throw new Exception("Scope {$scopeId} is invalid or inactive for this tenant.");
                 }
+            }
 
-                $insertData[] = [
+            // Soft-delete assignments not in the desired set
+            TenantUserScope::where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $dto->tenantUserId)
+                ->whereNotIn('scope_id', $desiredScopeIds)
+                ->delete();
+
+            foreach ($desiredScopeIds as $scopeId) {
+                $existing = TenantUserScope::withTrashed()
+                    ->where('tenant_id', $tenantId)
+                    ->where('tenant_user_id', $dto->tenantUserId)
+                    ->where('scope_id', $scopeId)
+                    ->first();
+
+                if ($existing) {
+                    if ($existing->trashed()) {
+                        $existing->restore();
+                        $existing->update([
+                            'updated_at' => now(),
+                            'row_version' => ($existing->row_version ?? 1) + 1,
+                        ]);
+                    }
+                    continue;
+                }
+
+                TenantUserScope::create([
                     'assignment_id'  => (string) Str::uuid(),
                     'tenant_id'      => $tenantId,
                     'tenant_user_id' => $dto->tenantUserId,
                     'scope_id'       => $scopeId,
-                    'created_at'     => now(),
-                    'updated_at'     => now(),
                     'row_version'    => 1,
-                ];
-            }
-
-            if (!empty($insertData)) {
-                TenantUserScope::insert($insertData);
+                ]);
             }
 
             $this->logEventOutbox(
@@ -186,7 +198,41 @@ class ScopeService
                 'identity.scope.assigned.v1',
                 [
                     'tenant_user_id' => $dto->tenantUserId,
-                    'scope_ids'      => $dto->scopeIds,
+                    'scope_ids'      => $desiredScopeIds,
+                ]
+            );
+        });
+    }
+
+    /**
+     * Soft-remove specific scopes from a tenant user (operational unassign).
+     */
+    public function unassignScopesFromUser(AssignScopeToUserDTO $dto): void
+    {
+        $tenantId = $this->getTenantId();
+
+        DB::transaction(function () use ($dto, $tenantId) {
+            $this->assertTenantUserBelongsToTenant($tenantId, $dto->tenantUserId);
+
+            $scopeIds = array_values(array_unique($dto->scopeIds));
+
+            $affected = TenantUserScope::where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $dto->tenantUserId)
+                ->whereIn('scope_id', $scopeIds)
+                ->delete();
+
+            if ($affected === 0) {
+                throw new Exception('No matching active scope assignments found for this user.');
+            }
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_user_scopes',
+                $dto->tenantUserId,
+                'identity.scope.unassigned.v1',
+                [
+                    'tenant_user_id' => $dto->tenantUserId,
+                    'scope_ids'      => $scopeIds,
                 ]
             );
         });
@@ -194,14 +240,30 @@ class ScopeService
 
     public function getUserScopes(string $tenantUserId): Collection
     {
-        $this->getTenantId();
+        $tenantId = $this->getTenantId();
+
+        $this->assertTenantUserBelongsToTenant($tenantId, $tenantUserId);
 
         return TenantUserScope::with('scope')
+            ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->get()
             ->pluck('scope')
             ->filter()
             ->values();
+    }
+
+    private function assertTenantUserBelongsToTenant(string $tenantId, string $tenantUserId): void
+    {
+        $tenantUser = TenantUser::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_user_id', $tenantUserId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$tenantUser) {
+            throw new Exception('tenant_user_id is invalid for the current tenant.');
+        }
     }
 
     /**
