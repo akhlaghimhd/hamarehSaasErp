@@ -6,6 +6,7 @@ use App\Modules\MasterData\Models\CostCenter;
 use App\Modules\MasterData\DTOs\CreateCostCenterDTO;
 use App\Modules\MasterData\DTOs\UpdateCostCenterDTO;
 use App\Base\Context\ScopeContext;
+use App\Base\Services\ScopeAccessGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Context;
@@ -15,11 +16,15 @@ use Illuminate\Database\Eloquent\Collection;
 
 class CostCenterService
 {
+    public function __construct(
+        protected ScopeAccessGuard $scopeAccessGuard = new ScopeAccessGuard()
+    ) {
+    }
+
     public function getAllCostCenters(): Collection
     {
         $query = CostCenter::query();
 
-        // اعمال فیلتر Scope در صورت وجود Scope از نوع COST_CENTER
         $costCenterReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COST_CENTER');
 
         if (!empty($costCenterReferenceIds)) {
@@ -33,7 +38,7 @@ class CostCenterService
     {
         $costCenter = CostCenter::findOrFail($id);
 
-        $this->ensureScopeAccess('COST_CENTER', $id);
+        $this->scopeAccessGuard->assertAccess('COST_CENTER', $id);
 
         return $costCenter;
     }
@@ -43,6 +48,10 @@ class CostCenterService
         try {
             return DB::transaction(function () use ($dto) {
                 $tenantId = Context::get('tenant_id');
+
+                if ($dto->companyId) {
+                    $this->scopeAccessGuard->assertAccess('COMPANY', $dto->companyId);
+                }
 
                 $costCenter = CostCenter::create([
                     'tenant_id'             => $tenantId,
@@ -56,7 +65,6 @@ class CostCenterService
                     'created_by'            => Context::get('user_id'),
                 ]);
 
-                // ⚡ ثبت رویداد ساخت مرکز هزینه در Outbox
                 $this->dispatchOutboxEvent('master_data.cost_center.created', $costCenter, $tenantId);
 
                 Log::info("CostCenter created successfully.", [
@@ -79,8 +87,7 @@ class CostCenterService
                 $costCenter = CostCenter::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
 
-                // بررسی دسترسی Scope
-                $this->ensureScopeAccess('COST_CENTER', $id);
+                $this->scopeAccessGuard->assertAccess('COST_CENTER', $id);
 
                 $updateData = array_filter([
                     'name'                  => $dto->name,
@@ -94,7 +101,6 @@ class CostCenterService
 
                 $costCenter->update($updateData);
 
-                // ⚡ ثبت رویداد آپدیت در Outbox
                 $this->dispatchOutboxEvent('master_data.cost_center.updated', $costCenter, $tenantId);
 
                 return $costCenter;
@@ -112,28 +118,16 @@ class CostCenterService
                 $costCenter = CostCenter::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
 
-                // بررسی دسترسی Scope
-                $this->ensureScopeAccess('COST_CENTER', $id);
+                $this->scopeAccessGuard->assertAccess('COST_CENTER', $id);
 
                 $costCenter->update(['deleted_by' => Context::get('user_id')]);
                 $costCenter->delete();
 
-                // ⚡ ثبت رویداد حذف در Outbox
                 $this->dispatchOutboxEvent('master_data.cost_center.deleted', $costCenter, $tenantId);
             });
         } catch (Exception $e) {
             Log::error("Failed to delete Cost Center: " . $e->getMessage());
             throw $e;
-        }
-    }
-
-    private function ensureScopeAccess(string $scopeType, string $referenceId): void
-    {
-        $scopeContext = ScopeContext::getInstance();
-        $referenceIds = $scopeContext->getReferenceIdsByType($scopeType);
-
-        if (!empty($referenceIds) && !in_array($referenceId, $referenceIds, true)) {
-            throw new Exception("شما دسترسی لازم به این منبع را ندارید.");
         }
     }
 
