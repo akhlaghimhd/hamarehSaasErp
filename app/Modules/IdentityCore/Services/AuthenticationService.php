@@ -15,6 +15,7 @@ use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantScope;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Exception;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -31,13 +32,14 @@ class AuthenticationService
      * - security_context in this response is a DB snapshot for the client only and may stale.
      * - Each subsequent request reloads roles/scopes/permissions from DB via LoadUserScopesMiddleware.
      *
+     * F5 — Successful login with tenant writes identity.user.logged_in.v1 to event_outbox.
+     *
      * @throws ValidationException
      * @throws HttpException
      * @throws Exception
      */
     public function login(LoginDTO $dto): array
     {
-        // 1. Find the user by email
         $user = User::where('email', $dto->email)
             ->whereNull('deleted_at')
             ->first();
@@ -46,7 +48,6 @@ class AuthenticationService
             throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
         }
 
-        // 2. Load credential and verify password
         $credential = $user->credential;
 
         if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
@@ -57,7 +58,6 @@ class AuthenticationService
             throw new HttpException(403, 'حساب کاربری شما غیرفعال یا مسدود شده است.');
         }
 
-        // 3. Resolve and validate Tenant membership — authorization data always from DB
         $tenantIdToLogin = $dto->tenantId;
         $tenantUser = null;
         $roles = [];
@@ -83,7 +83,6 @@ class AuthenticationService
                 throw new HttpException(403, 'Your account is not active in this organization.');
             }
 
-            // 3.1 Load Roles from DB (columns match migration: no role_type)
             $roleIds = TenantUserRole::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('user_id', $user->user_id)
@@ -110,7 +109,6 @@ class AuthenticationService
                     ];
                 })->values()->toArray();
 
-                // 3.2 Load Permissions via roles from DB
                 $permissionIds = TenantRolePermission::withoutGlobalScopes()
                     ->where('tenant_id', $tenantIdToLogin)
                     ->whereIn('tenant_role_id', $roleIds)
@@ -133,7 +131,6 @@ class AuthenticationService
                 }
             }
 
-            // 3.3 Load Scopes from DB assigned to this tenant_user
             $scopeAssignments = TenantUserScope::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('tenant_user_id', $tenantUser->tenant_user_id)
@@ -161,7 +158,6 @@ class AuthenticationService
             }
         }
 
-        // 4. Issue Token (identity only — not authorization payload)
         $tokenAbilities = ['*'];
         $tokenName = 'auth_token';
 
@@ -172,11 +168,9 @@ class AuthenticationService
 
         $tokenResult = $user->createToken($tokenName, $tokenAbilities);
 
-        // 5. Update Last Login (Audit)
         $user->last_login_at = now();
         $user->save();
 
-        // 6. Snapshot for client (not used as server-side authority)
         $securityContext = [
             'user_id'        => $user->user_id,
             'tenant_id'      => $tenantIdToLogin,
@@ -186,6 +180,22 @@ class AuthenticationService
             'scopes'         => $scopes,
             'is_owner'       => $tenantUser ? (bool) $tenantUser->is_owner : false,
         ];
+
+        // F5: audit login on outbox when tenant is known (event_outbox.tenant_id is required)
+        if ($tenantIdToLogin) {
+            $this->writeOutboxEvent(
+                tenantId: $tenantIdToLogin,
+                aggregateId: $user->user_id,
+                eventType: 'identity.user.logged_in.v1',
+                payload: [
+                    'user_id'        => $user->user_id,
+                    'tenant_id'      => $tenantIdToLogin,
+                    'tenant_user_id' => $tenantUser?->tenant_user_id,
+                    'token_name'     => $tokenName,
+                    'occurred_at'    => now()->toIso8601String(),
+                ]
+            );
+        }
 
         return [
             'access_token'     => $tokenResult->plainTextToken,
@@ -204,8 +214,32 @@ class AuthenticationService
     }
 
     /**
-     * Register a new user
+     * Logout current Sanctum token and write identity.user.logged_out.v1 to outbox.
      */
+    public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
+    {
+        $token = $user->currentAccessToken();
+
+        $tokenName = null;
+        if ($token) {
+            $tokenName = $token->name ?? null;
+            $token->delete();
+        }
+
+        $this->writeOutboxEvent(
+            tenantId: $tenantId,
+            aggregateId: $user->user_id,
+            eventType: 'identity.user.logged_out.v1',
+            payload: [
+                'user_id'        => $user->user_id,
+                'tenant_id'      => $tenantId,
+                'tenant_user_id' => $tenantUserId,
+                'token_name'     => $tokenName,
+                'occurred_at'    => now()->toIso8601String(),
+            ]
+        );
+    }
+
     public function register(UserRegistrationDTO $dto): User
     {
         return DB::transaction(function () use ($dto) {
@@ -228,5 +262,27 @@ class AuthenticationService
 
             return $user;
         });
+    }
+
+    /**
+     * Versioned integration event — no secrets in payload.
+     */
+    private function writeOutboxEvent(
+        string $tenantId,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => (string) Str::uuid(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => 'users',
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'retry_count'    => 0,
+            'created_at'     => now(),
+        ]);
     }
 }
