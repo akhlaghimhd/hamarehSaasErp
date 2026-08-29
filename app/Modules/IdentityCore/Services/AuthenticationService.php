@@ -23,7 +23,13 @@ class AuthenticationService
 {
     /**
      * Login and return full security context according to Architecture Law 4.4
-     * Required context: user_id, tenant_id, roles, scopes
+     * Required context fields: user_id, tenant_id, roles, scopes (+ permissions)
+     *
+     * F4 — Token vs Request Context:
+     * - Sanctum token proves identity (and may carry tenant ability). It is NOT the
+     *   source of truth for roles / permissions / scopes.
+     * - security_context in this response is a DB snapshot for the client only and may stale.
+     * - Each subsequent request reloads roles/scopes/permissions from DB via LoadUserScopesMiddleware.
      *
      * @throws ValidationException
      * @throws HttpException
@@ -51,7 +57,7 @@ class AuthenticationService
             throw new HttpException(403, 'حساب کاربری شما غیرفعال یا مسدود شده است.');
         }
 
-        // 3. Resolve and validate Tenant membership
+        // 3. Resolve and validate Tenant membership — authorization data always from DB
         $tenantIdToLogin = $dto->tenantId;
         $tenantUser = null;
         $roles = [];
@@ -77,7 +83,7 @@ class AuthenticationService
                 throw new HttpException(403, 'Your account is not active in this organization.');
             }
 
-            // 3.1 Load Roles (columns match migration: no role_type)
+            // 3.1 Load Roles from DB (columns match migration: no role_type)
             $roleIds = TenantUserRole::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('user_id', $user->user_id)
@@ -104,7 +110,7 @@ class AuthenticationService
                     ];
                 })->values()->toArray();
 
-                // 3.2 Load Permissions via roles
+                // 3.2 Load Permissions via roles from DB
                 $permissionIds = TenantRolePermission::withoutGlobalScopes()
                     ->where('tenant_id', $tenantIdToLogin)
                     ->whereIn('tenant_role_id', $roleIds)
@@ -127,7 +133,7 @@ class AuthenticationService
                 }
             }
 
-            // 3.3 Load Scopes assigned to this tenant_user
+            // 3.3 Load Scopes from DB assigned to this tenant_user
             $scopeAssignments = TenantUserScope::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('tenant_user_id', $tenantUser->tenant_user_id)
@@ -155,7 +161,7 @@ class AuthenticationService
             }
         }
 
-        // 4. Issue Token (Laravel Sanctum)
+        // 4. Issue Token (identity only — not authorization payload)
         $tokenAbilities = ['*'];
         $tokenName = 'auth_token';
 
@@ -170,7 +176,7 @@ class AuthenticationService
         $user->last_login_at = now();
         $user->save();
 
-        // 6. Full Security Context (Law 4.4)
+        // 6. Snapshot for client (not used as server-side authority)
         $securityContext = [
             'user_id'        => $user->user_id,
             'tenant_id'      => $tenantIdToLogin,
