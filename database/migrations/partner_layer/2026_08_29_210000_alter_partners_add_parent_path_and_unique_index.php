@@ -23,12 +23,6 @@ return new class extends Migration
             }
         });
 
-        // Drop legacy unique if present (Laravel default name or explicit)
-        Schema::table('partners', function (Blueprint $table) {
-            $sm = Schema::getConnection()->getDoctrineSchemaManager();
-            // Prefer DB-level drop to avoid driver differences
-        });
-
         DB::statement('ALTER TABLE partners DROP CONSTRAINT IF EXISTS uq_partners_tenant_code');
         DB::statement('DROP INDEX IF EXISTS uq_partners_tenant_code');
 
