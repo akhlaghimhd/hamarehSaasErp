@@ -101,6 +101,13 @@ class AuthOutboxEventsTest extends TestCase
         $token = $login->json('data.access_token');
         $this->assertNotEmpty($token);
 
+        $this->assertGreaterThan(
+            0,
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $this->user->user_id)
+                ->count()
+        );
+
         $logout = $this->withHeaders([
             'Authorization' => 'Bearer ' . $token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
@@ -119,7 +126,14 @@ class AuthOutboxEventsTest extends TestCase
         $payload = json_decode($event->payload, true);
         $this->assertSame($this->user->user_id, $payload['user_id']);
 
-        // Token must no longer authenticate
+        $this->assertSame(
+            0,
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $this->user->user_id)
+                ->count(),
+            'All personal access tokens for the user must be revoked after logout'
+        );
+
         $reuse = $this->withHeaders([
             'Authorization' => 'Bearer ' . $token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,

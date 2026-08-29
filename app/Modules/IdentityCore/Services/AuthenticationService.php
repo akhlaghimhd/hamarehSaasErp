@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\PersonalAccessToken;
 use Exception;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -181,7 +182,6 @@ class AuthenticationService
             'is_owner'       => $tenantUser ? (bool) $tenantUser->is_owner : false,
         ];
 
-        // F5: audit login on outbox when tenant is known (event_outbox.tenant_id is required)
         if ($tenantIdToLogin) {
             $this->writeOutboxEvent(
                 tenantId: $tenantIdToLogin,
@@ -214,16 +214,20 @@ class AuthenticationService
     }
 
     /**
-     * Logout current Sanctum token and write identity.user.logged_out.v1 to outbox.
+     * Logout: revoke current (or all) Sanctum tokens and write logged_out outbox event.
      */
     public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
     {
-        $token = $user->currentAccessToken();
-
         $tokenName = null;
-        if ($token) {
-            $tokenName = $token->name ?? null;
-            $token->delete();
+        $current = $user->currentAccessToken();
+
+        if ($current instanceof PersonalAccessToken) {
+            $tokenName = $current->name;
+            $current->delete();
+        } else {
+            // TransientToken or missing current: revoke all tokens for this user
+            $tokenName = $user->tokens()->value('name');
+            $user->tokens()->delete();
         }
 
         $this->writeOutboxEvent(
@@ -264,9 +268,6 @@ class AuthenticationService
         });
     }
 
-    /**
-     * Versioned integration event — no secrets in payload.
-     */
     private function writeOutboxEvent(
         string $tenantId,
         string $aggregateId,
