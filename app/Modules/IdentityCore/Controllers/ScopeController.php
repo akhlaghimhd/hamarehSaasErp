@@ -112,6 +112,21 @@ class ScopeController extends Controller
         }
     }
 
+    public function unassign(AssignScopeRequest $request): JsonResponse
+    {
+        try {
+            $dto = AssignScopeToUserDTO::fromRequest($request->validated());
+            $this->scopeService->unassignScopesFromUser($dto);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده‌ها با موفقیت از کاربر حذف شدند.',
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
     public function userScopes(string $tenantUserId): JsonResponse
     {
         try {
