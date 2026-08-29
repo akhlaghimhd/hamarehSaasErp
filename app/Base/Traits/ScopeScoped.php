@@ -4,32 +4,38 @@ namespace App\Base\Traits;
 
 use App\Base\Context\ScopeContext;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Context;
 
 /**
  * ScopeScoped Trait
  *
- * اعمال فیلتر سطح Resource بر اساس Scopeهای کاربر جاری.
- * مکمل TenantScoped است و زنجیره دسترسی قانون ۴.۲ را کامل می‌کند:
+ * Resource-level filter based on the current user's Scopes.
+ * Complements TenantScoped and completes Law 4.2 chain:
  * User → Role → Permission → Scope → Resource
  *
- * نحوه استفاده در مدل:
+ * Model usage:
  *
  *   class Branch extends Model
  *   {
  *       use TenantScoped, ScopeScoped;
  *
- *       // نوع Scope و نام ستون مرجع در جدول
  *       protected static string $scopeType = 'BRANCH';
  *       protected static string $scopeColumn = 'branch_id';
  *   }
  *
- * رفتار:
- * - اگر کاربر برای scopeType مورد نظر حداقل یک Scope داشته باشد → فقط reference_idهای مجاز فیلتر می‌شوند.
- * - اگر کاربر هیچ Scope از آن نوع نداشته باشد → فیلتر اضافی اعمال نمی‌شود (فقط Tenant Isolation باقی می‌ماند).
- *   این رفتار امکان استقرار تدریجی را بدون شکستن دسترسی‌های فعلی فراهم می‌کند.
- * - در محیط بدون ScopeContext (مثل Artisan/Queue بدون context) فیلتر Scope اعمال نمی‌شود.
+ * Enforcement policy (F2 ADD — Scope Enforcement Policy):
+ * - gradual (Policy B, default): no scopes of this scopeType → no extra filter
+ *   (tenant isolation only). Supports gradual Scope assignment rollout.
+ * - strict (Policy A): for types in config('scope.strict_scope_types'),
+ *   missing scopes of that type → zero rows (fail-closed).
+ *
+ * Shared rules:
+ * - User has scopes of this type → filter to allowed reference_ids.
+ * - Scopes of type exist but reference_ids empty → zero rows.
+ * - Without ScopeContext (Artisan/Queue): gradual skips filter;
+ *   strict applies zero rows for listed types.
+ *
+ * Config: config/scope.php | env SCOPE_ENFORCEMENT_MODE=gradual|strict
  */
 trait ScopeScoped
 {
@@ -48,13 +54,16 @@ trait ScopeScoped
 
             $allowedReferenceIds = static::getAllowedReferenceIds($scopeType);
 
-            // اگر کاربر برای این نوع Scope هیچ محدوده‌ای ندارد → فیلتر اضافه نکن
-            // (Tenant Isolation از TenantScoped همچنان فعال است)
+            // null = no scopes of this type
             if ($allowedReferenceIds === null) {
+                if (static::isStrictModeFor($scopeType)) {
+                    $builder->whereRaw('1 = 0');
+                }
+                // gradual: no extra filter (tenant isolation remains)
                 return;
             }
 
-            // اگر لیست خالی باشد (کاربر Scope دارد ولی reference_id ندارد) → هیچ رکوردی برنگردان
+            // empty list = scopes of type exist but no reference_id → deny all
             if (empty($allowedReferenceIds)) {
                 $builder->whereRaw('1 = 0');
                 return;
@@ -66,8 +75,22 @@ trait ScopeScoped
     }
 
     /**
-     * نوع Scope مربوط به این مدل (مثلاً BRANCH, WAREHOUSE, COMPANY)
-     * مدل باید این مقدار را تعریف کند.
+     * Whether strict (Policy A) applies for this scopeType.
+     */
+    protected static function isStrictModeFor(string $scopeType): bool
+    {
+        $mode = config('scope.enforcement_mode', 'gradual');
+        if ($mode !== 'strict') {
+            return false;
+        }
+
+        $strictTypes = config('scope.strict_scope_types', ['COMPANY', 'BRANCH', 'WAREHOUSE']);
+
+        return in_array(strtoupper($scopeType), array_map('strtoupper', $strictTypes), true);
+    }
+
+    /**
+     * Scope type for this model (e.g. BRANCH, WAREHOUSE, COMPANY).
      */
     protected static function getScopeType(): ?string
     {
@@ -77,8 +100,7 @@ trait ScopeScoped
     }
 
     /**
-     * نام ستون مرجع در جدول مدل که باید فیلتر شود
-     * (معمولاً primary key مدل یا ستون مرتبط مثل company_id)
+     * Column on the model table to filter by reference_id.
      */
     protected static function getScopeColumn(): ?string
     {
@@ -86,24 +108,21 @@ trait ScopeScoped
             return static::$scopeColumn;
         }
 
-        // fallback: اگر primary key مشخص باشد از آن استفاده کن
         $model = new static();
         return $model->getKeyName();
     }
 
     /**
-     * دریافت reference_idهای مجاز کاربر برای یک scopeType
+     * Allowed reference_ids for the given scopeType.
      *
-     * @return array|null  null = هیچ Scope از این نوع تعریف نشده (فیلتر نکن)
-     *                     array = لیست reference_idهای مجاز (حتی اگر خالی)
+     * @return array|null  null = no scopes of this type defined for the user
+     *                     array = allowed reference_ids (may be empty)
      */
     protected static function getAllowedReferenceIds(string $scopeType): ?array
     {
         $scopeContext = ScopeContext::getInstance();
 
-        // اگر ScopeContext خالی است (مثلاً درخواست بدون load.scopes) → فیلتر نکن
         if (!$scopeContext->hasScopes()) {
-            // تلاش از Laravel Context / Container
             $scopesFromContext = Context::get('user_scopes');
             if (empty($scopesFromContext) && app()->bound('current_user_scopes')) {
                 $scopesFromContext = app('current_user_scopes');
@@ -113,13 +132,11 @@ trait ScopeScoped
                 return null;
             }
 
-            // پر کردن موقت ScopeContext از Context برای یکنواختی
             $scopeContext->setScopes($scopesFromContext);
         }
 
         $scopesOfType = $scopeContext->getScopesByType($scopeType);
 
-        // کاربر هیچ Scope از این نوع ندارد → null برگردان (فیلتر اضافی اعمال نشود)
         if (empty($scopesOfType)) {
             return null;
         }
@@ -128,7 +145,7 @@ trait ScopeScoped
     }
 
     /**
-     * Helper: آیا کاربر جاری به یک reference_id خاص دسترسی دارد؟
+     * Whether the current user may access a specific reference_id.
      */
     public static function currentUserHasAccessTo(string $referenceId): bool
     {
@@ -139,17 +156,16 @@ trait ScopeScoped
 
         $allowed = static::getAllowedReferenceIds($scopeType);
 
-        // null یعنی محدودیتی تعریف نشده
         if ($allowed === null) {
-            return true;
+            // strict + no scopes of type = deny; gradual = allow (tenant only)
+            return !static::isStrictModeFor($scopeType);
         }
 
         return in_array($referenceId, $allowed, true);
     }
 
     /**
-     * غیرفعال کردن موقت فیلتر Scope برای یک Query خاص
-     * (مشابه withoutGlobalScope)
+     * Temporarily disable scope isolation for a query.
      */
     public static function withoutScopeIsolation(): Builder
     {
