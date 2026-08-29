@@ -12,6 +12,8 @@ use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Services\ScopeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Exception;
 
 class ScopeController extends Controller
 {
@@ -19,102 +21,130 @@ class ScopeController extends Controller
         private readonly ScopeService $scopeService
     ) {}
 
-    /**
-     * لیست محدوده‌های مستأجر جاری
-     */
     public function index(Request $request): JsonResponse
     {
-        $scopes = $this->scopeService->listScopes($request->query('scope_type'));
+        try {
+            $scopes = $this->scopeService->listScopes($request->query('scope_type'));
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'لیست محدوده‌ها با موفقیت دریافت شد.',
-            'data'    => $scopes,
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'لیست محدوده‌ها با موفقیت دریافت شد.',
+                'data'    => $scopes,
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * دریافت یک محدوده
-     */
     public function show(string $id): JsonResponse
     {
-        $scope = $this->scopeService->getScope($id);
+        try {
+            $scope = $this->scopeService->getScope($id);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده با موفقیت دریافت شد.',
-            'data'    => $scope,
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده با موفقیت دریافت شد.',
+                'data'    => $scope,
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * ایجاد محدوده جدید
-     */
     public function store(CreateScopeRequest $request): JsonResponse
     {
-        $dto = CreateScopeDTO::fromRequest($request->validated());
-        $scope = $this->scopeService->createScope($dto);
+        try {
+            $dto = CreateScopeDTO::fromRequest($request->validated());
+            $scope = $this->scopeService->createScope($dto);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده با موفقیت ایجاد شد.',
-            'data'    => $scope,
-        ], 201);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده با موفقیت ایجاد شد.',
+                'data'    => $scope,
+            ], 201);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * به‌روزرسانی محدوده
-     */
     public function update(UpdateScopeRequest $request, string $id): JsonResponse
     {
-        $dto = UpdateScopeDTO::fromRequest($id, $request->validated());
-        $scope = $this->scopeService->updateScope($dto);
+        try {
+            $dto = UpdateScopeDTO::fromRequest($id, $request->validated());
+            $scope = $this->scopeService->updateScope($dto);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده با موفقیت به‌روزرسانی شد.',
-            'data'    => $scope,
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده با موفقیت به‌روزرسانی شد.',
+                'data'    => $scope,
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * حذف محدوده
-     */
     public function destroy(string $id): JsonResponse
     {
-        $this->scopeService->deleteScope($id);
+        try {
+            $this->scopeService->deleteScope($id);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده با موفقیت حذف شد.',
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده با موفقیت حذف شد.',
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * تخصیص محدوده‌ها به کاربر
-     */
     public function assign(AssignScopeRequest $request): JsonResponse
     {
-        $dto = AssignScopeToUserDTO::fromRequest($request->validated());
-        $this->scopeService->assignScopesToUser($dto);
+        try {
+            $dto = AssignScopeToUserDTO::fromRequest($request->validated());
+            $this->scopeService->assignScopesToUser($dto);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده‌ها با موفقیت به کاربر تخصیص داده شدند.',
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده‌ها با موفقیت به کاربر تخصیص داده شدند.',
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
     }
 
-    /**
-     * دریافت محدوده‌های یک کاربر
-     */
     public function userScopes(string $tenantUserId): JsonResponse
     {
-        $scopes = $this->scopeService->getUserScopes($tenantUserId);
+        try {
+            $scopes = $this->scopeService->getUserScopes($tenantUserId);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'محدوده‌های کاربر با موفقیت دریافت شد.',
+                'data'    => $scopes,
+            ], 200);
+        } catch (Exception $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    private function errorResponse(Exception $e): JsonResponse
+    {
+        if ($e instanceof HttpException) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        }
+
+        $status = 400;
+        if (str_contains(strtolower($e->getMessage()), 'not found')
+            || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
+            $status = 404;
+        }
 
         return response()->json([
-            'status'  => 'success',
-            'message' => 'محدوده‌های کاربر با موفقیت دریافت شد.',
-            'data'    => $scopes,
-        ], 200);
+            'status'  => 'error',
+            'message' => $e->getMessage(),
+        ], $status);
     }
 }
