@@ -13,10 +13,13 @@ use Symfony\Component\HttpFoundation\Response;
 class LoadUserScopesMiddleware
 {
     /**
-     * بارگذاری کامل Security Context کاربر احراز هویت‌شده
-     * طبق قانون ۴.۴: user_id, tenant_id, roles, scopes (+ permissions)
+     * Reload full Security Context from the database for the authenticated user.
+     * Law 4.4: user_id, tenant_id, roles, scopes (+ permissions).
      *
-     * این middleware باید بعد از auth:sanctum و TenantContextMiddleware اجرا شود.
+     * F4 — Token vs Request Context:
+     * This middleware is the request-time source of truth for roles/permissions/scopes.
+     * Sanctum token only authenticates the user; it does not carry live authorization data.
+     * Must run after TenantContextMiddleware and auth:sanctum.
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -38,7 +41,7 @@ class LoadUserScopesMiddleware
             return $next($request);
         }
 
-        // 1. Scopes
+        // 1. Scopes (DB)
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantId)
@@ -57,7 +60,7 @@ class LoadUserScopesMiddleware
             ->map(fn ($item) => (array) $item)
             ->toArray();
 
-        // 2. Roles — columns must match migration (NO role_type)
+        // 2. Roles (DB)
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantId)
@@ -84,7 +87,7 @@ class LoadUserScopesMiddleware
 
         $roleIds = $roleRows->pluck('tenant_role_id')->unique()->values()->toArray();
 
-        // 3. Permissions
+        // 3. Permissions (DB)
         $permissions = [];
         if (!empty($roleIds)) {
             $permissions = DB::table('tenant_role_permissions')
@@ -103,7 +106,7 @@ class LoadUserScopesMiddleware
         // 4. ScopeContext
         ScopeContext::getInstance()->setScopes($scopes, $tenantUser->tenant_user_id);
 
-        // 5. Full security context (Law 4.4)
+        // 5. Full security context (Law 4.4) — request-scoped, from DB
         $securityContext = [
             'user_id'        => $user->user_id,
             'tenant_id'      => $tenantId,
