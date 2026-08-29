@@ -5,7 +5,7 @@ namespace App\Base\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use App\Base\Context\TenantContext;
-use Illuminate\Support\Facades\Cache;
+use App\Base\Support\TenantCache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,7 +16,7 @@ class RequirePermission
      * Usage in routes: middleware('permission:identity.role.create')
      *
      * F4: Permission codes are always resolved from DB (cache is derived only).
-     * Cache key includes tenant_id so entries are not shared across tenants.
+     * F7: Cache key = tenant:{tenant_id}:identity:user_permissions:{user_id}
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -30,10 +30,9 @@ class RequirePermission
             ], 401);
         }
 
-        $cacheKey = "user_permissions:{$tenantId}:{$userId}";
-
-        $userPermissions = Cache::tags(["tenant:{$tenantId}"])->remember(
-            $cacheKey,
+        $userPermissions = TenantCache::remember(
+            'identity',
+            "user_permissions:{$userId}",
             now()->addHours(12),
             function () use ($tenantId, $userId) {
                 return DB::table('tenant_user_roles')
@@ -59,7 +58,8 @@ class RequirePermission
                     ->unique()
                     ->values()
                     ->toArray();
-            }
+            },
+            $tenantId
         );
 
         if (!in_array($permission, $userPermissions, true)) {
