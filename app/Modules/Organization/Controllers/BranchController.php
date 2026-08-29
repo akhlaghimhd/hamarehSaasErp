@@ -9,6 +9,7 @@ use App\Modules\Organization\DTOs\CreateBranchDTO;
 use App\Modules\Organization\DTOs\UpdateBranchDTO;
 use App\Modules\Organization\Services\BranchService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class BranchController extends Controller
 {
@@ -17,9 +18,18 @@ class BranchController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    /**
+     * List branches with Scope + optional company filter from nested route.
+     * GET /api/organization/companies/{company}/branches
+     * Also supports flat list if route ever exposes it without company.
+     */
+    public function index(Request $request, ?string $company = null): JsonResponse
     {
-        $branches = $this->branchService->getAllBranches();
+        $companyId = $company ?? $request->route('company');
+
+        $branches = $this->branchService->getAllBranches(
+            companyId: $companyId ? (string) $companyId : null
+        );
 
         return response()->json([
             'status' => 'success',
