@@ -14,6 +14,9 @@ class RequirePermission
     /**
      * Handle an incoming request.
      * Usage in routes: middleware('permission:identity.role.create')
+     *
+     * F4: Permission codes are always resolved from DB (cache is derived only).
+     * Cache key includes tenant_id so entries are not shared across tenants.
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -27,8 +30,8 @@ class RequirePermission
             ], 401);
         }
 
-        // Cache permissions per user inside tenant tag for fast invalidation
-        $cacheKey = "user_permissions:{$userId}";
+        $cacheKey = "user_permissions:{$tenantId}:{$userId}";
+
         $userPermissions = Cache::tags(["tenant:{$tenantId}"])->remember(
             $cacheKey,
             now()->addHours(12),
