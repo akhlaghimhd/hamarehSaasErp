@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Models\Branch;
+use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -105,7 +106,6 @@ class ScopeAssignmentEndToEndTest extends TestCase
             ]);
         }
 
-        // Admin role
         TenantUserRole::create([
             'tenant_user_role_id' => (string) Str::uuid(),
             'tenant_id'           => $this->tenant->tenant_id,
@@ -113,7 +113,6 @@ class ScopeAssignmentEndToEndTest extends TestCase
             'tenant_role_id'      => $role->tenant_role_id,
         ]);
 
-        // Scoped user also needs branch.view for list assertions
         TenantUserRole::create([
             'tenant_user_role_id' => (string) Str::uuid(),
             'tenant_id'           => $this->tenant->tenant_id,
@@ -153,20 +152,36 @@ class ScopeAssignmentEndToEndTest extends TestCase
         ]);
     }
 
-    protected function adminHeaders(): array
+    /**
+     * Drop persisted Authorization / guard state so admin vs scoped user
+     * requests cannot bleed into each other (MakesHttpRequests merges headers).
+     */
+    protected function switchToBearer(?string $token): void
     {
-        return [
-            'Authorization' => 'Bearer ' . $this->adminToken,
-            'X-Tenant-ID'   => $this->tenant->tenant_id,
-            'Accept'        => 'application/json',
-        ];
+        ScopeContext::resetInstance();
+        $this->app['auth']->forgetGuards();
+
+        // Rebuild default headers without a stale Authorization
+        unset($this->defaultHeaders['Authorization']);
+
+        if ($token !== null && $token !== '') {
+            $this->withToken($token, 'Bearer');
+        }
+
+        $this->withHeaders([
+            'X-Tenant-ID' => $this->tenant->tenant_id,
+            'Accept'      => 'application/json',
+        ]);
     }
 
     /** @test */
     public function create_assign_list_filter_and_unassign_scopes_end_to_end(): void
     {
+        // --- Admin session ---
+        $this->switchToBearer($this->adminToken);
+
         // 1) Create BRANCH scope bound to real branch
-        $create = $this->withHeaders($this->adminHeaders())->postJson('/api/identity-core/identity/scopes', [
+        $create = $this->postJson('/api/identity-core/identity/scopes', [
             'scope_name'   => 'Allowed Branch Scope',
             'scope_type'   => 'BRANCH',
             'reference_id' => $this->branchAllowed->branch_id,
@@ -178,7 +193,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
         $this->assertNotEmpty($scopeId);
 
         // 2) Reject fake reference_id
-        $bad = $this->withHeaders($this->adminHeaders())->postJson('/api/identity-core/identity/scopes', [
+        $bad = $this->postJson('/api/identity-core/identity/scopes', [
             'scope_name'   => 'Bad',
             'scope_type'   => 'BRANCH',
             'reference_id' => (string) Str::uuid(),
@@ -187,7 +202,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
         $bad->assertStatus(400);
 
         // 3) Assign to scoped tenant user
-        $assign = $this->withHeaders($this->adminHeaders())->postJson('/api/identity-core/identity/scopes/assign', [
+        $assign = $this->postJson('/api/identity-core/identity/scopes/assign', [
             'tenant_user_id' => $this->scopedTenantUser->tenant_user_id,
             'scope_ids'      => [$scopeId],
         ]);
@@ -199,25 +214,41 @@ class ScopeAssignmentEndToEndTest extends TestCase
             'event_type' => 'identity.scope.assigned.v1',
         ]);
 
+        $this->assertSame(
+            1,
+            (int) DB::table('tenant_user_scopes')
+                ->where('tenant_user_id', $this->scopedTenantUser->tenant_user_id)
+                ->where('scope_id', $scopeId)
+                ->whereNull('deleted_at')
+                ->count(),
+            'Assignment row must exist before list filter assertion'
+        );
+
         // 4) userScopes API (must not be captured by /scopes/{id})
-        $userScopes = $this->withHeaders($this->adminHeaders())
-            ->getJson('/api/identity-core/identity/scopes/user/' . $this->scopedTenantUser->tenant_user_id);
+        $userScopes = $this->getJson(
+            '/api/identity-core/identity/scopes/user/' . $this->scopedTenantUser->tenant_user_id
+        );
 
         $userScopes->assertStatus(200);
         $userScopeIds = collect($userScopes->json('data'))->pluck('scope_id')->toArray();
         $this->assertContains($scopeId, $userScopeIds);
 
-        // 5) Login as scoped user → scopes in security_context
-        $login = $this->withHeaders([
-            'X-Tenant-ID' => $this->tenant->tenant_id,
-            'Accept'      => 'application/json',
-        ])->postJson('/api/identity-core/identity/auth/login', [
+        // --- Switch to scoped user via real login (clear admin auth first) ---
+        $this->switchToBearer(null);
+
+        $login = $this->postJson('/api/identity-core/identity/auth/login', [
             'email'     => 'scope.user@example.com',
             'password'  => $this->plainPassword,
             'tenant_id' => $this->tenant->tenant_id,
         ]);
 
         $login->assertStatus(200);
+        $this->assertSame(
+            $this->scopedUser->user_id,
+            $login->json('data.user.user_id'),
+            'Login must authenticate the scoped user, not admin'
+        );
+
         $scopes = $login->json('data.security_context.scopes');
         $this->assertNotEmpty($scopes);
         $this->assertSame('BRANCH', $scopes[0]['scope_type']);
@@ -225,21 +256,31 @@ class ScopeAssignmentEndToEndTest extends TestCase
 
         $userToken = $login->json('data.access_token');
         $this->assertNotEmpty($userToken);
+        $this->assertNotSame($this->adminToken, $userToken);
 
-        // 6) Branch list filtered by assigned scope (Organization API)
-        $list = $this->withHeaders([
-            'Authorization' => 'Bearer ' . $userToken,
-            'X-Tenant-ID'   => $this->tenant->tenant_id,
-            'Accept'        => 'application/json',
-        ])->getJson('/api/organization/companies/' . $this->company->company_id . '/branches');
+        // --- Scoped user session ---
+        $this->switchToBearer($userToken);
+
+        // 6) Branch list filtered by assigned BRANCH scope
+        $list = $this->getJson(
+            '/api/organization/companies/' . $this->company->company_id . '/branches'
+        );
 
         $list->assertStatus(200);
-        $branchIds = collect($list->json('data'))->pluck('branch_id')->toArray();
+        $branchIds = collect($list->json('data'))->pluck('branch_id')->values()->all();
+
         $this->assertContains($this->branchAllowed->branch_id, $branchIds);
         $this->assertNotContains($this->branchOther->branch_id, $branchIds);
+        $this->assertCount(
+            1,
+            $branchIds,
+            'Scoped user must see exactly the allowed branch, got: ' . json_encode($branchIds)
+        );
 
-        // 7) Unassign
-        $unassign = $this->withHeaders($this->adminHeaders())->postJson('/api/identity-core/identity/scopes/unassign', [
+        // --- Admin unassign ---
+        $this->switchToBearer($this->adminToken);
+
+        $unassign = $this->postJson('/api/identity-core/identity/scopes/unassign', [
             'tenant_user_id' => $this->scopedTenantUser->tenant_user_id,
             'scope_ids'      => [$scopeId],
         ]);
