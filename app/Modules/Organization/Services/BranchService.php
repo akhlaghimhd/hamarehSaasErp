@@ -59,6 +59,8 @@ class BranchService
      */
     public function getAllBranches(?string $companyId = null)
     {
+        $this->ensureScopeContextHydrated();
+
         $query = Branch::with('company')->orderBy('created_at', 'desc');
 
         if ($companyId !== null && $companyId !== '') {
@@ -140,5 +142,34 @@ class BranchService
         }
 
         $branch->delete();
+    }
+
+    /**
+     * If ScopeContext was reset/cleared but middleware already bound scopes
+     * on the container, re-hydrate so list filters still apply.
+     */
+    private function ensureScopeContextHydrated(): void
+    {
+        $ctx = ScopeContext::getInstance();
+
+        if ($ctx->hasScopes()) {
+            return;
+        }
+
+        $scopes = null;
+
+        if (app()->bound('current_user_scopes')) {
+            $scopes = app('current_user_scopes');
+        }
+
+        if (empty($scopes) || !is_array($scopes)) {
+            return;
+        }
+
+        $tenantUserId = app()->bound('current_tenant_user_id')
+            ? app('current_tenant_user_id')
+            : null;
+
+        $ctx->setScopes($scopes, $tenantUserId);
     }
 }
