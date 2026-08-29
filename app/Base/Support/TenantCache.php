@@ -10,17 +10,9 @@ use InvalidArgumentException;
  * Tenant-aware cache keys per Isolation Architecture Standard §7 / F7.
  *
  * Pattern: tenant:{tenant_id}:{module}:{key}
- * Example: tenant:550e8400-e29b-41d4-a716-446655440000:identity:user_permissions:abc
  */
 class TenantCache
 {
-    /**
-     * Build a fully-qualified tenant cache key.
-     *
-     * @param  string  $module  Logical module (e.g. identity, organization, master_data)
-     * @param  string  $key     Key segment(s) without tenant prefix
-     * @param  string|null  $tenantId  Defaults to current TenantContext
-     */
     public static function key(string $module, string $key, ?string $tenantId = null): string
     {
         $tenantId = $tenantId ?? TenantContext::getInstance()->getTenantId();
@@ -39,10 +31,18 @@ class TenantCache
         return "tenant:{$tenantId}:{$module}:{$key}";
     }
 
-    /**
-     * Remember a value under the standard tenant key.
-     * Uses tenant tag when the store supports tags (for bulk invalidation).
-     */
+    public static function get(string $module, string $key, mixed $default = null, ?string $tenantId = null): mixed
+    {
+        $tenantId = $tenantId ?? TenantContext::getInstance()->getTenantId();
+        $cacheKey = self::key($module, $key, $tenantId);
+
+        try {
+            return Cache::tags(["tenant:{$tenantId}"])->get($cacheKey, $default);
+        } catch (\BadMethodCallException $e) {
+            return Cache::get($cacheKey, $default);
+        }
+    }
+
     public static function remember(
         string $module,
         string $key,
@@ -56,23 +56,19 @@ class TenantCache
         try {
             return Cache::tags(["tenant:{$tenantId}"])->remember($cacheKey, $ttl, $callback);
         } catch (\BadMethodCallException $e) {
-            // Store without tag support (e.g. file, some array configs)
             return Cache::remember($cacheKey, $ttl, $callback);
         }
     }
 
-    /**
-     * Forget a tenant-scoped key.
-     */
     public static function forget(string $module, string $key, ?string $tenantId = null): bool
     {
         $tenantId = $tenantId ?? TenantContext::getInstance()->getTenantId();
         $cacheKey = self::key($module, $key, $tenantId);
 
         try {
-            return Cache::tags(["tenant:{$tenantId}"])->forget($cacheKey);
+            return (bool) Cache::tags(["tenant:{$tenantId}"])->forget($cacheKey);
         } catch (\BadMethodCallException $e) {
-            return Cache::forget($cacheKey);
+            return (bool) Cache::forget($cacheKey);
         }
     }
 }

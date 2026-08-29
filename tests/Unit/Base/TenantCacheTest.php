@@ -59,8 +59,8 @@ class TenantCacheTest extends TestCase
         TenantCache::remember('identity', 'roles', 60, fn () => ['A'], $tenantA);
         TenantCache::remember('identity', 'roles', 60, fn () => ['B'], $tenantB);
 
-        $this->assertSame(['A'], Cache::get(TenantCache::key('identity', 'roles', $tenantA)));
-        $this->assertSame(['B'], Cache::get(TenantCache::key('identity', 'roles', $tenantB)));
+        $this->assertSame(['A'], TenantCache::get('identity', 'roles', null, $tenantA));
+        $this->assertSame(['B'], TenantCache::get('identity', 'roles', null, $tenantB));
     }
 
     /** @test */
@@ -74,7 +74,7 @@ class TenantCacheTest extends TestCase
 
         TenantCache::forget('identity', 'roles', $tenantA);
 
-        $this->assertNull(Cache::get(TenantCache::key('identity', 'roles', $tenantA)));
-        $this->assertSame(['B'], Cache::get(TenantCache::key('identity', 'roles', $tenantB)));
+        $this->assertNull(TenantCache::get('identity', 'roles', null, $tenantA));
+        $this->assertSame(['B'], TenantCache::get('identity', 'roles', null, $tenantB));
     }
 }
