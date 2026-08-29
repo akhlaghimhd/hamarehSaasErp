@@ -42,8 +42,15 @@ class ScopeContext
      */
     public function setScopes(array $scopes, ?string $tenantUserId = null): self
     {
-        $this->scopes = $scopes;
-        $this->scopeIds = array_column($scopes, 'scope_id');
+        // Normalize scope_type to uppercase at ingestion
+        $this->scopes = array_map(function ($scope) {
+            if (is_array($scope) && isset($scope['scope_type'])) {
+                $scope['scope_type'] = strtoupper((string) $scope['scope_type']);
+            }
+            return $scope;
+        }, $scopes);
+
+        $this->scopeIds = array_values(array_filter(array_column($this->scopes, 'scope_id')));
         $this->tenantUserId = $tenantUserId;
 
         return $this;
@@ -86,9 +93,11 @@ class ScopeContext
      */
     public function getScopesByType(string $scopeType): array
     {
+        $type = strtoupper($scopeType);
+
         return array_values(array_filter(
             $this->scopes,
-            fn ($scope) => ($scope['scope_type'] ?? null) === $scopeType
+            fn ($scope) => strtoupper((string) ($scope['scope_type'] ?? '')) === $type
         ));
     }
 
@@ -98,6 +107,7 @@ class ScopeContext
     public function getReferenceIdsByType(string $scopeType): array
     {
         $filtered = $this->getScopesByType($scopeType);
+
         return array_values(array_filter(array_column($filtered, 'reference_id')));
     }
 
@@ -106,14 +116,17 @@ class ScopeContext
      */
     public function hasAccessTo(string $scopeType, string $referenceId): bool
     {
+        $type = strtoupper($scopeType);
+
         foreach ($this->scopes as $scope) {
             if (
-                ($scope['scope_type'] ?? null) === $scopeType &&
+                strtoupper((string) ($scope['scope_type'] ?? '')) === $type &&
                 ($scope['reference_id'] ?? null) === $referenceId
             ) {
                 return true;
             }
         }
+
         return false;
     }
 }
