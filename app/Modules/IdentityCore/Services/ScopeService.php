@@ -7,6 +7,7 @@ use App\Modules\IdentityCore\DTOs\UpdateScopeDTO;
 use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Models\TenantScope;
 use App\Modules\IdentityCore\Models\TenantUserScope;
+use App\Modules\IdentityCore\Models\TenantUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,9 +15,15 @@ use Exception;
 
 class ScopeService
 {
-    /**
-     * لیست محدوده‌های مستأجر جاری
-     */
+    /** Scope types that must point at a concrete resource in the same tenant. */
+    private const STRUCTURAL_TYPES = [
+        'COMPANY',
+        'BRANCH',
+        'WAREHOUSE',
+        'DEPARTMENT',
+        'COST_CENTER',
+    ];
+
     public function listScopes(?string $scopeType = null): Collection
     {
         $this->getTenantId();
@@ -30,9 +37,6 @@ class ScopeService
         return $query->get();
     }
 
-    /**
-     * دریافت یک محدوده
-     */
     public function getScope(string $scopeId): TenantScope
     {
         $this->getTenantId();
@@ -40,18 +44,17 @@ class ScopeService
         return TenantScope::where('scope_id', $scopeId)->firstOrFail();
     }
 
-    /**
-     * ایجاد محدوده جدید
-     */
     public function createScope(CreateScopeDTO $dto): TenantScope
     {
         $tenantId = $this->getTenantId();
+
+        $this->assertReferenceValid($tenantId, $dto->scopeType, $dto->referenceId);
 
         return DB::transaction(function () use ($dto, $tenantId) {
             $scope = TenantScope::create([
                 'tenant_id'    => $tenantId,
                 'scope_name'   => $dto->scopeName,
-                'scope_type'   => $dto->scopeType,
+                'scope_type'   => strtoupper($dto->scopeType),
                 'reference_id' => $dto->referenceId,
                 'description'  => $dto->description,
                 'is_active'    => $dto->isActive,
@@ -61,11 +64,12 @@ class ScopeService
                 $tenantId,
                 'tenant_scopes',
                 $scope->scope_id,
-                'identity.scope.created',
+                'identity.scope.created.v1',
                 [
-                    'scope_id'   => $scope->scope_id,
-                    'scope_name' => $scope->scope_name,
-                    'scope_type' => $scope->scope_type,
+                    'scope_id'     => $scope->scope_id,
+                    'scope_name'   => $scope->scope_name,
+                    'scope_type'   => $scope->scope_type,
+                    'reference_id' => $scope->reference_id,
                 ]
             );
 
@@ -73,9 +77,6 @@ class ScopeService
         });
     }
 
-    /**
-     * به‌روزرسانی محدوده
-     */
     public function updateScope(UpdateScopeDTO $dto): TenantScope
     {
         $tenantId = $this->getTenantId();
@@ -83,9 +84,14 @@ class ScopeService
         return DB::transaction(function () use ($dto, $tenantId) {
             $scope = TenantScope::where('scope_id', $dto->scopeId)->firstOrFail();
 
+            $scopeType = $dto->scopeType !== null ? strtoupper($dto->scopeType) : $scope->scope_type;
+            $referenceId = $dto->referenceId !== null ? $dto->referenceId : $scope->reference_id;
+
+            $this->assertReferenceValid($tenantId, $scopeType, $referenceId);
+
             $updateData = array_filter([
                 'scope_name'   => $dto->scopeName,
-                'scope_type'   => $dto->scopeType,
+                'scope_type'   => $dto->scopeType !== null ? strtoupper($dto->scopeType) : null,
                 'reference_id' => $dto->referenceId,
                 'description'  => $dto->description,
                 'is_active'    => $dto->isActive,
@@ -99,7 +105,7 @@ class ScopeService
                 $tenantId,
                 'tenant_scopes',
                 $scope->scope_id,
-                'identity.scope.updated',
+                'identity.scope.updated.v1',
                 [
                     'scope_id' => $scope->scope_id,
                     'changes'  => $updateData,
@@ -110,9 +116,6 @@ class ScopeService
         });
     }
 
-    /**
-     * حذف نرم محدوده
-     */
     public function deleteScope(string $scopeId): void
     {
         $tenantId = $this->getTenantId();
@@ -125,31 +128,41 @@ class ScopeService
                 $tenantId,
                 'tenant_scopes',
                 $scopeId,
-                'identity.scope.deleted',
+                'identity.scope.deleted.v1',
                 ['scope_id' => $scopeId]
             );
         });
     }
 
-    /**
-     * تخصیص محدوده‌ها به کاربر
-     */
     public function assignScopesToUser(AssignScopeToUserDTO $dto): void
     {
         $tenantId = $this->getTenantId();
 
         DB::transaction(function () use ($dto, $tenantId) {
-            // حذف تخصیص‌های قبلی این کاربر (soft delete)
+            $tenantUser = TenantUser::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $dto->tenantUserId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$tenantUser) {
+                throw new Exception('tenant_user_id is invalid for the current tenant.');
+            }
+
             TenantUserScope::where('tenant_user_id', $dto->tenantUserId)
                 ->where('tenant_id', $tenantId)
                 ->delete();
 
             $insertData = [];
             foreach ($dto->scopeIds as $scopeId) {
-                // اعتبارسنجی وجود scope
-                TenantScope::where('scope_id', $scopeId)
+                $scope = TenantScope::where('scope_id', $scopeId)
                     ->where('tenant_id', $tenantId)
-                    ->firstOrFail();
+                    ->where('is_active', true)
+                    ->first();
+
+                if (!$scope) {
+                    throw new Exception("Scope {$scopeId} is invalid or inactive for this tenant.");
+                }
 
                 $insertData[] = [
                     'assignment_id'  => (string) Str::uuid(),
@@ -170,7 +183,7 @@ class ScopeService
                 $tenantId,
                 'tenant_user_scopes',
                 $dto->tenantUserId,
-                'identity.scope.assigned',
+                'identity.scope.assigned.v1',
                 [
                     'tenant_user_id' => $dto->tenantUserId,
                     'scope_ids'      => $dto->scopeIds,
@@ -179,9 +192,6 @@ class ScopeService
         });
     }
 
-    /**
-     * دریافت محدوده‌های تخصیص‌یافته به یک کاربر
-     */
     public function getUserScopes(string $tenantUserId): Collection
     {
         $this->getTenantId();
@@ -190,7 +200,57 @@ class ScopeService
             ->where('tenant_user_id', $tenantUserId)
             ->get()
             ->pluck('scope')
-            ->filter();
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * Logical reference check (no cross-module physical FK).
+     */
+    private function assertReferenceValid(string $tenantId, string $scopeType, ?string $referenceId): void
+    {
+        $type = strtoupper($scopeType);
+
+        if (in_array($type, self::STRUCTURAL_TYPES, true) && empty($referenceId)) {
+            throw new Exception("reference_id is required for scope_type {$type}.");
+        }
+
+        if (empty($referenceId)) {
+            return;
+        }
+
+        $exists = match ($type) {
+            'COMPANY' => DB::table('erp_companies')
+                ->where('tenant_id', $tenantId)
+                ->where('company_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            'BRANCH' => DB::table('erp_branches')
+                ->where('tenant_id', $tenantId)
+                ->where('branch_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            'DEPARTMENT' => DB::table('erp_departments')
+                ->where('tenant_id', $tenantId)
+                ->where('department_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            'WAREHOUSE' => DB::table('warehouses')
+                ->where('tenant_id', $tenantId)
+                ->where('warehouse_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            'COST_CENTER' => DB::table('cost_centers')
+                ->where('tenant_id', $tenantId)
+                ->where('cost_center_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            default => true,
+        };
+
+        if (!$exists) {
+            throw new Exception("reference_id does not exist for scope_type {$type} in this tenant.");
+        }
     }
 
     private function getTenantId(): string
