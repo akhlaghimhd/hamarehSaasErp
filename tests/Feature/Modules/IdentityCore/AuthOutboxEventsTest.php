@@ -134,6 +134,10 @@ class AuthOutboxEventsTest extends TestCase
             'All personal access tokens for the user must be revoked after logout'
         );
 
+        // PHPUnit reuses the same app instance; clear resolved guards so the next
+        // request must re-authenticate from the (now deleted) bearer token only.
+        $this->app['auth']->forgetGuards();
+
         $reuse = $this->withHeaders([
             'Authorization' => 'Bearer ' . $token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
