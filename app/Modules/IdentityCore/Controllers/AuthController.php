@@ -10,7 +10,7 @@ use App\Modules\IdentityCore\Services\AuthenticationService;
 use App\Modules\IdentityCore\Models\TenantUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Context;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthController extends Controller
@@ -53,6 +53,39 @@ class AuthController extends Controller
         }
     }
 
+    /**
+     * Invalidate current access token and emit logout outbox event (F5).
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        try {
+            $user = $request->user();
+            $tenantId = TenantContext::getInstance()->getTenantId();
+
+            if (!$user || !$tenantId) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Unauthorized or missing tenant context.',
+                ], 401);
+            }
+
+            $tenantUserId = Context::get('tenant_user_id');
+
+            $this->authService->logout($user, $tenantId, $tenantUserId);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'خروج با موفقیت انجام شد.',
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
     public function register(Request $request): JsonResponse
     {
         try {
@@ -68,7 +101,6 @@ class AuthController extends Controller
             $dto = UserRegistrationDTO::fromRequest($request->all());
             $user = $this->authService->register($dto);
 
-            // Associate user with tenant
             TenantUser::create([
                 'tenant_id'  => $tenantId,
                 'user_id'    => $user->user_id,
