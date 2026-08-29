@@ -19,6 +19,9 @@ Route::prefix('identity')->group(function () {
     // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت + بارگذاری Scope + Permission)
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
 
+        // Auth session end (no special permission — any authenticated tenant user)
+        Route::post('/auth/logout', [AuthController::class, 'logout']);
+
         // Users (مدیریت کاربران مستأجر)
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
