@@ -238,19 +238,30 @@ class ScopeService
         });
     }
 
+    /**
+     * Active scopes assigned to a tenant user (Eloquent Collection of TenantScope).
+     * Query via assignment scope_ids so return type stays Eloquent\Collection
+     * (pluck()->filter()->values() would yield Support\Collection and break the contract).
+     */
     public function getUserScopes(string $tenantUserId): Collection
     {
         $tenantId = $this->getTenantId();
 
         $this->assertTenantUserBelongsToTenant($tenantId, $tenantUserId);
 
-        return TenantUserScope::with('scope')
-            ->where('tenant_id', $tenantId)
+        $scopeIds = TenantUserScope::where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
-            ->get()
-            ->pluck('scope')
-            ->filter()
-            ->values();
+            ->pluck('scope_id');
+
+        if ($scopeIds->isEmpty()) {
+            return new Collection();
+        }
+
+        return TenantScope::where('tenant_id', $tenantId)
+            ->whereIn('scope_id', $scopeIds)
+            ->orderBy('scope_type')
+            ->orderBy('scope_name')
+            ->get();
     }
 
     private function assertTenantUserBelongsToTenant(string $tenantId, string $tenantUserId): void
