@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\PartnerLayer\Controllers\PartnerController;
 use App\Modules\PartnerLayer\Controllers\PartnerUserController;
 use App\Modules\PartnerLayer\Controllers\PartnerTenantAssignmentController;
+use App\Modules\PartnerLayer\Controllers\PartnerAgreementController;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,7 +13,7 @@ use App\Modules\PartnerLayer\Controllers\PartnerTenantAssignmentController;
 | Loaded by ModuleServiceProvider with prefix: /api/partner-layer
 | Middleware 'api' is already applied by the provider.
 |
-| P3-A1 — Partner, PartnerUser, PartnerTenantAssignment endpoints.
+| P3-A1 — Partner, PartnerUser, Assignment, Agreement endpoints.
 */
 
 Route::middleware([
@@ -83,5 +84,26 @@ Route::middleware([
     Route::delete('/partner-tenant-assignments/{assignment}', [PartnerTenantAssignmentController::class, 'destroy'])
         ->middleware('permission:partner.assignment.delete')
         ->name('partner-layer.assignments.delete');
+
+    // PartnerAgreement
+    Route::get('/partner-agreements', [PartnerAgreementController::class, 'index'])
+        ->middleware('permission:partner.agreement.view')
+        ->name('partner-layer.agreements.index');
+
+    Route::post('/partner-agreements', [PartnerAgreementController::class, 'store'])
+        ->middleware('permission:partner.agreement.create')
+        ->name('partner-layer.agreements.store');
+
+    Route::get('/partner-agreements/{agreement}', [PartnerAgreementController::class, 'show'])
+        ->middleware('permission:partner.agreement.view')
+        ->name('partner-layer.agreements.show');
+
+    Route::put('/partner-agreements/{agreement}', [PartnerAgreementController::class, 'update'])
+        ->middleware('permission:partner.agreement.update')
+        ->name('partner-layer.agreements.update');
+
+    Route::delete('/partner-agreements/{agreement}', [PartnerAgreementController::class, 'destroy'])
+        ->middleware('permission:partner.agreement.delete')
+        ->name('partner-layer.agreements.delete');
 
 });
