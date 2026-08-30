@@ -134,6 +134,7 @@ class PartnerAgreementCrudTest extends TestCase
             'partner_id'       => $this->partner->partner_id,
             'agreement_number' => 'DUP-001',
             'agreement_type'   => 1,
+            'start_date'       => now(),
             'status'           => 1,
         ]);
 
@@ -154,6 +155,7 @@ class PartnerAgreementCrudTest extends TestCase
             'partner_id'       => $this->partner->partner_id,
             'agreement_number' => 'LIST-001',
             'agreement_type'   => 1,
+            'start_date'       => now(),
             'status'           => 1,
         ]);
 
@@ -173,6 +175,7 @@ class PartnerAgreementCrudTest extends TestCase
             'partner_id'       => $this->partner->partner_id,
             'agreement_number' => 'UPD-001',
             'agreement_type'   => 1,
+            'start_date'       => now(),
             'description'      => 'Before',
             'status'           => 1,
         ]);
@@ -194,6 +197,7 @@ class PartnerAgreementCrudTest extends TestCase
             'partner_id'       => $this->partner->partner_id,
             'agreement_number' => 'DEL-001',
             'agreement_type'   => 1,
+            'start_date'       => now(),
             'status'           => 1,
         ]);
 
