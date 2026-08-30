@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Modules\PartnerLayer\Controllers\PartnerController;
+use App\Modules\PartnerLayer\Controllers\PartnerUserController;
 
 /*
 |--------------------------------------------------------------------------
@@ -10,7 +11,7 @@ use App\Modules\PartnerLayer\Controllers\PartnerController;
 | Loaded by ModuleServiceProvider with prefix: /api/partner-layer
 | Middleware 'api' is already applied by the provider.
 |
-| P3-A1 — Partner CRUD core endpoints.
+| P3-A1 — Partner CRUD + PartnerUser (logical user link) endpoints.
 */
 
 Route::middleware([
@@ -19,6 +20,7 @@ Route::middleware([
     'load.scopes',
 ])->group(function () {
 
+    // Partner core
     Route::get('/partners', [PartnerController::class, 'index'])
         ->middleware('permission:partner.partner.view')
         ->name('partner-layer.partners.index');
@@ -38,5 +40,26 @@ Route::middleware([
     Route::delete('/partners/{partner}', [PartnerController::class, 'destroy'])
         ->middleware('permission:partner.partner.delete')
         ->name('partner-layer.partners.delete');
+
+    // PartnerUser — logical link of IdentityCore user_id to Partner
+    Route::get('/partner-users', [PartnerUserController::class, 'index'])
+        ->middleware('permission:partner.partner_user.view')
+        ->name('partner-layer.partner-users.index');
+
+    Route::post('/partner-users', [PartnerUserController::class, 'store'])
+        ->middleware('permission:partner.partner_user.create')
+        ->name('partner-layer.partner-users.store');
+
+    Route::get('/partner-users/{partnerUser}', [PartnerUserController::class, 'show'])
+        ->middleware('permission:partner.partner_user.view')
+        ->name('partner-layer.partner-users.show');
+
+    Route::put('/partner-users/{partnerUser}', [PartnerUserController::class, 'update'])
+        ->middleware('permission:partner.partner_user.update')
+        ->name('partner-layer.partner-users.update');
+
+    Route::delete('/partner-users/{partnerUser}', [PartnerUserController::class, 'destroy'])
+        ->middleware('permission:partner.partner_user.delete')
+        ->name('partner-layer.partner-users.delete');
 
 });
