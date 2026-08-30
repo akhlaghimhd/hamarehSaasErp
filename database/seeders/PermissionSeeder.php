@@ -212,6 +212,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'partner.partner_user.create', 'name' => 'Link User to Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.partner_user.update', 'name' => 'Update Partner User', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.partner_user.delete', 'name' => 'Unlink User from Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            // Layer 3 — PartnerLayer (PartnerTenantAssignment)
+            ['code' => 'partner.assignment.view', 'name' => 'View Partner Tenant Assignments', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.assignment.create', 'name' => 'Create Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.assignment.update', 'name' => 'Update Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.assignment.delete', 'name' => 'Delete Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
         ];
     }
 }
