@@ -200,6 +200,18 @@ class PermissionSeeder extends Seeder
             ['code' => 'saas-admin.coupon.view', 'name' => 'View Coupons', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
             ['code' => 'saas-admin.coupon.update', 'name' => 'Update Coupon', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
             ['code' => 'saas-admin.coupon.delete', 'name' => 'Delete Coupon', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
+
+            // Layer 3 — PartnerLayer (Partner core)
+            ['code' => 'partner.partner.view', 'name' => 'View Partners', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.partner.create', 'name' => 'Create Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.partner.update', 'name' => 'Update Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.partner.delete', 'name' => 'Delete Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            // Layer 3 — PartnerLayer (PartnerUser — logical user link)
+            ['code' => 'partner.partner_user.view', 'name' => 'View Partner Users', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.partner_user.create', 'name' => 'Link User to Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.partner_user.update', 'name' => 'Update Partner User', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.partner_user.delete', 'name' => 'Unlink User from Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
         ];
     }
 }
