@@ -207,7 +207,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'partner.partner.update', 'name' => 'Update Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.partner.delete', 'name' => 'Delete Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerUser — logical user link)
+            // Layer 3 — PartnerLayer (PartnerUser)
             ['code' => 'partner.partner_user.view', 'name' => 'View Partner Users', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.partner_user.create', 'name' => 'Link User to Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.partner_user.update', 'name' => 'Update Partner User', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
@@ -218,6 +218,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'partner.assignment.create', 'name' => 'Create Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.assignment.update', 'name' => 'Update Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.assignment.delete', 'name' => 'Delete Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            // Layer 3 — PartnerLayer (PartnerAgreement)
+            ['code' => 'partner.agreement.view', 'name' => 'View Partner Agreements', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.agreement.create', 'name' => 'Create Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.agreement.update', 'name' => 'Update Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.agreement.delete', 'name' => 'Delete Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
         ];
     }
 }
