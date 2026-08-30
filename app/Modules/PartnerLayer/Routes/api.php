@@ -5,6 +5,7 @@ use App\Modules\PartnerLayer\Controllers\PartnerController;
 use App\Modules\PartnerLayer\Controllers\PartnerUserController;
 use App\Modules\PartnerLayer\Controllers\PartnerTenantAssignmentController;
 use App\Modules\PartnerLayer\Controllers\PartnerAgreementController;
+use App\Modules\PartnerLayer\Controllers\PartnerCommissionRuleController;
 
 /*
 |--------------------------------------------------------------------------
@@ -12,8 +13,6 @@ use App\Modules\PartnerLayer\Controllers\PartnerAgreementController;
 |--------------------------------------------------------------------------
 | Loaded by ModuleServiceProvider with prefix: /api/partner-layer
 | Middleware 'api' is already applied by the provider.
-|
-| P3-A1 — Partner, PartnerUser, Assignment, Agreement endpoints.
 */
 
 Route::middleware([
@@ -43,7 +42,7 @@ Route::middleware([
         ->middleware('permission:partner.partner.delete')
         ->name('partner-layer.partners.delete');
 
-    // PartnerUser — logical link of IdentityCore user_id to Partner
+    // PartnerUser
     Route::get('/partner-users', [PartnerUserController::class, 'index'])
         ->middleware('permission:partner.partner_user.view')
         ->name('partner-layer.partner-users.index');
@@ -64,7 +63,7 @@ Route::middleware([
         ->middleware('permission:partner.partner_user.delete')
         ->name('partner-layer.partner-users.delete');
 
-    // PartnerTenantAssignment — logical tenant_id assignment
+    // PartnerTenantAssignment
     Route::get('/partner-tenant-assignments', [PartnerTenantAssignmentController::class, 'index'])
         ->middleware('permission:partner.assignment.view')
         ->name('partner-layer.assignments.index');
@@ -105,5 +104,26 @@ Route::middleware([
     Route::delete('/partner-agreements/{agreement}', [PartnerAgreementController::class, 'destroy'])
         ->middleware('permission:partner.agreement.delete')
         ->name('partner-layer.agreements.delete');
+
+    // PartnerCommissionRule
+    Route::get('/partner-commission-rules', [PartnerCommissionRuleController::class, 'index'])
+        ->middleware('permission:partner.commission_rule.view')
+        ->name('partner-layer.commission-rules.index');
+
+    Route::post('/partner-commission-rules', [PartnerCommissionRuleController::class, 'store'])
+        ->middleware('permission:partner.commission_rule.create')
+        ->name('partner-layer.commission-rules.store');
+
+    Route::get('/partner-commission-rules/{commissionRule}', [PartnerCommissionRuleController::class, 'show'])
+        ->middleware('permission:partner.commission_rule.view')
+        ->name('partner-layer.commission-rules.show');
+
+    Route::put('/partner-commission-rules/{commissionRule}', [PartnerCommissionRuleController::class, 'update'])
+        ->middleware('permission:partner.commission_rule.update')
+        ->name('partner-layer.commission-rules.update');
+
+    Route::delete('/partner-commission-rules/{commissionRule}', [PartnerCommissionRuleController::class, 'destroy'])
+        ->middleware('permission:partner.commission_rule.delete')
+        ->name('partner-layer.commission-rules.delete');
 
 });
