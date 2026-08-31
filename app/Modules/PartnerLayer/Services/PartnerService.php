@@ -8,12 +8,12 @@ use App\Modules\PartnerLayer\DTOs\UpdatePartnerDTO;
 use App\Base\Context\TenantContext;
 use Exception;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * P3-S1 — Core Partner CRUD within PartnerLayer.
- *
- * tenant_id is taken from TenantContext for tenant-scoped partners.
- * Code uniqueness follows SSOT partial unique (tenant context + soft delete).
+ * P3-X1 — Versioned outbox events on create/delete.
  */
 class PartnerService
 {
@@ -55,20 +55,41 @@ class PartnerService
 
         $parentPath = $this->buildParentPath($dto->parentPartnerId);
 
-        return Partner::create([
-            'tenant_id'           => $tenantId,
-            'parent_partner_id'   => $dto->parentPartnerId,
-            'parent_path'         => $parentPath,
-            'code'                => $dto->code,
-            'name'                => $dto->name,
-            'partner_type'        => $dto->partnerType,
-            'ownership_type'      => $dto->ownershipType,
-            'commission_enabled'  => $dto->commissionEnabled,
-            'phone'               => $dto->phone,
-            'email'               => $dto->email,
-            'address'             => $dto->address,
-            'status'              => $dto->status,
-        ]);
+        return DB::transaction(function () use ($dto, $tenantId, $parentPath) {
+            $partner = Partner::create([
+                'tenant_id'          => $tenantId,
+                'parent_partner_id'  => $dto->parentPartnerId,
+                'parent_path'        => $parentPath,
+                'code'               => $dto->code,
+                'name'               => $dto->name,
+                'partner_type'       => $dto->partnerType,
+                'ownership_type'     => $dto->ownershipType,
+                'commission_enabled' => $dto->commissionEnabled,
+                'phone'              => $dto->phone,
+                'email'              => $dto->email,
+                'address'            => $dto->address,
+                'status'             => $dto->status,
+            ]);
+
+            if ($tenantId) {
+                $this->logEventOutbox(
+                    $tenantId,
+                    'partners',
+                    $partner->partner_id,
+                    'PartnerLayer.PartnerCreated.v1',
+                    [
+                        'partner_id'   => $partner->partner_id,
+                        'tenant_id'    => $tenantId,
+                        'code'         => $partner->code,
+                        'name'         => $partner->name,
+                        'partner_type' => $partner->partner_type,
+                        'status'       => $partner->status,
+                    ]
+                );
+            }
+
+            return $partner;
+        });
     }
 
     public function updatePartner(string $partnerId, UpdatePartnerDTO $dto): Partner
@@ -90,17 +111,17 @@ class PartnerService
         $parentPath = $this->buildParentPath($dto->parentPartnerId);
 
         $partner->update([
-            'parent_partner_id'   => $dto->parentPartnerId,
-            'parent_path'         => $parentPath,
-            'code'                => $dto->code,
-            'name'                => $dto->name,
-            'partner_type'        => $dto->partnerType,
-            'ownership_type'      => $dto->ownershipType,
-            'commission_enabled'  => $dto->commissionEnabled,
-            'phone'               => $dto->phone,
-            'email'               => $dto->email,
-            'address'             => $dto->address,
-            'status'              => $dto->status,
+            'parent_partner_id'  => $dto->parentPartnerId,
+            'parent_path'        => $parentPath,
+            'code'               => $dto->code,
+            'name'               => $dto->name,
+            'partner_type'       => $dto->partnerType,
+            'ownership_type'     => $dto->ownershipType,
+            'commission_enabled' => $dto->commissionEnabled,
+            'phone'              => $dto->phone,
+            'email'              => $dto->email,
+            'address'            => $dto->address,
+            'status'             => $dto->status,
         ]);
 
         return $partner->fresh();
@@ -118,7 +139,47 @@ class PartnerService
             throw new Exception('This partner has agreements and cannot be deleted.');
         }
 
-        $partner->delete();
+        DB::transaction(function () use ($partner) {
+            $tenantId = $partner->tenant_id ?? TenantContext::getInstance()->getTenantId();
+
+            $partner->delete();
+
+            if ($tenantId) {
+                $this->logEventOutbox(
+                    $tenantId,
+                    'partners',
+                    $partner->partner_id,
+                    'PartnerLayer.PartnerDeleted.v1',
+                    [
+                        'partner_id' => $partner->partner_id,
+                        'tenant_id'  => $tenantId,
+                        'code'       => $partner->code,
+                    ]
+                );
+            }
+        });
+    }
+
+    /**
+     * Integration event → shared event_outbox (law 6.4 versioned event types).
+     */
+    private function logEventOutbox(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 
     private function assertCodeAvailable(string $code, ?string $tenantId, ?string $exceptPartnerId = null): void
