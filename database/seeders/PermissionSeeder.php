@@ -236,6 +236,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'partner.commission.create', 'name' => 'Create Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.commission.update', 'name' => 'Update Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.commission.delete', 'name' => 'Delete Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            // Layer 3 — PartnerLayer (PartnerPayout)
+            ['code' => 'partner.payout.view', 'name' => 'View Partner Payouts', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.payout.create', 'name' => 'Create Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.payout.update', 'name' => 'Update Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.payout.delete', 'name' => 'Delete Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
         ];
     }
 }
