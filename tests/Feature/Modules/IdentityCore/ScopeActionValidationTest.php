@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * F3 — Validate Scope on actions.
@@ -118,15 +119,15 @@ class ScopeActionValidationTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function assert_allows_access_to_scoped_reference(): void
     {
         Branch::assertCurrentUserHasAccessTo($this->branchAllowed->branch_id);
 
-        $this->assertTrue(true); // no exception
+        $this->assertTrue(true);
     }
 
-    /** @test */
+    #[Test]
     public function assert_denies_access_to_out_of_scope_reference(): void
     {
         $this->expectException(HttpException::class);
@@ -134,7 +135,7 @@ class ScopeActionValidationTest extends TestCase
         Branch::assertCurrentUserHasAccessTo($this->branchDenied->branch_id);
     }
 
-    /** @test */
+    #[Test]
     public function assert_in_strict_mode_denies_when_user_has_no_scopes(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -147,7 +148,7 @@ class ScopeActionValidationTest extends TestCase
         Branch::assertCurrentUserHasAccessTo($this->branchAllowed->branch_id);
     }
 
-    /** @test */
+    #[Test]
     public function assert_in_gradual_mode_allows_when_user_has_no_scopes(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -160,7 +161,7 @@ class ScopeActionValidationTest extends TestCase
         $this->assertTrue(true);
     }
 
-    /** @test */
+    #[Test]
     public function middleware_allows_request_when_reference_is_in_scope(): void
     {
         $request = Request::create('/branches/' . $this->branchAllowed->branch_id, 'GET');
@@ -181,7 +182,7 @@ class ScopeActionValidationTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function middleware_denies_request_when_reference_is_out_of_scope(): void
     {
         $request = Request::create('/branches/' . $this->branchDenied->branch_id, 'GET');
@@ -203,7 +204,7 @@ class ScopeActionValidationTest extends TestCase
         $this->assertStringContainsString('Scope', $response->getContent());
     }
 
-    /** @test */
+    #[Test]
     public function middleware_in_strict_mode_denies_when_no_scopes_assigned(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -229,7 +230,7 @@ class ScopeActionValidationTest extends TestCase
         $this->assertEquals(403, $response->getStatusCode());
     }
 
-    /** @test */
+    #[Test]
     public function middleware_in_gradual_mode_allows_when_no_scopes_assigned(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
