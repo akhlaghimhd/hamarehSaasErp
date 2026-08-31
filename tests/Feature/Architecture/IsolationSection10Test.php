@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Tenant Isolation Architecture Standard — §10 Automated Security Testing (F6)
@@ -119,7 +120,7 @@ class IsolationSection10Test extends TestCase
         parent::tearDown();
     }
 
-    /** @test §10.1 Data Bleed — Eloquent scope hides other tenant by id */
+    #[Test]
     public function tenant_a_cannot_load_tenant_b_role_by_id(): void
     {
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
@@ -134,7 +135,7 @@ class IsolationSection10Test extends TestCase
         $this->assertNull($found);
     }
 
-    /** @test §10.1 Data Bleed — API list only returns own tenant roles */
+    #[Test]
     public function tenant_a_api_list_does_not_include_tenant_b_roles(): void
     {
         $response = $this->withHeaders([
@@ -151,7 +152,7 @@ class IsolationSection10Test extends TestCase
         $this->assertNotContains('ISO10_ROLE_B', $codes);
     }
 
-    /** @test §10.2 Spoofed / missing tenant header */
+    #[Test]
     public function missing_tenant_header_is_rejected(): void
     {
         $response = $this->withHeaders([
@@ -162,7 +163,7 @@ class IsolationSection10Test extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test §10.2 Invalid tenant UUID rejected */
+    #[Test]
     public function invalid_tenant_header_is_rejected(): void
     {
         $response = $this->withHeaders([
@@ -174,7 +175,7 @@ class IsolationSection10Test extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test §10.3 Token of A + header of B (user not member of B) → forbidden */
+    #[Test]
     public function user_a_cannot_switch_to_tenant_b_via_header_alone(): void
     {
         $response = $this->withHeaders([
@@ -186,7 +187,7 @@ class IsolationSection10Test extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test §10.1 Organization data bleed */
+    #[Test]
     public function tenant_a_cannot_see_company_of_tenant_b(): void
     {
         Company::withoutGlobalScopes()->create([
@@ -202,7 +203,7 @@ class IsolationSection10Test extends TestCase
         $this->assertCount(0, Company::where('code', 'B-CO')->get());
     }
 
-    /** @test §10.4 Cache prefix contract (preparatory for F7) */
+    #[Test]
     public function cache_keys_must_use_tenant_prefix_to_avoid_collision(): void
     {
         $module = 'identity';
@@ -221,11 +222,9 @@ class IsolationSection10Test extends TestCase
         $this->assertNotSame(Cache::get($keyA), Cache::get($keyB));
     }
 
-    /** @test §10.5 Outbox events stay tenant-bound */
+    #[Test]
     public function outbox_login_event_is_bound_to_request_tenant_only(): void
     {
-        // Minimal credential for login path is heavy; assert insert contract directly
-        // matching AuthenticationService writeOutboxEvent shape.
         $eventId = (string) Str::uuid();
 
         DB::table('event_outbox')->insert([
