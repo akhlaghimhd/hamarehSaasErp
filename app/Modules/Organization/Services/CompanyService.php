@@ -30,6 +30,7 @@ class CompanyService
             'registration_number'  => $dto->registrationNumber,
             'economic_code'        => $dto->economicCode,
             'is_active'            => $dto->isActive,
+            'row_version'          => 1,
         ]);
     }
 
@@ -68,9 +69,10 @@ class CompanyService
             'registration_number'  => $dto->registrationNumber,
             'economic_code'        => $dto->economicCode,
             'is_active'            => $dto->isActive,
+            'row_version'          => ((int) ($company->row_version ?? 1)) + 1,
         ]);
 
-        return $company;
+        return $company->fresh();
     }
 
     public function deleteCompany(string $companyId): void
