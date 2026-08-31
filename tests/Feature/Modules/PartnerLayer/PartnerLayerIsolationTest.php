@@ -155,16 +155,9 @@ class PartnerLayerIsolationTest extends TestCase
         $response = $this->withHeaders($this->authHeadersA())
             ->getJson('/api/partner-layer/partner-agreements?partner_id=' . $this->partnerB->partner_id);
 
-        // Service rejects inaccessible partner context
-        $this->assertTrue(
-            in_array($response->status(), [200, 422], true),
-            'Expected 200 (empty) or 422 (denied), got ' . $response->status()
-        );
-
-        if ($response->status() === 200) {
-            $numbers = collect($response->json('data'))->pluck('agreement_number')->all();
-            $this->assertNotContains('AGR-B-ISO', $numbers);
-        }
+        // Access denied: partner of another tenant is not accessible
+        $response->assertStatus(422)
+            ->assertJsonPath('status', 'error');
     }
 
     #[Test]
@@ -187,13 +180,8 @@ class PartnerLayerIsolationTest extends TestCase
         $response = $this->withHeaders($this->authHeadersA())
             ->getJson('/api/partner-layer/partner-commissions?partner_id=' . $this->partnerB->partner_id);
 
-        $this->assertTrue(
-            in_array($response->status(), [200, 422], true)
-        );
-
-        if ($response->status() === 200) {
-            $this->assertEmpty($response->json('data'));
-        }
+        $response->assertStatus(422)
+            ->assertJsonPath('status', 'error');
     }
 
     #[Test]
