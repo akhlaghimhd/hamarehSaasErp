@@ -111,16 +111,35 @@ class PermissionSeeder extends Seeder
     private function getBasePermissions(): array
     {
         return [
+            // Identity — Permission
             ['code' => 'identity.permission.view', 'name' => 'View Permissions', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.permission.create', 'name' => 'Create Permission', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.permission.update', 'name' => 'Update Permission', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.permission.delete', 'name' => 'Delete Permission', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+
+            // Identity — Role
             ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.role.create', 'name' => 'Create Role', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.role.update', 'name' => 'Update Role', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.role.delete', 'name' => 'Delete Role', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
             ['code' => 'identity.role.assign', 'name' => 'Assign Role to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.role.assign-permissions', 'name' => 'Assign Permissions to Role', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+
+            // Identity — User / membership
             ['code' => 'identity.user.view', 'name' => 'View Tenant Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.user.create', 'name' => 'Create Tenant User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.update', 'name' => 'Update Tenant User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.user.delete', 'name' => 'Delete Tenant User', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
 
+            // Identity — Profile
+            ['code' => 'identity.profile.view', 'name' => 'View User Profiles', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.profile.update', 'name' => 'Update User Profiles', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.profile.delete', 'name' => 'Delete User Profiles', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+
+            // Identity — Membership history (read-only audit)
+            ['code' => 'identity.membership_history.view', 'name' => 'View Membership History', 'module_name' => 'Identity', 'action_type' => 'READ'],
+
+            // Identity — Scope
             ['code' => 'identity.scope.view', 'name' => 'View Scopes', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.scope.create', 'name' => 'Create Scope', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.scope.update', 'name' => 'Update Scope', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
@@ -144,7 +163,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.business-partner.create', 'name' => 'Create Business Partner', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.business-partner.update', 'name' => 'Update Business Partner', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.business-partner.delete', 'name' => 'Delete Business Partner', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-            ['code' => 'master-data.item.view', 'name' => 'View Items', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.item.view', 'name' => 'View Items', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.item.create', 'name' => 'Create Item', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.item.update', 'name' => 'Update Item', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.item.delete', 'name' => 'Delete Item', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
