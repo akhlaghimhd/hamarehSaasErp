@@ -25,6 +25,19 @@ class AuthenticationService
 {
     /**
      * Login and return full security context according to Architecture Law 4.4
+     * Required context fields: user_id, tenant_id, roles, scopes (+ permissions)
+     *
+     * F4 — Token vs Request Context:
+     * - Sanctum token proves identity (and may carry tenant ability). It is NOT the
+     *   source of truth for roles / permissions / scopes.
+     * - security_context in this response is a DB snapshot for the client only and may stale.
+     * - Each subsequent request reloads roles/scopes/permissions from DB via LoadUserScopesMiddleware.
+     *
+     * F5 — Successful login with tenant writes identity.user.logged_in.v1 to event_outbox.
+     *
+     * @throws ValidationException
+     * @throws HttpException
+     * @throws Exception
      */
     public function login(LoginDTO $dto): array
     {
@@ -38,7 +51,7 @@ class AuthenticationService
 
         $credential = $user->credential;
 
-        // Lockout check (P4-S1)
+        // Lockout check (P4-S1): 5 failures → 15 min lock
         if ($credential && $credential->locked_until && $credential->locked_until->isFuture()) {
             throw new HttpException(403, 'حساب کاربری موقتاً قفل شده است. لطفاً بعداً تلاش کنید.');
         }
@@ -129,26 +142,27 @@ class AuthenticationService
                 }
             }
 
-            $scopeModels = TenantUserScope::withoutGlobalScopes()
+            $scopeAssignments = TenantUserScope::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
-                ->where('tenant_user_id', $tenantUser->tenant_user_id)
+                ->where('user_id', $user->user_id)
                 ->whereNull('deleted_at')
-                ->get();
+                ->get(['scope_id']);
 
-            if ($scopeModels->isNotEmpty()) {
-                $scopeIds = $scopeModels->pluck('tenant_scope_id')->unique()->values()->toArray();
-                $scopesData = TenantScope::withoutGlobalScopes()
+            $scopeIds = $scopeAssignments->pluck('scope_id')->unique()->values()->toArray();
+
+            if (!empty($scopeIds)) {
+                $scopeModels = TenantScope::withoutGlobalScopes()
                     ->where('tenant_id', $tenantIdToLogin)
-                    ->whereIn('tenant_scope_id', $scopeIds)
+                    ->whereIn('scope_id', $scopeIds)
                     ->whereNull('deleted_at')
-                    ->get();
+                    ->get(['scope_id', 'scope_name', 'scope_type', 'reference_id']);
 
-                $scopes = $scopesData->map(function ($scope) {
+                $scopes = $scopeModels->map(function ($scope) {
                     return [
-                        'scope_id'     => $scope->tenant_scope_id,
-                        'scope_name'   => $scope->scope_name ?? $scope->name ?? null,
-                        'scope_type'   => $scope->scope_type ?? null,
-                        'reference_id' => $scope->reference_id ?? null,
+                        'scope_id'     => $scope->scope_id,
+                        'scope_name'   => $scope->scope_name,
+                        'scope_type'   => $scope->scope_type,
+                        'reference_id' => $scope->reference_id,
                     ];
                 })->values()->toArray();
             }
