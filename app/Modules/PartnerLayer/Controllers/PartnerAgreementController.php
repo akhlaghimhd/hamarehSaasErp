@@ -21,16 +21,23 @@ class PartnerAgreementController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $partnerId = $request->query('partner_id');
+        try {
+            $partnerId = $request->query('partner_id');
 
-        $items = $this->agreementService->getAgreements(
-            $partnerId ? (string) $partnerId : null
-        );
+            $items = $this->agreementService->getAgreements(
+                $partnerId ? (string) $partnerId : null
+            );
 
-        return response()->json([
-            'status' => 'success',
-            'data'   => $items,
-        ]);
+            return response()->json([
+                'status' => 'success',
+                'data'   => $items,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     public function store(CreatePartnerAgreementRequest $request): JsonResponse
