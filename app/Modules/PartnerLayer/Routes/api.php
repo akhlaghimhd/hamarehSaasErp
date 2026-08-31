@@ -7,6 +7,7 @@ use App\Modules\PartnerLayer\Controllers\PartnerTenantAssignmentController;
 use App\Modules\PartnerLayer\Controllers\PartnerAgreementController;
 use App\Modules\PartnerLayer\Controllers\PartnerCommissionRuleController;
 use App\Modules\PartnerLayer\Controllers\PartnerCommissionController;
+use App\Modules\PartnerLayer\Controllers\PartnerPayoutController;
 
 /*
 |--------------------------------------------------------------------------
@@ -147,5 +148,26 @@ Route::middleware([
     Route::delete('/partner-commissions/{commission}', [PartnerCommissionController::class, 'destroy'])
         ->middleware('permission:partner.commission.delete')
         ->name('partner-layer.commissions.delete');
+
+    // PartnerPayout
+    Route::get('/partner-payouts', [PartnerPayoutController::class, 'index'])
+        ->middleware('permission:partner.payout.view')
+        ->name('partner-layer.payouts.index');
+
+    Route::post('/partner-payouts', [PartnerPayoutController::class, 'store'])
+        ->middleware('permission:partner.payout.create')
+        ->name('partner-layer.payouts.store');
+
+    Route::get('/partner-payouts/{payout}', [PartnerPayoutController::class, 'show'])
+        ->middleware('permission:partner.payout.view')
+        ->name('partner-layer.payouts.show');
+
+    Route::put('/partner-payouts/{payout}', [PartnerPayoutController::class, 'update'])
+        ->middleware('permission:partner.payout.update')
+        ->name('partner-layer.payouts.update');
+
+    Route::delete('/partner-payouts/{payout}', [PartnerPayoutController::class, 'destroy'])
+        ->middleware('permission:partner.payout.delete')
+        ->name('partner-layer.payouts.delete');
 
 });
