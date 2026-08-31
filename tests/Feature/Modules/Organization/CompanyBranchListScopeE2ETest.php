@@ -18,6 +18,7 @@ use App\Modules\Organization\Models\Branch;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Phase A – E2E Scope on list Company / Branch APIs.
@@ -28,7 +29,7 @@ use Illuminate\Support\Str;
  *  - Login as scoped user
  *  - GET /api/organization/companies → only company A
  *  - GET /api/organization/companies/{companyA}/branches → only allowed branch
- *  - Company B and its branches never appear
+ *  - Out-of-scope company/branch access is fail-closed by ScopeAccessGuard (403)
  */
 class CompanyBranchListScopeE2ETest extends TestCase
 {
@@ -112,7 +113,6 @@ class CompanyBranchListScopeE2ETest extends TestCase
             'tenant_role_id'      => $role->tenant_role_id,
         ]);
 
-        // --- Data: 2 companies, 3 branches ---
         $this->companyAllowed = Company::withoutGlobalScopes()->create([
             'company_id' => (string) Str::uuid(),
             'tenant_id'  => $this->tenant->tenant_id,
@@ -156,7 +156,6 @@ class CompanyBranchListScopeE2ETest extends TestCase
             'is_active'  => true,
         ]);
 
-        // --- Scopes: COMPANY(allowed) + BRANCH(allowed branch only) ---
         $companyScope = TenantScope::withoutGlobalScopes()->create([
             'scope_id'     => (string) Str::uuid(),
             'tenant_id'    => $this->tenant->tenant_id,
@@ -184,7 +183,6 @@ class CompanyBranchListScopeE2ETest extends TestCase
             ]);
         }
 
-        // Login → token with live scopes loaded by middleware on each request
         $login = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
@@ -211,7 +209,7 @@ class CompanyBranchListScopeE2ETest extends TestCase
         ];
     }
 
-    /** @test */
+    #[Test]
     public function company_list_returns_only_scoped_company(): void
     {
         $response = $this->withHeaders($this->authHeaders())
@@ -227,7 +225,7 @@ class CompanyBranchListScopeE2ETest extends TestCase
         $this->assertCount(1, $ids);
     }
 
-    /** @test */
+    #[Test]
     public function branch_list_under_allowed_company_returns_only_scoped_branch(): void
     {
         $response = $this->withHeaders($this->authHeaders())
@@ -244,36 +242,33 @@ class CompanyBranchListScopeE2ETest extends TestCase
         $this->assertCount(1, $ids);
     }
 
-    /** @test */
-    public function branch_list_under_denied_company_returns_empty(): void
+    #[Test]
+    public function branch_list_under_denied_company_is_blocked_by_scope_guard(): void
     {
+        // ScopeAccessGuard fail-closed: company_id in path is out of user's COMPANY scopes → 403
         $response = $this->withHeaders($this->authHeaders())
             ->getJson('/api/organization/companies/' . $this->companyDenied->company_id . '/branches');
 
-        $response->assertStatus(200)
-            ->assertJsonPath('status', 'success');
-
-        $ids = collect($response->json('data'))->pluck('branch_id')->toArray();
-
-        $this->assertCount(0, $ids);
-        $this->assertNotContains($this->branchOtherCompany->branch_id, $ids);
+        $response->assertStatus(403);
     }
 
-    /** @test */
-    public function show_denied_company_returns_404(): void
+    #[Test]
+    public function show_denied_company_is_blocked_by_scope_guard(): void
     {
+        // Out-of-scope COMPANY reference → ScopeAccessGuard denies (403), not data leak
         $response = $this->withHeaders($this->authHeaders())
             ->getJson('/api/organization/companies/' . $this->companyDenied->company_id);
 
-        $response->assertStatus(404);
+        $response->assertStatus(403);
     }
 
-    /** @test */
-    public function show_denied_branch_returns_404(): void
+    #[Test]
+    public function show_denied_branch_is_blocked_by_scope_guard(): void
     {
+        // Out-of-scope BRANCH reference → ScopeAccessGuard denies (403)
         $response = $this->withHeaders($this->authHeaders())
             ->getJson('/api/organization/branches/' . $this->branchSiblingDenied->branch_id);
 
-        $response->assertStatus(404);
+        $response->assertStatus(403);
     }
 }
