@@ -9,6 +9,7 @@ use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * F1 – Database-level RLS isolation for tenant_roles
@@ -33,8 +34,6 @@ class RlsTenantRolesIsolationTest extends TestCase
     {
         parent::setUp();
 
-        // Ensure app_user can access tables created by RefreshDatabase
-        // and RLS policy is present with safe empty-string handling.
         $this->ensureRlsInfrastructure();
 
         $this->tenantA = Tenant::factory()->create(['tenant_code' => 'RLS_A']);
@@ -43,7 +42,6 @@ class RlsTenantRolesIsolationTest extends TestCase
         $this->roleAId = (string) Str::uuid();
         $this->roleBId = (string) Str::uuid();
 
-        // Seed as current role (superuser) so data exists regardless of RLS
         DB::table('tenant_roles')->insert([
             [
                 'tenant_role_id'    => $this->roleAId,
@@ -83,21 +81,15 @@ class RlsTenantRolesIsolationTest extends TestCase
         parent::tearDown();
     }
 
-    /**
-     * Re-apply grants + RLS policy after RefreshDatabase recreates tables.
-     * Does not weaken isolation; makes non-superuser role able to exercise RLS.
-     */
     protected function ensureRlsInfrastructure(): void
     {
-        // Privileges for app_user on current (testing) database objects
         DB::statement('GRANT USAGE ON SCHEMA public TO app_user');
         DB::statement('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user');
         DB::statement('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user');
 
-        // RLS on tenant_roles
         DB::statement('ALTER TABLE tenant_roles ENABLE ROW LEVEL SECURITY');
         DB::statement('ALTER TABLE tenant_roles FORCE ROW LEVEL SECURITY');
-        
+
         DB::statement('DROP POLICY IF EXISTS tenant_isolation_policy ON tenant_roles');
 
         DB::statement("
@@ -112,15 +104,12 @@ class RlsTenantRolesIsolationTest extends TestCase
         ");
     }
 
-    /**
-     * Enforce RLS by switching to non-superuser role (NOBYPASSRLS).
-     */
     protected function actAsAppUser(): void
     {
         DB::statement('SET ROLE app_user');
     }
 
-    /** @test */
+    #[Test]
     public function rls_blocks_cross_tenant_data_even_when_global_scopes_are_bypassed(): void
     {
         $this->actAsAppUser();
@@ -136,7 +125,7 @@ class RlsTenantRolesIsolationTest extends TestCase
         $this->assertEquals('ROLE_A', $roles->first()->code);
     }
 
-    /** @test */
+    #[Test]
     public function rls_returns_empty_when_tenant_context_is_missing(): void
     {
         $this->actAsAppUser();
@@ -148,7 +137,7 @@ class RlsTenantRolesIsolationTest extends TestCase
         $this->assertCount(0, $roles);
     }
 
-    /** @test */
+    #[Test]
     public function rls_blocks_insert_of_wrong_tenant_id(): void
     {
         $this->actAsAppUser();
@@ -172,7 +161,7 @@ class RlsTenantRolesIsolationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function switching_tenant_context_changes_visible_rows(): void
     {
         $this->actAsAppUser();
