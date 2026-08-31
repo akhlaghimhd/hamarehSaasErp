@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\DTOs\CreateTenantUserDTO;
+use App\Modules\IdentityCore\DTOs\UpdateTenantUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\UserCredential;
@@ -20,7 +21,7 @@ class UserService
     ) {}
 
     /**
-     * لیست کاربران عضو مستأجر جاری
+     * List tenant memberships for the current tenant.
      */
     public function listTenantUsers(): Collection
     {
@@ -35,7 +36,7 @@ class UserService
     }
 
     /**
-     * جزئیات یک عضویت در مستأجر جاری
+     * Show one tenant membership in the current tenant.
      */
     public function getTenantUser(string $tenantUserId): TenantUser
     {
@@ -49,14 +50,13 @@ class UserService
     }
 
     /**
-     * ایجاد کاربر جدید + عضویت در مستأجر جاری (+ تخصیص نقش اختیاری)
+     * Create user (if needed) + tenant membership (+ optional roles).
      */
     public function createTenantUser(CreateTenantUserDTO $dto): TenantUser
     {
         $tenantId = $this->getTenantId();
 
         return DB::transaction(function () use ($dto, $tenantId) {
-            // اگر کاربر با این ایمیل از قبل وجود دارد، فقط عضویت بساز
             $user = User::where('email', $dto->email)->first();
 
             if (!$user) {
@@ -80,7 +80,6 @@ class UserService
                 ]);
             }
 
-            // جلوگیری از عضویت تکراری
             $existingMembership = TenantUser::where('tenant_id', $tenantId)
                 ->where('user_id', $user->user_id)
                 ->first();
@@ -100,7 +99,7 @@ class UserService
                 $tenantId,
                 'tenant_users',
                 $tenantUser->tenant_user_id,
-                'identity.tenant_user.created',
+                'identity.tenant_user.created.v1',
                 [
                     'tenant_user_id' => $tenantUser->tenant_user_id,
                     'user_id'        => $user->user_id,
@@ -108,7 +107,6 @@ class UserService
                 ]
             );
 
-            // تخصیص نقش‌های اختیاری
             if (!empty($dto->roleIds)) {
                 foreach ($dto->roleIds as $roleId) {
                     $assignDto = AssignRoleToUserDTO::fromRequest([
@@ -120,6 +118,84 @@ class UserService
             }
 
             return $tenantUser->load('user');
+        });
+    }
+
+    /**
+     * Update tenant membership fields and related user profile fields.
+     * Soft-delete is handled by softDeleteTenantUser().
+     */
+    public function updateTenantUser(UpdateTenantUserDTO $dto): TenantUser
+    {
+        $tenantId = $this->getTenantId();
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $tenantUser = TenantUser::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $dto->tenantUserId)
+                ->with(['user'])
+                ->firstOrFail();
+
+            $membershipChanges = array_filter([
+                'is_owner' => $dto->isOwner,
+                'status'   => $dto->status,
+            ], fn ($value) => !is_null($value));
+
+            if (!empty($membershipChanges)) {
+                if (property_exists($tenantUser, 'row_version') || isset($tenantUser->row_version)) {
+                    $membershipChanges['row_version'] = ((int) ($tenantUser->row_version ?? 1)) + 1;
+                }
+                $tenantUser->update($membershipChanges);
+            }
+
+            $userChanges = array_filter([
+                'first_name' => $dto->firstName,
+                'last_name'  => $dto->lastName,
+                'mobile'     => $dto->mobile,
+            ], fn ($value) => !is_null($value));
+
+            if (!empty($userChanges) && $tenantUser->user) {
+                $tenantUser->user->update($userChanges);
+            }
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_users',
+                $tenantUser->tenant_user_id,
+                'identity.tenant_user.updated.v1',
+                [
+                    'tenant_user_id'      => $tenantUser->tenant_user_id,
+                    'membership_changes'  => $membershipChanges,
+                    'user_changes'        => $userChanges,
+                ]
+            );
+
+            return $tenantUser->fresh(['user']);
+        });
+    }
+
+    /**
+     * Soft-delete a tenant membership (Law 1.4 — no physical delete).
+     */
+    public function softDeleteTenantUser(string $tenantUserId): void
+    {
+        $tenantId = $this->getTenantId();
+
+        DB::transaction(function () use ($tenantUserId, $tenantId) {
+            $tenantUser = TenantUser::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $tenantUserId)
+                ->firstOrFail();
+
+            $tenantUser->delete();
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_users',
+                $tenantUserId,
+                'identity.tenant_user.deleted.v1',
+                ['tenant_user_id' => $tenantUserId]
+            );
         });
     }
 

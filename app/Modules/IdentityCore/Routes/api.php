@@ -10,25 +10,28 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
 
-    // ۱. روت‌های عمومی (فقط Tenant Context)
+    // 1. Public routes (Tenant Context only)
     Route::middleware([TenantContextMiddleware::class])->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
     });
 
-    // ۲. روت‌های محافظت‌شده (Tenant Context + احراز هویت + بارگذاری Scope + Permission)
+    // 2. Protected routes (Tenant Context + auth + scopes + permission)
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
 
-        // Auth session end (no special permission — any authenticated tenant user)
         Route::post('/auth/logout', [AuthController::class, 'logout']);
 
-        // Users (مدیریت کاربران مستأجر)
+        // Users (tenant membership management)
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
         Route::post('/users', [UserController::class, 'store'])
             ->middleware('permission:identity.user.create');
         Route::get('/users/{id}', [UserController::class, 'show'])
             ->middleware('permission:identity.user.view');
+        Route::put('/users/{id}', [UserController::class, 'update'])
+            ->middleware('permission:identity.user.update');
+        Route::delete('/users/{id}', [UserController::class, 'destroy'])
+            ->middleware('permission:identity.user.delete');
 
         // Permissions
         Route::get('/permissions', [PermissionController::class, 'index'])
