@@ -7,7 +7,8 @@ use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Context; // اصلاح کلاس کانتکست
+use Illuminate\Support\Facades\Context;
+use PHPUnit\Framework\Attributes\Test;
 
 class OutboxWorkerTest extends TestCase
 {
@@ -24,12 +25,9 @@ class OutboxWorkerTest extends TestCase
         ]);
     }
 
-    /**
-     * @test
-     */
+    #[Test]
     public function it_saves_event_to_outbox_table_instead_of_direct_dispatch()
     {
-        // استفاده از فیساد جدید لاراول برای تنظیم کانتکست
         Context::add('tenant_id', $this->tenant->tenant_id);
 
         $aggregateId = (string) \Illuminate\Support\Str::uuid();
@@ -46,7 +44,7 @@ class OutboxWorkerTest extends TestCase
             'aggregate_id' => $aggregateId,
             'event_type' => 'IdentityCore.UserLoggedIn.v1',
             'payload' => json_encode($payload),
-            'status' => 1, // 1: Pending
+            'status' => 1,
             'retry_count' => 0,
             'created_at' => now()
         ]);
@@ -58,9 +56,7 @@ class OutboxWorkerTest extends TestCase
         ]);
     }
 
-    /**
-     * @test
-     */
+    #[Test]
     public function outbox_worker_processes_pending_events_and_updates_status()
     {
         Event::fake(); 
@@ -85,14 +81,11 @@ class OutboxWorkerTest extends TestCase
 
         $this->assertDatabaseHas('event_outbox', [
             'event_id' => $eventId,
-            // در حالت تست سینک (Sync)، رویداد مستقیماً پردازش شده و استاتوس ۲ می‌گیرد
             'status' => 2 
         ]);
     }
     
- /**
-     * @test
-     */
+    #[Test]
     public function outbox_worker_increments_retry_count_on_failure()
     {
         $eventId = (string) \Illuminate\Support\Str::uuid();
@@ -113,11 +106,10 @@ class OutboxWorkerTest extends TestCase
             throw new \Exception('Simulated Failure');
         });
 
-        // جلوگیری از کرش کردن تست به خاطر Exception پرتاب شده در جاب
         try {
             $this->artisan('erp:process-outbox');
         } catch (\Exception $e) {
-            // استثنا به درستی دریافت شد
+            // expected
         }
 
         $failedEvent = DB::table('event_outbox')->where('event_id', $eventId)->first();

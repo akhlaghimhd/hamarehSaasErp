@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use App\Modules\SaasPlatform\Models\Tenant;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\Test;
 
 class TenantContextMiddlewareTest extends TestCase
 {
@@ -26,13 +27,10 @@ class TenantContextMiddlewareTest extends TestCase
         'status' => 1 
         ]);
 
-        // درج مستقیم برای جلوگیری از باگ‌های UUID در الکوئنت
         DB::table('tenants')->insert($this->tenant->toArray());
     }
 
-    /**
-     * @test
-     */
+    #[Test]
     public function it_rejects_requests_without_tenant_context()
     {
         $request = Request::create('/api/accounting/invoices', 'GET');
@@ -42,13 +40,10 @@ class TenantContextMiddlewareTest extends TestCase
             return new Response('OK', 200);
         });
 
-        // میدل‌ور باید در صورت نبود هدر، ریسپانس 401 برگرداند
         $this->assertEquals(401, $response->getStatusCode());   
     }
 
-    /**
-     * @test
-     */
+    #[Test]
     public function it_rejects_requests_with_invalid_tenant_id()
     {
         $invalidTenantId = (string) \Illuminate\Support\Str::uuid();
@@ -62,13 +57,10 @@ class TenantContextMiddlewareTest extends TestCase
             return new Response('OK', 200);
         });
 
-        // میدل‌ور باید در صورت اشتباه بودن مستأجر، ریسپانس 401 برگرداند
         $this->assertEquals(401, $response->getStatusCode());
     }
 
-    /**
-     * @test
-     */
+    #[Test]
     public function it_sets_tenant_context_and_injects_into_postgresql_session_securely()
     {
         $request = Request::create('/api/accounting/invoices', 'GET');
@@ -93,9 +85,7 @@ class TenantContextMiddlewareTest extends TestCase
         $this->assertEquals('SUCCESS', $response->getContent());
     }
     
-    /**
-     * @test
-     */
+    #[Test]
     public function it_clears_database_session_after_request_terminates()
     {
         $request = Request::create('/api/accounting/invoices', 'GET');
