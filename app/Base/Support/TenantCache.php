@@ -71,4 +71,24 @@ class TenantCache
             return (bool) Cache::forget($cacheKey);
         }
     }
+
+    /**
+     * Flush all cache entries tagged for a tenant (structural RBAC/permission changes).
+     * Falls back to no-op when the cache driver does not support tags.
+     */
+    public static function flushTenant(?string $tenantId = null): void
+    {
+        $tenantId = $tenantId ?? TenantContext::getInstance()->getTenantId();
+
+        if (!$tenantId) {
+            throw new InvalidArgumentException('TenantCache::flushTenant requires a tenant_id (context or explicit).');
+        }
+
+        try {
+            Cache::tags(["tenant:{$tenantId}"])->flush();
+        } catch (\BadMethodCallException $e) {
+            // Drivers without tag support (array/file): cannot selectively flush; callers
+            // that need hard invalidation should use forget() for known keys.
+        }
+    }
 }
