@@ -17,6 +17,7 @@ use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Layer 3 – Organization CRUD + Tenant Isolation + basic Scope checks
@@ -37,7 +38,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
     {
         parent::setUp();
 
-        // --- Tenant A (authorized) ---
         $this->tenantA = Tenant::factory()->create([
             'tenant_code' => 'ORG_CRUD_A',
             'status'      => 1,
@@ -104,7 +104,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ['tenant:' . $this->tenantA->tenant_id]
         )->plainTextToken;
 
-        // --- Tenant B (for isolation tests) ---
         $this->tenantB = Tenant::factory()->create([
             'tenant_code' => 'ORG_CRUD_B',
             'status'      => 1,
@@ -123,7 +122,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ['tenant:' . $this->tenantB->tenant_id]
         )->plainTextToken;
 
-        // Default context = Tenant A
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
         app()->instance('current_tenant_id', $this->tenantA->tenant_id);
         ScopeContext::resetInstance();
@@ -145,14 +143,9 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ];
     }
 
-    // =========================================================================
-    // COMPANY CRUD
-    // =========================================================================
-
-    /** @test */
+    #[Test]
     public function can_create_list_show_update_and_soft_delete_company(): void
     {
-        // CREATE
         $createPayload = [
             'code'                => 'COMP-CRUD-01',
             'name'                => 'CRUD Company',
@@ -172,7 +165,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $companyId = $createResponse->json('data.company_id');
         $this->assertNotEmpty($companyId);
 
-        // INDEX
         $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies');
 
@@ -182,7 +174,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $ids = collect($indexResponse->json('data'))->pluck('company_id')->toArray();
         $this->assertContains($companyId, $ids);
 
-        // SHOW
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies/' . $companyId);
 
@@ -190,7 +181,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->assertJsonPath('data.company_id', $companyId)
             ->assertJsonPath('data.code', 'COMP-CRUD-01');
 
-        // UPDATE
         $updatePayload = [
             'code'                => 'COMP-CRUD-01-UPD',
             'name'                => 'CRUD Company Updated',
@@ -208,7 +198,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->assertJsonPath('data.name', 'CRUD Company Updated')
             ->assertJsonPath('data.is_active', false);
 
-        // SOFT DELETE
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/companies/' . $companyId);
 
@@ -227,7 +216,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $this->assertNotContains($companyId, $idsAfter);
     }
 
-    /** @test */
+    #[Test]
     public function company_code_must_be_unique_within_same_tenant(): void
     {
         $payload = [
@@ -250,7 +239,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $this->assertNotEquals(201, $duplicateResponse->status());
     }
 
-    /** @test */
+    #[Test]
     public function cannot_delete_company_that_has_branches(): void
     {
         $company = Company::create([
@@ -278,11 +267,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ]);
     }
 
-    // =========================================================================
-    // BRANCH CRUD
-    // =========================================================================
-
-    /** @test */
+    #[Test]
     public function can_create_list_show_update_and_soft_delete_branch(): void
     {
         $company = Company::create([
@@ -292,7 +277,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'is_active' => true,
         ]);
 
-        // CREATE
         $createPayload = [
             'code'      => 'BR-CRUD-01',
             'name'      => 'Main Branch',
@@ -310,14 +294,12 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $branchId = $createResponse->json('data.branch_id');
         $this->assertNotEmpty($branchId);
 
-        // SHOW
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/branches/' . $branchId);
 
         $showResponse->assertStatus(200)
             ->assertJsonPath('data.branch_id', $branchId);
 
-        // UPDATE
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->putJson('/api/organization/branches/' . $branchId, [
                 'code'      => 'BR-CRUD-01-UPD',
@@ -330,7 +312,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->assertJsonPath('data.code', 'BR-CRUD-01-UPD')
             ->assertJsonPath('data.name', 'Main Branch Updated');
 
-        // SOFT DELETE
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/branches/' . $branchId);
 
@@ -341,11 +322,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ]);
     }
 
-    // =========================================================================
-    // DEPARTMENT CRUD
-    // =========================================================================
-
-    /** @test */
+    #[Test]
     public function can_create_list_show_update_and_soft_delete_department(): void
     {
         $company = Company::create([
@@ -363,7 +340,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'is_active'  => true,
         ]);
 
-        // CREATE
         $createPayload = [
             'branch_id' => $branch->branch_id,
             'code'      => 'DEP-CRUD-01',
@@ -381,14 +357,12 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $departmentId = $createResponse->json('data.department_id');
         $this->assertNotEmpty($departmentId);
 
-        // SHOW
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/departments/' . $departmentId);
 
         $showResponse->assertStatus(200)
             ->assertJsonPath('data.department_id', $departmentId);
 
-        // UPDATE
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->putJson('/api/organization/departments/' . $departmentId, [
                 'code'      => 'DEP-CRUD-01-UPD',
@@ -399,7 +373,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $updateResponse->assertStatus(200)
             ->assertJsonPath('data.code', 'DEP-CRUD-01-UPD');
 
-        // SOFT DELETE
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/departments/' . $departmentId);
 
@@ -410,11 +383,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ]);
     }
 
-    // =========================================================================
-    // TENANT ISOLATION
-    // =========================================================================
-
-    /** @test */
+    #[Test]
     public function tenant_a_cannot_see_or_modify_companies_of_tenant_b(): void
     {
         $companyB = Company::withoutGlobalScopes()->create([
@@ -454,7 +423,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function tenant_a_cannot_create_company_under_tenant_b_context(): void
     {
         $response = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantB->tenant_id))
