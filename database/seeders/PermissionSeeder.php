@@ -201,47 +201,59 @@ class PermissionSeeder extends Seeder
             ['code' => 'saas-admin.coupon.update', 'name' => 'Update Coupon', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
             ['code' => 'saas-admin.coupon.delete', 'name' => 'Delete Coupon', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (Partner core)
             ['code' => 'partner.partner.view', 'name' => 'View Partners', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.partner.create', 'name' => 'Create Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.partner.update', 'name' => 'Update Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.partner.delete', 'name' => 'Delete Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerUser)
             ['code' => 'partner.partner_user.view', 'name' => 'View Partner Users', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.partner_user.create', 'name' => 'Link User to Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.partner_user.update', 'name' => 'Update Partner User', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.partner_user.delete', 'name' => 'Unlink User from Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerTenantAssignment)
             ['code' => 'partner.assignment.view', 'name' => 'View Partner Tenant Assignments', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.assignment.create', 'name' => 'Create Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.assignment.update', 'name' => 'Update Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.assignment.delete', 'name' => 'Delete Partner Tenant Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerAgreement)
             ['code' => 'partner.agreement.view', 'name' => 'View Partner Agreements', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.agreement.create', 'name' => 'Create Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.agreement.update', 'name' => 'Update Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.agreement.delete', 'name' => 'Delete Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerCommissionRule)
             ['code' => 'partner.commission_rule.view', 'name' => 'View Partner Commission Rules', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.commission_rule.create', 'name' => 'Create Partner Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.commission_rule.update', 'name' => 'Update Partner Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.commission_rule.delete', 'name' => 'Delete Partner Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerCommission)
             ['code' => 'partner.commission.view', 'name' => 'View Partner Commissions', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.commission.create', 'name' => 'Create Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.commission.update', 'name' => 'Update Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.commission.delete', 'name' => 'Delete Partner Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
 
-            // Layer 3 — PartnerLayer (PartnerPayout)
             ['code' => 'partner.payout.view', 'name' => 'View Partner Payouts', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.payout.create', 'name' => 'Create Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.payout.update', 'name' => 'Update Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
             ['code' => 'partner.payout.delete', 'name' => 'Delete Partner Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            // P3-S8 supporting entities
+            ['code' => 'partner.bank_account.view', 'name' => 'View Partner Bank Accounts', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.bank_account.create', 'name' => 'Create Partner Bank Account', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.bank_account.update', 'name' => 'Update Partner Bank Account', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.bank_account.delete', 'name' => 'Delete Partner Bank Account', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            ['code' => 'partner.contact.view', 'name' => 'View Partner Contacts', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.contact.create', 'name' => 'Create Partner Contact', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.contact.update', 'name' => 'Update Partner Contact', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.contact.delete', 'name' => 'Delete Partner Contact', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            ['code' => 'partner.document.view', 'name' => 'View Partner Documents', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.document.create', 'name' => 'Create Partner Document', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.document.update', 'name' => 'Update Partner Document', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.document.delete', 'name' => 'Delete Partner Document', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+
+            ['code' => 'partner.activity_log.view', 'name' => 'View Partner Activity Logs', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.activity_log.create', 'name' => 'Create Partner Activity Log', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
         ];
     }
 }
