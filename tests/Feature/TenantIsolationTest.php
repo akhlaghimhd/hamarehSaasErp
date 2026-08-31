@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class TenantIsolationTest extends TestCase
 {
@@ -79,8 +80,8 @@ class TenantIsolationTest extends TestCase
         ]);
     }
 
-    /** @test */
-    public function database_queries_are_automatically_isolated_by_tenant_scope()
+    #[Test]
+    public function database_queries_are_automatically_isolated_by_tenant_scope(): void
     {
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
 
@@ -90,8 +91,8 @@ class TenantIsolationTest extends TestCase
         $this->assertEquals('ROLE_A', $roles->first()->code);
     }
 
-    /** @test */
-    public function user_cannot_access_other_tenants_record_by_direct_id()
+    #[Test]
+    public function user_cannot_access_other_tenants_record_by_direct_id(): void
     {
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
 
@@ -100,8 +101,8 @@ class TenantIsolationTest extends TestCase
         $this->assertNull(TenantRole::find($roleB->tenant_role_id));
     }
 
-    /** @test */
-    public function api_endpoints_block_cross_tenant_access_and_prevent_data_leakage()
+    #[Test]
+    public function api_endpoints_block_cross_tenant_access_and_prevent_data_leakage(): void
     {
         $token = $this->globalUserA->createToken(
             'test-token-' . $this->tenantA->tenant_id,
