@@ -10,6 +10,7 @@ use App\Modules\IdentityCore\Models\UserCredential;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class AuthLoginTest extends TestCase
 {
@@ -52,8 +53,8 @@ class AuthLoginTest extends TestCase
         ]);
     }
 
-    /** @test */
-    public function user_can_login_with_valid_credentials()
+    #[Test]
+    public function user_can_login_with_valid_credentials(): void
     {
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
@@ -79,8 +80,8 @@ class AuthLoginTest extends TestCase
             ]);
     }
 
-    /** @test */
-    public function user_cannot_login_with_invalid_password()
+    #[Test]
+    public function user_cannot_login_with_invalid_password(): void
     {
         $response = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
@@ -95,8 +96,8 @@ class AuthLoginTest extends TestCase
             ->assertJsonFragment(['status' => 'error']);
     }
 
-    /** @test */
-    public function suspended_tenant_users_cannot_login()
+    #[Test]
+    public function suspended_tenant_users_cannot_login(): void
     {
         $this->tenantUser->update(['status' => 2]); // 2: Suspended
 
@@ -115,8 +116,8 @@ class AuthLoginTest extends TestCase
             ]);
     }
 
-    /** @test */
-    public function user_cannot_login_to_unassociated_tenant()
+    #[Test]
+    public function user_cannot_login_to_unassociated_tenant(): void
     {
         $otherTenant = Tenant::factory()->create(['tenant_code' => 'OTHER_ORG']);
 

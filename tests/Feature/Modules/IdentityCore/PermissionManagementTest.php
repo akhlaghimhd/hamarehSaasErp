@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class PermissionManagementTest extends TestCase
 {
@@ -47,7 +48,6 @@ class PermissionManagementTest extends TestCase
             'status'    => 1,
         ]);
 
-        // ایجاد permission لازم برای ساخت Permission
         $createPerm = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenant->tenant_id,
@@ -58,7 +58,6 @@ class PermissionManagementTest extends TestCase
             'status'               => 1,
         ]);
 
-        // ایجاد permission لازم برای مشاهده
         $viewPerm = TenantPermission::create([
             'tenant_permission_id' => (string) Str::uuid(),
             'tenant_id'            => $this->tenant->tenant_id,
@@ -95,13 +94,12 @@ class PermissionManagementTest extends TestCase
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
-        // تنظیم TenantContext برای لایه Application
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
 
-    /** @test */
-    public function authorized_user_can_create_permission()
+    #[Test]
+    public function authorized_user_can_create_permission(): void
     {
         $payload = [
             'code'        => 'identity.test.action',
@@ -138,10 +136,9 @@ class PermissionManagementTest extends TestCase
         ]);
     }
 
-    /** @test */
-    public function unauthorized_user_cannot_create_permission()
+    #[Test]
+    public function unauthorized_user_cannot_create_permission(): void
     {
-        // کاربر بدون هیچ role/permission
         $otherUser = User::factory()->create(['status' => 1]);
 
         TenantUser::factory()->create([
@@ -169,8 +166,8 @@ class PermissionManagementTest extends TestCase
             ->assertJsonPath('status', 'error');
     }
 
-    /** @test */
-    public function create_permission_validates_code_format()
+    #[Test]
+    public function create_permission_validates_code_format(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->token,
@@ -185,10 +182,9 @@ class PermissionManagementTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
-    public function create_permission_rejects_duplicate_code_in_same_tenant()
+    #[Test]
+    public function create_permission_rejects_duplicate_code_in_same_tenant(): void
     {
-        // اول یک بار بساز
         $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
@@ -199,7 +195,6 @@ class PermissionManagementTest extends TestCase
             'module_name' => 'Identity',
         ])->assertStatus(201);
 
-        // بار دوم باید 422 بدهد
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
@@ -213,8 +208,8 @@ class PermissionManagementTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
-    public function authorized_user_can_list_permissions()
+    #[Test]
+    public function authorized_user_can_list_permissions(): void
     {
         $response = $this->withHeaders([
             'Authorization' => 'Bearer ' . $this->token,
