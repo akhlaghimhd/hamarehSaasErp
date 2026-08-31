@@ -5,6 +5,7 @@ use App\Modules\MasterData\Controllers\BusinessPartnerController;
 use App\Modules\MasterData\Controllers\ItemController;
 use App\Modules\MasterData\Controllers\CostCenterController;
 use App\Modules\MasterData\Controllers\WarehouseController;
+use App\Modules\MasterData\Controllers\CurrencyController;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,4 +63,17 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.warehouse.update');
     Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])
         ->middleware('permission:master-data.warehouse.delete');
+
+
+    // Currencies (Platform Master Data — no tenant_id)
+    Route::get('currencies', [CurrencyController::class, 'index'])
+        ->middleware('permission:master-data.currency.view');
+    Route::post('currencies', [CurrencyController::class, 'store'])
+        ->middleware('permission:master-data.currency.create');
+    Route::get('currencies/{id}', [CurrencyController::class, 'show'])
+        ->middleware('permission:master-data.currency.view');
+    Route::put('currencies/{id}', [CurrencyController::class, 'update'])
+        ->middleware('permission:master-data.currency.update');
+    Route::delete('currencies/{id}', [CurrencyController::class, 'destroy'])
+        ->middleware('permission:master-data.currency.delete');
 });
