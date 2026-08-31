@@ -7,6 +7,7 @@ use App\Base\Context\ScopeContext;
 use App\Base\Services\ScopeAccessGuard;
 use RuntimeException;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class ScopeAccessGuardTest extends TestCase
 {
@@ -16,7 +17,7 @@ class ScopeAccessGuardTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function gradual_allows_when_user_has_no_scopes_of_type(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -29,7 +30,7 @@ class ScopeAccessGuardTest extends TestCase
         $guard->assertAccess('BRANCH', (string) Str::uuid());
     }
 
-    /** @test */
+    #[Test]
     public function gradual_denies_when_reference_not_in_user_scopes(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -54,7 +55,7 @@ class ScopeAccessGuardTest extends TestCase
         $guard->assertAccess('BRANCH', $denied);
     }
 
-    /** @test */
+    #[Test]
     public function gradual_denies_when_scope_type_exists_but_reference_ids_empty(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -72,7 +73,7 @@ class ScopeAccessGuardTest extends TestCase
         $this->assertFalse($guard->canAccess('BRANCH', (string) Str::uuid()));
     }
 
-    /** @test */
+    #[Test]
     public function strict_denies_when_user_has_no_scopes_of_strict_type(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -87,7 +88,7 @@ class ScopeAccessGuardTest extends TestCase
         $guard->assertAccess('WAREHOUSE', (string) Str::uuid());
     }
 
-    /** @test */
+    #[Test]
     public function strict_allows_listed_reference_when_scopes_present(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -108,7 +109,7 @@ class ScopeAccessGuardTest extends TestCase
         $guard->assertAccess('COMPANY', $allowed);
     }
 
-    /** @test */
+    #[Test]
     public function cost_center_type_is_not_in_default_strict_list(): void
     {
         config([
@@ -120,7 +121,6 @@ class ScopeAccessGuardTest extends TestCase
 
         $guard = new ScopeAccessGuard();
 
-        // COST_CENTER not in strict list → gradual-like allow when no scopes of type
         $this->assertTrue($guard->canAccess('COST_CENTER', (string) Str::uuid()));
     }
 }

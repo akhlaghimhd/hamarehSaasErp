@@ -8,6 +8,7 @@ use App\Base\Support\TenantCache;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\Test;
 
 class TenantCacheTest extends TestCase
 {
@@ -18,7 +19,7 @@ class TenantCacheTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function key_follows_standard_pattern(): void
     {
         $tenantId = (string) Str::uuid();
@@ -31,7 +32,7 @@ class TenantCacheTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function key_uses_tenant_context_when_id_omitted(): void
     {
         $tenantId = (string) Str::uuid();
@@ -42,7 +43,7 @@ class TenantCacheTest extends TestCase
         $this->assertSame("tenant:{$tenantId}:organization:branches", $key);
     }
 
-    /** @test */
+    #[Test]
     public function key_requires_tenant_id(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -50,7 +51,7 @@ class TenantCacheTest extends TestCase
         TenantCache::key('identity', 'x');
     }
 
-    /** @test */
+    #[Test]
     public function remember_isolates_values_per_tenant(): void
     {
         $tenantA = (string) Str::uuid();
@@ -63,7 +64,7 @@ class TenantCacheTest extends TestCase
         $this->assertSame(['B'], TenantCache::get('identity', 'roles', null, $tenantB));
     }
 
-    /** @test */
+    #[Test]
     public function forget_removes_only_target_tenant_key(): void
     {
         $tenantA = (string) Str::uuid();
