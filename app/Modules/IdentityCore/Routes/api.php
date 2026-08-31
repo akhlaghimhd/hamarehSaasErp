@@ -7,6 +7,7 @@ use App\Modules\IdentityCore\Controllers\UserController;
 use App\Modules\IdentityCore\Controllers\AuthController;
 use App\Modules\IdentityCore\Controllers\ScopeController;
 use App\Modules\IdentityCore\Controllers\ProfileController;
+use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -42,6 +43,14 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.profile.update');
             Route::delete('/{userId}', [ProfileController::class, 'destroy'])
                 ->middleware('permission:identity.profile.delete');
+        });
+
+        // Membership history (read-only audit)
+        Route::prefix('membership-histories')->group(function () {
+            Route::get('/', [MembershipHistoryController::class, 'index'])
+                ->middleware('permission:identity.membership_history.view');
+            Route::get('/user/{tenantUserId}', [MembershipHistoryController::class, 'byTenantUser'])
+                ->middleware('permission:identity.membership_history.view');
         });
 
         Route::prefix('permissions')->group(function () {

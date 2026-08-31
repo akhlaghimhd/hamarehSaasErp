@@ -17,7 +17,8 @@ use Exception;
 class UserService
 {
     public function __construct(
-        private readonly RoleService $roleService
+        private readonly RoleService $roleService,
+        private readonly MembershipHistoryService $membershipHistoryService
     ) {}
 
     /**
@@ -95,6 +96,15 @@ class UserService
                 'status'     => 1,
             ]);
 
+            // Initial membership history (join)
+            $this->membershipHistoryService->recordChange(
+                $tenantUser->tenant_user_id,
+                null,
+                1,
+                'JOIN',
+                'Tenant membership created'
+            );
+
             $this->logEventOutbox(
                 $tenantId,
                 'tenant_users',
@@ -136,6 +146,8 @@ class UserService
                 ->with(['user'])
                 ->firstOrFail();
 
+            $previousStatus = $tenantUser->status;
+
             $membershipChanges = array_filter([
                 'is_owner' => $dto->isOwner,
                 'status'   => $dto->status,
@@ -146,6 +158,19 @@ class UserService
                     $membershipChanges['row_version'] = ((int) ($tenantUser->row_version ?? 1)) + 1;
                 }
                 $tenantUser->update($membershipChanges);
+            }
+
+            // Record status transition when status actually changes
+            if (array_key_exists('status', $membershipChanges)
+                && (int) $membershipChanges['status'] !== (int) $previousStatus
+            ) {
+                $this->membershipHistoryService->recordChange(
+                    $tenantUser->tenant_user_id,
+                    (int) $previousStatus,
+                    (int) $membershipChanges['status'],
+                    'STATUS_CHANGE',
+                    'Membership status updated via API'
+                );
             }
 
             $userChanges = array_filter([
@@ -187,7 +212,17 @@ class UserService
                 ->where('tenant_user_id', $tenantUserId)
                 ->firstOrFail();
 
+            $previousStatus = $tenantUser->status;
+
             $tenantUser->delete();
+
+            $this->membershipHistoryService->recordChange(
+                $tenantUserId,
+                (int) $previousStatus,
+                0,
+                'SOFT_DELETE',
+                'Tenant membership soft-deleted'
+            );
 
             $this->logEventOutbox(
                 $tenantId,
