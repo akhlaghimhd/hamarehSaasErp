@@ -16,6 +16,7 @@ use App\Modules\IdentityCore\Models\TenantUserScope;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Verifies that login returns full security_context per Architecture Law 4.4:
@@ -62,7 +63,6 @@ class SecurityContextLoginTest extends TestCase
             'is_owner'  => false,
         ]);
 
-        // Role + Permission
         $role = TenantRole::factory()->create([
             'tenant_id' => $this->tenant->tenant_id,
             'code'      => 'sec-role',
@@ -93,7 +93,6 @@ class SecurityContextLoginTest extends TestCase
             'tenant_role_id'      => $role->tenant_role_id,
         ]);
 
-        // Scope (BRANCH)
         $scope = TenantScope::create([
             'scope_id'     => (string) Str::uuid(),
             'tenant_id'    => $this->tenant->tenant_id,
@@ -111,7 +110,7 @@ class SecurityContextLoginTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function login_returns_full_security_context_per_law_4_4(): void
     {
         $response = $this->withHeaders([
@@ -150,7 +149,7 @@ class SecurityContextLoginTest extends TestCase
         $this->assertEquals('BRANCH', $context['scopes'][0]['scope_type']);
     }
 
-    /** @test */
+    #[Test]
     public function login_without_tenant_still_returns_user_but_empty_tenant_context(): void
     {
         $response = $this->withHeaders([
@@ -159,7 +158,6 @@ class SecurityContextLoginTest extends TestCase
         ])->postJson('/api/identity-core/identity/auth/login', [
             'email'    => $this->userEmail,
             'password' => $this->plainPassword,
-            // no tenant_id
         ]);
 
         $response->assertStatus(200)

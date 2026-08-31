@@ -14,6 +14,7 @@ use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Verifies ScopeScoped trait enforces Resource-level filtering (Law 4.2 / 4.3).
@@ -34,7 +35,6 @@ class ScopeIsolationTest extends TestCase
     {
         parent::setUp();
 
-        // Production interim default: Policy B (gradual)
         config(['scope.enforcement_mode' => 'gradual']);
 
         $this->tenant = Tenant::factory()->create([
@@ -111,7 +111,7 @@ class ScopeIsolationTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function branch_query_is_filtered_by_user_branch_scopes(): void
     {
         $results = Branch::query()->get();
@@ -123,7 +123,7 @@ class ScopeIsolationTest extends TestCase
         $this->assertCount(1, $results);
     }
 
-    /** @test */
+    #[Test]
     public function without_scope_isolation_returns_all_tenant_branches(): void
     {
         $results = Branch::withoutScopeIsolation()->get();
@@ -137,9 +137,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Policy B (gradual): no scopes of BRANCH type → no extra filter.
-     *
-     * @test
      */
+    #[Test]
     public function gradual_mode_when_user_has_no_branch_scopes_no_extra_filter_is_applied(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -154,9 +153,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Policy B: user has only WAREHOUSE scopes → BRANCH type is null → no BRANCH filter.
-     *
-     * @test
      */
+    #[Test]
     public function gradual_mode_other_scope_type_without_branch_does_not_filter_branches(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -178,9 +176,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Scopes of BRANCH type exist but reference_id list is empty → zero rows (both policies).
-     *
-     * @test
      */
+    #[Test]
     public function empty_reference_ids_yield_zero_rows(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -202,9 +199,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Policy A (strict): no BRANCH scopes → zero rows.
-     *
-     * @test
      */
+    #[Test]
     public function strict_mode_when_user_has_no_branch_scopes_returns_zero_rows(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -219,9 +215,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Policy A: other scope type without BRANCH still denies branches (fail-closed).
-     *
-     * @test
      */
+    #[Test]
     public function strict_mode_other_scope_type_without_branch_returns_zero_rows(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -243,9 +238,8 @@ class ScopeIsolationTest extends TestCase
 
     /**
      * Policy A with valid BRANCH scopes still filters to allowed reference only.
-     *
-     * @test
      */
+    #[Test]
     public function strict_mode_still_filters_to_allowed_reference_when_scopes_present(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
@@ -259,7 +253,7 @@ class ScopeIsolationTest extends TestCase
         $this->assertCount(1, $results);
     }
 
-    /** @test */
+    #[Test]
     public function current_user_has_access_to_helper_works_in_gradual_mode(): void
     {
         config(['scope.enforcement_mode' => 'gradual']);
@@ -268,7 +262,7 @@ class ScopeIsolationTest extends TestCase
         $this->assertFalse(Branch::currentUserHasAccessTo($this->branchDenied->branch_id));
     }
 
-    /** @test */
+    #[Test]
     public function current_user_has_access_to_helper_denies_all_when_strict_and_no_scopes(): void
     {
         config(['scope.enforcement_mode' => 'strict']);

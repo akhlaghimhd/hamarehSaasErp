@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * F5: Login / Logout emit versioned events to event_outbox.
@@ -55,7 +56,7 @@ class AuthOutboxEventsTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function successful_login_writes_logged_in_outbox_event(): void
     {
         $response = $this->withHeaders([
@@ -86,7 +87,7 @@ class AuthOutboxEventsTest extends TestCase
         $this->assertArrayNotHasKey('access_token', $payload);
     }
 
-    /** @test */
+    #[Test]
     public function logout_writes_logged_out_outbox_event_and_invalidates_token(): void
     {
         $login = $this->withHeaders([
@@ -134,8 +135,6 @@ class AuthOutboxEventsTest extends TestCase
             'All personal access tokens for the user must be revoked after logout'
         );
 
-        // PHPUnit reuses the same app instance; clear resolved guards so the next
-        // request must re-authenticate from the (now deleted) bearer token only.
         $this->app['auth']->forgetGuards();
 
         $reuse = $this->withHeaders([
