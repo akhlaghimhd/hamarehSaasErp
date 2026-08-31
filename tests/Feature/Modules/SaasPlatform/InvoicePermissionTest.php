@@ -14,6 +14,7 @@ use App\Modules\SaasPlatform\Services\InvoiceService;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class InvoicePermissionTest extends TestCase
 {
@@ -92,7 +93,7 @@ class InvoicePermissionTest extends TestCase
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_can_create_invoice(): void
     {
         $response = $this->withHeaders([
@@ -111,7 +112,7 @@ class InvoicePermissionTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_invoice(): void
     {
         $response = $this->withHeaders([
@@ -128,7 +129,7 @@ class InvoicePermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
