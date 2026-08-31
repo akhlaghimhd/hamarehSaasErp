@@ -6,6 +6,7 @@ use App\Modules\PartnerLayer\Controllers\PartnerUserController;
 use App\Modules\PartnerLayer\Controllers\PartnerTenantAssignmentController;
 use App\Modules\PartnerLayer\Controllers\PartnerAgreementController;
 use App\Modules\PartnerLayer\Controllers\PartnerCommissionRuleController;
+use App\Modules\PartnerLayer\Controllers\PartnerCommissionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -125,5 +126,26 @@ Route::middleware([
     Route::delete('/partner-commission-rules/{commissionRule}', [PartnerCommissionRuleController::class, 'destroy'])
         ->middleware('permission:partner.commission_rule.delete')
         ->name('partner-layer.commission-rules.delete');
+
+    // PartnerCommission
+    Route::get('/partner-commissions', [PartnerCommissionController::class, 'index'])
+        ->middleware('permission:partner.commission.view')
+        ->name('partner-layer.commissions.index');
+
+    Route::post('/partner-commissions', [PartnerCommissionController::class, 'store'])
+        ->middleware('permission:partner.commission.create')
+        ->name('partner-layer.commissions.store');
+
+    Route::get('/partner-commissions/{commission}', [PartnerCommissionController::class, 'show'])
+        ->middleware('permission:partner.commission.view')
+        ->name('partner-layer.commissions.show');
+
+    Route::put('/partner-commissions/{commission}', [PartnerCommissionController::class, 'update'])
+        ->middleware('permission:partner.commission.update')
+        ->name('partner-layer.commissions.update');
+
+    Route::delete('/partner-commissions/{commission}', [PartnerCommissionController::class, 'destroy'])
+        ->middleware('permission:partner.commission.delete')
+        ->name('partner-layer.commissions.delete');
 
 });
