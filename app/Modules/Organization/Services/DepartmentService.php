@@ -56,6 +56,7 @@ class DepartmentService
             'name'                 => $dto->name,
             'manager_user_id'      => $dto->managerUserId,
             'is_active'            => $dto->isActive,
+            'row_version'          => 1,
         ]);
     }
 
@@ -133,9 +134,10 @@ class DepartmentService
             'name'                 => $dto->name,
             'manager_user_id'      => $dto->managerUserId,
             'is_active'            => $dto->isActive,
+            'row_version'          => ((int) ($department->row_version ?? 1)) + 1,
         ]);
 
-        return $department;
+        return $department->fresh();
     }
 
     public function deleteDepartment(string $departmentId): void

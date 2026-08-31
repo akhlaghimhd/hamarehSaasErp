@@ -39,12 +39,13 @@ class BranchService
         }
 
         return Branch::create([
-            'tenant_id'  => $tenantId,
-            'company_id' => $dto->companyId,
-            'code'       => $dto->code,
-            'name'       => $dto->name,
-            'address'    => $dto->address,
-            'is_active'  => $dto->isActive,
+            'tenant_id'   => $tenantId,
+            'company_id'  => $dto->companyId,
+            'code'        => $dto->code,
+            'name'        => $dto->name,
+            'address'     => $dto->address,
+            'is_active'   => $dto->isActive,
+            'row_version' => 1,
         ]);
     }
 
@@ -117,14 +118,15 @@ class BranchService
         }
 
         $branch->update([
-            'company_id' => $targetCompanyId,
-            'code'       => $dto->code,
-            'name'       => $dto->name,
-            'address'    => $dto->address,
-            'is_active'  => $dto->isActive,
+            'company_id'  => $targetCompanyId,
+            'code'        => $dto->code,
+            'name'        => $dto->name,
+            'address'     => $dto->address,
+            'is_active'   => $dto->isActive,
+            'row_version' => ((int) ($branch->row_version ?? 1)) + 1,
         ]);
 
-        return $branch;
+        return $branch->fresh();
     }
 
     public function deleteBranch(string $branchId): void
