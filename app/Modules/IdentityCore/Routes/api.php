@@ -6,6 +6,7 @@ use App\Modules\IdentityCore\Controllers\PermissionController;
 use App\Modules\IdentityCore\Controllers\UserController;
 use App\Modules\IdentityCore\Controllers\AuthController;
 use App\Modules\IdentityCore\Controllers\ScopeController;
+use App\Modules\IdentityCore\Controllers\ProfileController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -29,6 +30,19 @@ Route::prefix('identity')->group(function () {
             ->middleware('permission:identity.user.update');
         Route::delete('/users/{id}', [UserController::class, 'destroy'])
             ->middleware('permission:identity.user.delete');
+
+        // Profiles — /me before /{userId}; self-service does not require profile permission
+        Route::prefix('profiles')->group(function () {
+            Route::get('/me', [ProfileController::class, 'me']);
+            Route::put('/me', [ProfileController::class, 'upsertMe']);
+
+            Route::get('/{userId}', [ProfileController::class, 'show'])
+                ->middleware('permission:identity.profile.view');
+            Route::put('/{userId}', [ProfileController::class, 'upsert'])
+                ->middleware('permission:identity.profile.update');
+            Route::delete('/{userId}', [ProfileController::class, 'destroy'])
+                ->middleware('permission:identity.profile.delete');
+        });
 
         Route::prefix('permissions')->group(function () {
             Route::get('/', [PermissionController::class, 'index'])
