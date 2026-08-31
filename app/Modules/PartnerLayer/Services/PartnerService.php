@@ -6,6 +6,7 @@ use App\Modules\PartnerLayer\Models\Partner;
 use App\Modules\PartnerLayer\DTOs\CreatePartnerDTO;
 use App\Modules\PartnerLayer\DTOs\UpdatePartnerDTO;
 use App\Base\Context\TenantContext;
+use App\Base\Support\TenantCache;
 use Exception;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,20 +15,35 @@ use Illuminate\Support\Str;
 /**
  * P3-S1 — Core Partner CRUD within PartnerLayer.
  * P3-X1 — Versioned outbox events on create/delete.
+ * P3-X2 — TenantCache for partner list (prefix tenant:{id}:partnerlayer:...).
  */
 class PartnerService
 {
+    private const CACHE_MODULE = 'partnerlayer';
+    private const CACHE_LIST_KEY = 'partners:list';
+    private const CACHE_TTL_SECONDS = 60;
+
     public function getAllPartners(): Collection
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        $query = Partner::query()->orderBy('created_at', 'desc');
-
-        if ($tenantId) {
-            $query->where('tenant_id', $tenantId);
+        if (!$tenantId) {
+            return Partner::query()->orderBy('created_at', 'desc')->get();
         }
 
-        return $query->get();
+        return collect(TenantCache::remember(
+            self::CACHE_MODULE,
+            self::CACHE_LIST_KEY,
+            self::CACHE_TTL_SECONDS,
+            function () use ($tenantId) {
+                return Partner::query()
+                    ->where('tenant_id', $tenantId)
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->all();
+            },
+            $tenantId
+        ));
     }
 
     public function getPartnerById(string $partnerId): Partner
@@ -86,6 +102,8 @@ class PartnerService
                         'status'       => $partner->status,
                     ]
                 );
+
+                $this->forgetPartnerListCache($tenantId);
             }
 
             return $partner;
@@ -124,6 +142,10 @@ class PartnerService
             'status'             => $dto->status,
         ]);
 
+        if ($tenantId) {
+            $this->forgetPartnerListCache($tenantId);
+        }
+
         return $partner->fresh();
     }
 
@@ -156,13 +178,17 @@ class PartnerService
                         'code'       => $partner->code,
                     ]
                 );
+
+                $this->forgetPartnerListCache($tenantId);
             }
         });
     }
 
-    /**
-     * Integration event → shared event_outbox (law 6.4 versioned event types).
-     */
+    private function forgetPartnerListCache(string $tenantId): void
+    {
+        TenantCache::forget(self::CACHE_MODULE, self::CACHE_LIST_KEY, $tenantId);
+    }
+
     private function logEventOutbox(
         string $tenantId,
         string $aggregateType,
