@@ -458,6 +458,9 @@ class OrganizationCrudAndIsolationTest extends TestCase
     #[Test]
     public function branch_and_department_update_increments_row_version(): void
     {
+        // Nested routes match Routes/api.php:
+        // POST /companies/{company}/branches
+        // POST /companies/{company}/departments
         $companyResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->postJson('/api/organization/companies', [
                 'code'      => 'COMP-RV-01',
@@ -468,11 +471,10 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $companyId = $companyResponse->json('data.company_id');
 
         $branchResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->postJson('/api/organization/branches', [
-                'company_id' => $companyId,
-                'code'       => 'BR-RV-01',
-                'name'       => 'Row Version Branch',
-                'is_active'  => true,
+            ->postJson('/api/organization/companies/' . $companyId . '/branches', [
+                'code'      => 'BR-RV-01',
+                'name'      => 'Row Version Branch',
+                'is_active' => true,
             ]);
         $branchResponse->assertStatus(201);
         $branchId = $branchResponse->json('data.branch_id');
@@ -496,7 +498,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
         ]);
 
         $deptResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->postJson('/api/organization/departments', [
+            ->postJson('/api/organization/companies/' . $companyId . '/departments', [
                 'branch_id' => $branchId,
                 'code'      => 'DEP-RV-01',
                 'name'      => 'Row Version Department',
