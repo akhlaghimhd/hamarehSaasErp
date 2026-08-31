@@ -10,18 +10,15 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
 
-    // 1. Public routes (Tenant Context only)
     Route::middleware([TenantContextMiddleware::class])->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
         Route::post('/auth/login', [AuthController::class, 'login']);
     });
 
-    // 2. Protected routes (Tenant Context + auth + scopes + permission)
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
 
         Route::post('/auth/logout', [AuthController::class, 'logout']);
 
-        // Users (tenant membership management)
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
         Route::post('/users', [UserController::class, 'store'])
@@ -33,13 +30,11 @@ Route::prefix('identity')->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy'])
             ->middleware('permission:identity.user.delete');
 
-        // Permissions
         Route::get('/permissions', [PermissionController::class, 'index'])
             ->middleware('permission:identity.permission.view');
         Route::post('/permissions', [PermissionController::class, 'store'])
             ->middleware('permission:identity.permission.create');
 
-        // Roles
         Route::prefix('roles')->group(function () {
             Route::get('/', [RoleController::class, 'index'])
                 ->middleware('permission:identity.role.view');
@@ -49,9 +44,15 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.assign');
             Route::post('/assign-permissions', [RoleController::class, 'assignPermissions'])
                 ->middleware('permission:identity.role.assign-permissions');
+
+            Route::get('/{id}', [RoleController::class, 'show'])
+                ->middleware('permission:identity.role.view');
+            Route::put('/{id}', [RoleController::class, 'update'])
+                ->middleware('permission:identity.role.update');
+            Route::delete('/{id}', [RoleController::class, 'destroy'])
+                ->middleware('permission:identity.role.delete');
         });
 
-        // Scopes — specific paths BEFORE /{id}
         Route::prefix('scopes')->group(function () {
             Route::get('/', [ScopeController::class, 'index'])
                 ->middleware('permission:identity.scope.view');

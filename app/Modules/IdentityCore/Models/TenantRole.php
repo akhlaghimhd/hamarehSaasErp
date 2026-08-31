@@ -5,25 +5,37 @@ namespace App\Modules\IdentityCore\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 
 class TenantRole extends Model
 {
-    use HasUuids, HasFactory, TenantScoped; // ✅ HasFactory اضافه شد
+    use HasUuids, HasFactory, TenantScoped, SoftDeletes;
 
     protected $table = 'tenant_roles';
-    protected $primaryKey = 'tenant_role_id'; 
-    
+    protected $primaryKey = 'tenant_role_id';
+
     public $incrementing = false;
     protected $keyType = 'string';
 
     protected $fillable = [
-        'tenant_id', 'code', 'name', 'description', 'status', 'created_by', 'updated_by'
+        'tenant_id',
+        'code',
+        'name',
+        'description',
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected function casts(): array
     {
-        return ['status' => 'integer'];
+        return [
+            'status'      => 'integer',
+            'row_version' => 'integer',
+        ];
     }
 
     public function permissions()
@@ -41,7 +53,6 @@ class TenantRole extends Model
         return $this->hasMany(TenantUserRole::class, 'tenant_role_id', 'tenant_role_id');
     }
 
-    // ✅ این متد برای معرفی دقیق مسیر فکتوری به لاراول الزامی است
     protected static function newFactory()
     {
         return \Database\Factories\TenantRoleFactory::new();

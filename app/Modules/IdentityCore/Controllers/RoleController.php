@@ -4,9 +4,11 @@ namespace App\Modules\IdentityCore\Controllers;
 
 use App\Base\Controller;
 use App\Modules\IdentityCore\Requests\CreateRoleRequest;
+use App\Modules\IdentityCore\Requests\UpdateRoleRequest;
 use App\Modules\IdentityCore\Requests\AssignRoleRequest;
 use App\Modules\IdentityCore\Requests\AssignPermissionsRequest;
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
+use App\Modules\IdentityCore\DTOs\UpdateRoleDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Services\RoleService;
@@ -18,17 +20,25 @@ class RoleController extends Controller
         private readonly RoleService $roleService
     ) {}
 
-    /**
-     * لیست نقش‌های مستأجر جاری (با فیلتر خودکار TenantScoped)
-     */
     public function index(): JsonResponse
     {
         $roles = $this->roleService->listRoles();
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'لیست نقش‌ها با موفقیت دریافت شد.',
+            'message' => 'Roles retrieved successfully.',
             'data'    => $roles,
+        ], 200);
+    }
+
+    public function show(string $id): JsonResponse
+    {
+        $role = $this->roleService->getRole($id);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Role retrieved successfully.',
+            'data'    => $role,
         ], 200);
     }
 
@@ -39,9 +49,31 @@ class RoleController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'نقش با موفقیت ایجاد شد.',
+            'message' => 'Role created successfully.',
             'data'    => $role,
         ], 201);
+    }
+
+    public function update(UpdateRoleRequest $request, string $id): JsonResponse
+    {
+        $dto = UpdateRoleDTO::fromRequest($id, $request->validated());
+        $role = $this->roleService->updateRole($dto);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Role updated successfully.',
+            'data'    => $role,
+        ], 200);
+    }
+
+    public function destroy(string $id): JsonResponse
+    {
+        $this->roleService->softDeleteRole($id);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Role soft-deleted successfully.',
+        ], 200);
     }
 
     public function assign(AssignRoleRequest $request): JsonResponse
@@ -51,7 +83,7 @@ class RoleController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'نقش‌های مورد نظر با موفقیت به کاربر تخصیص داده شدند.',
+            'message' => 'Role assigned to user successfully.',
         ], 200);
     }
 
@@ -62,7 +94,7 @@ class RoleController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'مجوزها با موفقیت به نقش تخصیص داده شدند.',
+            'message' => 'Permissions assigned to role successfully.',
         ], 200);
     }
 }

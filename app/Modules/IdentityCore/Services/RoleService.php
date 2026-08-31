@@ -4,6 +4,7 @@ namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
 use App\Modules\IdentityCore\DTOs\CreatePermissionDTO;
+use App\Modules\IdentityCore\DTOs\UpdateRoleDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -18,9 +19,6 @@ use Exception;
 
 class RoleService
 {
-    /**
-     * لیست نقش‌های مستأجر جاری
-     */
     public function listRoles(): Collection
     {
         $this->getTenantId();
@@ -30,9 +28,16 @@ class RoleService
             ->get();
     }
 
-    /**
-     * لیست مجوزهای مستأجر جاری
-     */
+    public function getRole(string $tenantRoleId): TenantRole
+    {
+        $tenantId = $this->getTenantId();
+
+        return TenantRole::query()
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_role_id', $tenantRoleId)
+            ->firstOrFail();
+    }
+
     public function listPermissions(): Collection
     {
         $this->getTenantId();
@@ -44,9 +49,6 @@ class RoleService
             ->get();
     }
 
-    /**
-     * ایجاد مجوز جدید برای مستأجر جاری
-     */
     public function createPermission(CreatePermissionDTO $dto): TenantPermission
     {
         $tenantId = $this->getTenantId();
@@ -66,7 +68,7 @@ class RoleService
                 $tenantId,
                 'tenant_permissions',
                 $permission->tenant_permission_id,
-                'identity.permission.created',
+                'identity.permission.created.v1',
                 [
                     'permission_id' => $permission->tenant_permission_id,
                     'code'          => $permission->code,
@@ -91,10 +93,16 @@ class RoleService
                 'status'      => 1,
             ]);
 
-            $this->logEventOutbox($tenantId, 'tenant_roles', $role->tenant_role_id, 'identity.role.created', [
-                'role_id' => $role->tenant_role_id,
-                'code'    => $role->code,
-            ]);
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_roles',
+                $role->tenant_role_id,
+                'identity.role.created.v1',
+                [
+                    'role_id' => $role->tenant_role_id,
+                    'code'    => $role->code,
+                ]
+            );
 
             if (!empty($dto->permissionIds)) {
                 $permissionsDto = new AssignPermissionsToRoleDTO($role->tenant_role_id, $dto->permissionIds);
@@ -102,6 +110,68 @@ class RoleService
             }
 
             return $role;
+        });
+    }
+
+    public function updateRole(UpdateRoleDTO $dto): TenantRole
+    {
+        $tenantId = $this->getTenantId();
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $role = TenantRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_role_id', $dto->tenantRoleId)
+                ->firstOrFail();
+
+            $changes = array_filter([
+                'name'        => $dto->name,
+                'description' => $dto->description,
+                'status'      => $dto->status,
+            ], fn ($value) => !is_null($value));
+
+            if (!empty($changes)) {
+                $changes['row_version'] = ((int) ($role->row_version ?? 1)) + 1;
+                $role->update($changes);
+            }
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_roles',
+                $role->tenant_role_id,
+                'identity.role.updated.v1',
+                [
+                    'role_id' => $role->tenant_role_id,
+                    'changes' => $changes,
+                ]
+            );
+
+            Cache::tags(["tenant:{$tenantId}"])->flush();
+
+            return $role->fresh();
+        });
+    }
+
+    public function softDeleteRole(string $tenantRoleId): void
+    {
+        $tenantId = $this->getTenantId();
+
+        DB::transaction(function () use ($tenantRoleId, $tenantId) {
+            $role = TenantRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_role_id', $tenantRoleId)
+                ->firstOrFail();
+
+            $role->delete();
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_roles',
+                $tenantRoleId,
+                'identity.role.deleted.v1',
+                ['role_id' => $tenantRoleId]
+            );
+
+            Cache::tags(["tenant:{$tenantId}"])->flush();
         });
     }
 
@@ -124,7 +194,7 @@ class RoleService
                 $tenantId,
                 'tenant_user_roles',
                 $userRole->tenant_user_role_id ?? (string) Str::uuid(),
-                'identity.role.assigned',
+                'identity.role.assigned.v1',
                 [
                     'user_id'     => $dto->userId,
                     'role_id'     => $role->tenant_role_id,
@@ -163,10 +233,16 @@ class RoleService
                 TenantRolePermission::insert($insertData);
             }
 
-            $this->logEventOutbox($tenantId, 'tenant_roles', $dto->tenantRoleId, 'identity.role.permissions_updated', [
-                'role_id'         => $dto->tenantRoleId,
-                'permission_ids'  => $dto->permissionIds,
-            ]);
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_roles',
+                $dto->tenantRoleId,
+                'identity.role.permissions_updated.v1',
+                [
+                    'role_id'        => $dto->tenantRoleId,
+                    'permission_ids' => $dto->permissionIds,
+                ]
+            );
 
             Cache::tags(["tenant:{$tenantId}"])->flush();
         });
