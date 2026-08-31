@@ -15,6 +15,7 @@ use App\Modules\Organization\Models\Branch;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class OrganizationPermissionTest extends TestCase
 {
@@ -104,7 +105,7 @@ class OrganizationPermissionTest extends TestCase
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_with_permission_can_create_company(): void
     {
         $payload = [
@@ -125,7 +126,7 @@ class OrganizationPermissionTest extends TestCase
             ->assertJsonPath('status', 'success');
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_without_permission_cannot_create_company(): void
     {
         $response = $this->withHeaders([
@@ -140,7 +141,7 @@ class OrganizationPermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
@@ -154,10 +155,9 @@ class OrganizationPermissionTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_with_permission_can_create_branch(): void
     {
-        // Prerequisite: company under same tenant
         $company = Company::create([
             'tenant_id' => $this->tenant->tenant_id,
             'code'      => 'COMP-BR',
@@ -183,7 +183,7 @@ class OrganizationPermissionTest extends TestCase
             ->assertJsonPath('status', 'success');
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_branch(): void
     {
         $company = Company::create([
@@ -206,7 +206,7 @@ class OrganizationPermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_with_permission_can_create_department(): void
     {
         $company = Company::create([
@@ -241,7 +241,7 @@ class OrganizationPermissionTest extends TestCase
             ->assertJsonPath('status', 'success');
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_department(): void
     {
         $company = Company::create([

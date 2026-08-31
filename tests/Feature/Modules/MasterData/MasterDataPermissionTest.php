@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class MasterDataPermissionTest extends TestCase
 {
@@ -33,7 +34,6 @@ class MasterDataPermissionTest extends TestCase
             'status'      => 1,
         ]);
 
-        // Authorized user with create permissions
         $this->authorizedUser = User::factory()->create(['status' => 1]);
 
         TenantUser::factory()->create([
@@ -86,7 +86,6 @@ class MasterDataPermissionTest extends TestCase
             ['tenant:' . $this->tenant->tenant_id]
         )->plainTextToken;
 
-        // Unauthorized user (same tenant, no permission)
         $this->unauthorizedUser = User::factory()->create(['status' => 1]);
 
         TenantUser::factory()->create([
@@ -104,7 +103,7 @@ class MasterDataPermissionTest extends TestCase
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_can_create_business_partner(): void
     {
         $response = $this->withHeaders([
@@ -121,7 +120,7 @@ class MasterDataPermissionTest extends TestCase
         $response->assertStatus(201);
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_business_partner(): void
     {
         $response = $this->withHeaders([
@@ -138,7 +137,7 @@ class MasterDataPermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_item(): void
     {
         $response = $this->withHeaders([
@@ -156,7 +155,7 @@ class MasterDataPermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_cannot_create_warehouse(): void
     {
         $response = $this->withHeaders([
@@ -173,7 +172,7 @@ class MasterDataPermissionTest extends TestCase
         $response->assertStatus(403);
     }
 
-    /** @test */
+    #[Test]
     public function unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
