@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\Test;
 
 class TenantPermissionTest extends TestCase
 {
@@ -94,7 +95,7 @@ class TenantPermissionTest extends TestCase
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
     }
 
-    /** @test */
+    #[Test]
     public function authorized_user_with_permission_can_create_tenant(): void
     {
         $payload = [
@@ -134,7 +135,7 @@ class TenantPermissionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function unauthorized_user_without_permission_cannot_create_tenant(): void
     {
         $payload = [
@@ -157,7 +158,7 @@ class TenantPermissionTest extends TestCase
         ]);
     }
 
-    /** @test */
+    #[Test]
     public function unauthenticated_request_is_rejected(): void
     {
         $response = $this->withHeaders([
@@ -172,7 +173,7 @@ class TenantPermissionTest extends TestCase
         $response->assertStatus(401);
     }
 
-    /** @test */
+    #[Test]
     public function create_tenant_validates_required_fields(): void
     {
         $response = $this->withHeaders([
@@ -186,7 +187,7 @@ class TenantPermissionTest extends TestCase
         $response->assertStatus(422);
     }
 
-    /** @test */
+    #[Test]
     public function create_tenant_rejects_duplicate_tenant_code(): void
     {
         $this->withHeaders([

@@ -16,6 +16,7 @@ use App\Base\Services\ScopeAccessGuard;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use RuntimeException;
+use PHPUnit\Framework\Attributes\Test;
 
 /**
  * F3: Validate Scope before Action on Branch resources.
@@ -92,7 +93,7 @@ class BranchScopeActionTest extends TestCase
         parent::tearDown();
     }
 
-    /** @test */
+    #[Test]
     public function update_allowed_branch_succeeds(): void
     {
         $service = new BranchService(new ScopeAccessGuard());
@@ -110,7 +111,7 @@ class BranchScopeActionTest extends TestCase
         $this->assertSame('Allowed Updated', $updated->name);
     }
 
-    /** @test */
+    #[Test]
     public function update_denied_branch_throws(): void
     {
         $service = new BranchService(new ScopeAccessGuard());
@@ -128,7 +129,7 @@ class BranchScopeActionTest extends TestCase
         $service->updateBranch($this->branchDenied->branch_id, $dto);
     }
 
-    /** @test */
+    #[Test]
     public function delete_denied_branch_throws(): void
     {
         $service = new BranchService(new ScopeAccessGuard());
@@ -138,7 +139,7 @@ class BranchScopeActionTest extends TestCase
         $service->deleteBranch($this->branchDenied->branch_id);
     }
 
-    /** @test */
+    #[Test]
     public function strict_mode_blocks_update_when_no_branch_scopes(): void
     {
         config(['scope.enforcement_mode' => 'strict']);
