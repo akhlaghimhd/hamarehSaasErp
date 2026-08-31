@@ -4,8 +4,7 @@ use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
 use App\Modules\IdentityCore\Models\TenantPermission;
-use App\Modules\IdentityCore\Models\TenantRole;
-use App\Modules\IdentityCore\Models\User; // اضافه کردن مدل User
+use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Services\RoleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -41,15 +40,14 @@ it('creates a tenant role and writes to outbox', function () {
         'aggregate_type' => 'tenant_roles',
         'aggregate_id' => $role->tenant_role_id,
         'status' => 1,
-        'event_type' => 'identity.role.created'
+        'event_type' => 'identity.role.created.v1'
     ]);
 });
 
 it('assigns role to user and logs to outbox', function () {
-    // ایجاد یک کاربر واقعی در دیتابیس برای جلوگیری از خطای Foreign Key
     $user = User::factory()->create();
     $userId = $user->user_id;
-    
+
     $role = $this->service->createRole(CreateRoleDTO::fromRequest([
         'role_name' => 'MANAGER',
         'permission_ids' => []
@@ -71,7 +69,7 @@ it('assigns role to user and logs to outbox', function () {
     ]);
 
     $this->assertDatabaseHas('event_outbox', [
-        'event_type' => 'identity.role.assigned',
+        'event_type' => 'identity.role.assigned.v1',
         'aggregate_type' => 'tenant_user_roles'
     ]);
 });
@@ -81,7 +79,7 @@ it('assigns permissions to role and logs to outbox', function () {
         'tenant_id' => $this->tenantId,
         'code' => 'inventory.items.create',
         'name' => 'Create Inventory Item',
-        'module_name' => 'Inventory', // اصلاح نام ستون از module به module_name مطابق با ساختار دیتابیس
+        'module_name' => 'Inventory',
         'description' => 'Create Inventory Item',
         'status' => 1,
     ]);
@@ -114,14 +112,14 @@ it('prevents data bleeding across tenants in role assignment', function () {
     $tenantIdB = Str::uuid()->toString();
     app()->instance('current_tenant_id', $tenantIdB);
 
-    // ایجاد یک کاربر واقعی در دیتابیس برای جلوگیری از خطای پیش‌بینی‌نشده‌ی Foreign Key
     $userB = User::factory()->create();
     $userIdB = $userB->user_id;
-    
+
     $dtoB = AssignRoleToUserDTO::fromRequest([
         'user_id' => $userIdB,
         'role_ids' => [$roleTenantA->tenant_role_id]
     ]);
 
-    expect(fn() => $this->service->assignRoleToUser($dtoB))->toThrow(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
+    expect(fn () => $this->service->assignRoleToUser($dtoB))
+        ->toThrow(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
 });

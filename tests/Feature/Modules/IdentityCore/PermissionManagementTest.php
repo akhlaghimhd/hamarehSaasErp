@@ -131,7 +131,7 @@ class PermissionManagementTest extends TestCase
         $this->assertDatabaseHas('event_outbox', [
             'tenant_id'      => $this->tenant->tenant_id,
             'aggregate_type' => 'tenant_permissions',
-            'event_type'     => 'identity.permission.created',
+            'event_type'     => 'identity.permission.created.v1',
             'status'         => 1,
         ]);
     }
