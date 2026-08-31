@@ -38,13 +38,23 @@ class AuthenticationService
 
         $credential = $user->credential;
 
+        // Lockout check (P4-S1)
+        if ($credential && $credential->locked_until && $credential->locked_until->isFuture()) {
+            throw new HttpException(403, 'حساب کاربری موقتاً قفل شده است. لطفاً بعداً تلاش کنید.');
+        }
+
         if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
+            if ($credential) {
+                $this->registerFailedLoginAttempt($credential);
+            }
             throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
         }
 
         if ((int) $user->status !== 1) {
             throw new HttpException(403, 'حساب کاربری شما غیرفعال یا مسدود شده است.');
         }
+
+        $this->clearFailedLoginAttempts($credential);
 
         $tenantIdToLogin = $dto->tenantId;
         $tenantUser = null;
@@ -247,6 +257,31 @@ class AuthenticationService
 
             return $user;
         });
+    }
+
+    /**
+     * P4-S1: after 5 failed attempts lock account for 15 minutes.
+     */
+    private function registerFailedLoginAttempt(UserCredential $credential): void
+    {
+        $maxAttempts = 5;
+        $lockMinutes = 15;
+        $count = (int) $credential->failed_login_count + 1;
+        $credential->failed_login_count = $count;
+        if ($count >= $maxAttempts) {
+            $credential->locked_until = now()->addMinutes($lockMinutes);
+            $credential->failed_login_count = 0;
+        }
+        $credential->save();
+    }
+
+    private function clearFailedLoginAttempts(UserCredential $credential): void
+    {
+        if ((int) $credential->failed_login_count !== 0 || $credential->locked_until !== null) {
+            $credential->failed_login_count = 0;
+            $credential->locked_until = null;
+            $credential->save();
+        }
     }
 
     private function writeOutboxEvent(
