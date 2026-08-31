@@ -4,11 +4,12 @@ namespace App\Modules\IdentityCore\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 
 class TenantPermission extends Model
 {
-    use HasUuids, TenantScoped;
+    use HasUuids, TenantScoped, SoftDeletes;
 
     protected $table = 'tenant_permissions';
     protected $primaryKey = 'tenant_permission_id';
@@ -26,7 +27,17 @@ class TenantPermission extends Model
         'status',
         'created_by',
         'updated_by',
+        'deleted_by',
+        'row_version',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'status'      => 'integer',
+            'row_version' => 'integer',
+        ];
+    }
 
     public function roles()
     {

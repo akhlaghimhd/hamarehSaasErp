@@ -30,10 +30,18 @@ Route::prefix('identity')->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy'])
             ->middleware('permission:identity.user.delete');
 
-        Route::get('/permissions', [PermissionController::class, 'index'])
-            ->middleware('permission:identity.permission.view');
-        Route::post('/permissions', [PermissionController::class, 'store'])
-            ->middleware('permission:identity.permission.create');
+        Route::prefix('permissions')->group(function () {
+            Route::get('/', [PermissionController::class, 'index'])
+                ->middleware('permission:identity.permission.view');
+            Route::post('/', [PermissionController::class, 'store'])
+                ->middleware('permission:identity.permission.create');
+            Route::get('/{id}', [PermissionController::class, 'show'])
+                ->middleware('permission:identity.permission.view');
+            Route::put('/{id}', [PermissionController::class, 'update'])
+                ->middleware('permission:identity.permission.update');
+            Route::delete('/{id}', [PermissionController::class, 'destroy'])
+                ->middleware('permission:identity.permission.delete');
+        });
 
         Route::prefix('roles')->group(function () {
             Route::get('/', [RoleController::class, 'index'])

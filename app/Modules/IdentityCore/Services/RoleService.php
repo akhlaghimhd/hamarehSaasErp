@@ -5,6 +5,7 @@ namespace App\Modules\IdentityCore\Services;
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
 use App\Modules\IdentityCore\DTOs\CreatePermissionDTO;
 use App\Modules\IdentityCore\DTOs\UpdateRoleDTO;
+use App\Modules\IdentityCore\DTOs\UpdatePermissionDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -49,6 +50,16 @@ class RoleService
             ->get();
     }
 
+    public function getPermission(string $tenantPermissionId): TenantPermission
+    {
+        $tenantId = $this->getTenantId();
+
+        return TenantPermission::query()
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_permission_id', $tenantPermissionId)
+            ->firstOrFail();
+    }
+
     public function createPermission(CreatePermissionDTO $dto): TenantPermission
     {
         $tenantId = $this->getTenantId();
@@ -77,6 +88,70 @@ class RoleService
             );
 
             return $permission;
+        });
+    }
+
+    public function updatePermission(UpdatePermissionDTO $dto): TenantPermission
+    {
+        $tenantId = $this->getTenantId();
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $permission = TenantPermission::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_permission_id', $dto->tenantPermissionId)
+                ->firstOrFail();
+
+            $changes = array_filter([
+                'name'        => $dto->name,
+                'module_name' => $dto->moduleName,
+                'action_type' => $dto->actionType,
+                'description' => $dto->description,
+                'status'      => $dto->status,
+            ], fn ($value) => !is_null($value));
+
+            if (!empty($changes)) {
+                $changes['row_version'] = ((int) ($permission->row_version ?? 1)) + 1;
+                $permission->update($changes);
+            }
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_permissions',
+                $permission->tenant_permission_id,
+                'identity.permission.updated.v1',
+                [
+                    'permission_id' => $permission->tenant_permission_id,
+                    'changes'       => $changes,
+                ]
+            );
+
+            Cache::tags(["tenant:{$tenantId}"])->flush();
+
+            return $permission->fresh();
+        });
+    }
+
+    public function softDeletePermission(string $tenantPermissionId): void
+    {
+        $tenantId = $this->getTenantId();
+
+        DB::transaction(function () use ($tenantPermissionId, $tenantId) {
+            $permission = TenantPermission::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_permission_id', $tenantPermissionId)
+                ->firstOrFail();
+
+            $permission->delete();
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_permissions',
+                $tenantPermissionId,
+                'identity.permission.deleted.v1',
+                ['permission_id' => $tenantPermissionId]
+            );
+
+            Cache::tags(["tenant:{$tenantId}"])->flush();
         });
     }
 
