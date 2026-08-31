@@ -155,14 +155,18 @@ class PartnerLayerOutboxTest extends TestCase
             'status'     => 1,
         ]);
 
+        // Same payload contract as PartnerAgreementCrudTest (start_date NOT NULL in SSOT)
         $response = $this->withHeaders($this->authHeaders())
             ->postJson('/api/partner-layer/partner-agreements', [
                 'partner_id'       => $partner->partner_id,
                 'agreement_number' => 'OX-AGR-001',
                 'agreement_type'   => 1,
+                'start_date'       => now()->toIso8601String(),
+                'payment_cycle'    => 30,
+                'status'           => 1,
             ]);
 
-        $response->assertStatus(201);
+        $response->assertStatus(201, 'Agreement create failed: ' . json_encode($response->json()));
 
         $agreementId = $response->json('data.agreement_id');
 
