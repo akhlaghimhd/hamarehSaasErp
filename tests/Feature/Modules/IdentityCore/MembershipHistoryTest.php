@@ -143,9 +143,9 @@ class MembershipHistoryTest extends TestCase
             'tenant_id'       => $this->tenant->tenant_id,
             'tenant_user_id'  => $this->memberMembership->tenant_user_id,
             'previous_status' => 1,
-            'new_status'      => 2,
+            'new_status'      => 0,
             'reason_code'     => 'STATUS_CHANGE',
-            'description'     => 'Suspended',
+            'description'     => 'Deactivated',
             'effective_date'  => now(),
             'row_version'     => 1,
         ]);
@@ -159,16 +159,17 @@ class MembershipHistoryTest extends TestCase
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success')
             ->assertJsonPath('data.0.tenant_user_id', $this->memberMembership->tenant_user_id)
-            ->assertJsonPath('data.0.new_status', 2);
+            ->assertJsonPath('data.0.new_status', 0);
     }
 
     #[Test]
     public function updating_membership_status_records_history(): void
     {
+        // status only allows 0|1 per UpdateTenantUserRequest
         $response = $this->withHeaders($this->headers($this->adminToken))
             ->putJson(
                 '/api/identity-core/identity/users/' . $this->memberMembership->tenant_user_id,
-                ['status' => 2]
+                ['status' => 0]
             );
 
         $response->assertStatus(200);
@@ -177,7 +178,7 @@ class MembershipHistoryTest extends TestCase
             'tenant_id'       => $this->tenant->tenant_id,
             'tenant_user_id'  => $this->memberMembership->tenant_user_id,
             'previous_status' => 1,
-            'new_status'      => 2,
+            'new_status'      => 0,
             'reason_code'     => 'STATUS_CHANGE',
         ]);
 

@@ -22,8 +22,8 @@ class MembershipHistoryService
     {
         $tenantId = $this->getTenantId();
 
-        // Ensure membership belongs to current tenant (isolation).
-        TenantUser::query()
+        // Ensure membership belongs to current tenant (include soft-deleted for audit continuity).
+        TenantUser::withTrashed()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->firstOrFail();
@@ -70,7 +70,8 @@ class MembershipHistoryService
     ): TenantMembershipHistory {
         $tenantId = $this->getTenantId();
 
-        TenantUser::query()
+        // withTrashed: allows recording SOFT_DELETE while membership may already be soft-deleted
+        TenantUser::withTrashed()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->firstOrFail();

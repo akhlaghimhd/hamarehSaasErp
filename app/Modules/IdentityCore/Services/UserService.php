@@ -201,6 +201,7 @@ class UserService
 
     /**
      * Soft-delete a tenant membership (Law 1.4 — no physical delete).
+     * History is recorded BEFORE soft-delete so TenantUser is still visible.
      */
     public function softDeleteTenantUser(string $tenantUserId): void
     {
@@ -214,8 +215,7 @@ class UserService
 
             $previousStatus = $tenantUser->status;
 
-            $tenantUser->delete();
-
+            // Record audit row while membership is still active
             $this->membershipHistoryService->recordChange(
                 $tenantUserId,
                 (int) $previousStatus,
@@ -223,6 +223,8 @@ class UserService
                 'SOFT_DELETE',
                 'Tenant membership soft-deleted'
             );
+
+            $tenantUser->delete();
 
             $this->logEventOutbox(
                 $tenantId,
