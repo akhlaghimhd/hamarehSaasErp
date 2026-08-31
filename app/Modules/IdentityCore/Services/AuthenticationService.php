@@ -144,7 +144,7 @@ class AuthenticationService
 
             $scopeAssignments = TenantUserScope::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
-                ->where('user_id', $user->user_id)
+                ->where('tenant_user_id', $tenantUser->tenant_user_id)
                 ->whereNull('deleted_at')
                 ->get(['scope_id']);
 
@@ -154,6 +154,7 @@ class AuthenticationService
                 $scopeModels = TenantScope::withoutGlobalScopes()
                     ->where('tenant_id', $tenantIdToLogin)
                     ->whereIn('scope_id', $scopeIds)
+                    ->where('is_active', true)
                     ->whereNull('deleted_at')
                     ->get(['scope_id', 'scope_name', 'scope_type', 'reference_id']);
 
