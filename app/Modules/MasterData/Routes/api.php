@@ -6,6 +6,7 @@ use App\Modules\MasterData\Controllers\ItemController;
 use App\Modules\MasterData\Controllers\CostCenterController;
 use App\Modules\MasterData\Controllers\WarehouseController;
 use App\Modules\MasterData\Controllers\CurrencyController;
+use App\Modules\MasterData\Controllers\CountryController;
 use App\Modules\MasterData\Controllers\TaxCategoryController;
 use App\Modules\MasterData\Controllers\TaxDefinitionController;
 
@@ -77,6 +78,18 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.currency.update');
     Route::delete('currencies/{id}', [CurrencyController::class, 'destroy'])
         ->middleware('permission:master-data.currency.delete');
+
+    // Countries (Platform Master Data — no tenant_id)
+    Route::get('countries', [CountryController::class, 'index'])
+        ->middleware('permission:master-data.country.view');
+    Route::post('countries', [CountryController::class, 'store'])
+        ->middleware('permission:master-data.country.create');
+    Route::get('countries/{id}', [CountryController::class, 'show'])
+        ->middleware('permission:master-data.country.view');
+    Route::put('countries/{id}', [CountryController::class, 'update'])
+        ->middleware('permission:master-data.country.update');
+    Route::delete('countries/{id}', [CountryController::class, 'destroy'])
+        ->middleware('permission:master-data.country.delete');
 
     // Tax Categories (Tenant-Owned)
     Route::get('tax-categories', [TaxCategoryController::class, 'index'])
