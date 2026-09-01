@@ -24,7 +24,7 @@ use PHPUnit\Framework\Attributes\Test;
 
 /**
  * Layer 5 – MasterData CRUD + Tenant Isolation + SoftDelete + row_version
- * Covers L5-MD-T01 … T06 (BusinessPartner, Item, Warehouse, CostCenter, TaxCategory, TaxDefinition)
+ * Covers L5-MD-T01 … T06 + L5-MD-Q04 (BusinessPartner, Item, Warehouse, CostCenter, TaxCategory, TaxDefinition)
  */
 class MasterDataCrudAndIsolationTest extends TestCase
 {
@@ -410,6 +410,30 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ]);
     }
 
+    #[Test]
+    public function tenant_a_cannot_see_warehouse_of_tenant_b(): void
+    {
+        $warehouseB = Warehouse::withoutGlobalScopes()->create([
+            'warehouse_id' => (string) Str::uuid(),
+            'tenant_id'    => $this->tenantB->tenant_id,
+            'code'         => 'WH-B-ONLY',
+            'name'         => 'Tenant B Warehouse',
+            'is_active'    => true,
+        ]);
+
+        $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->getJson('/api/master-data/warehouses');
+
+        $indexResponse->assertStatus(200);
+        $ids = collect($indexResponse->json('data'))->pluck('warehouse_id')->toArray();
+        $this->assertNotContains($warehouseB->warehouse_id, $ids);
+
+        $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->getJson('/api/master-data/warehouses/' . $warehouseB->warehouse_id);
+
+        $showResponse->assertStatus(404);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // L5-MD-T04  CostCenter
     // ─────────────────────────────────────────────────────────────
@@ -464,6 +488,31 @@ class MasterDataCrudAndIsolationTest extends TestCase
             'cost_center_id' => $costCenterId,
             'tenant_id'      => $this->tenantA->tenant_id,
         ]);
+    }
+
+    #[Test]
+    public function tenant_a_cannot_see_cost_center_of_tenant_b(): void
+    {
+        $costCenterB = CostCenter::withoutGlobalScopes()->create([
+            'cost_center_id' => (string) Str::uuid(),
+            'tenant_id'      => $this->tenantB->tenant_id,
+            'code'           => 'CC-B-ONLY',
+            'name'           => 'Tenant B Cost Center',
+            'type'           => 1,
+            'status'         => 1,
+        ]);
+
+        $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->getJson('/api/master-data/cost-centers');
+
+        $indexResponse->assertStatus(200);
+        $ids = collect($indexResponse->json('data'))->pluck('cost_center_id')->toArray();
+        $this->assertNotContains($costCenterB->cost_center_id, $ids);
+
+        $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->getJson('/api/master-data/cost-centers/' . $costCenterB->cost_center_id);
+
+        $showResponse->assertStatus(404);
     }
 
     // ─────────────────────────────────────────────────────────────
