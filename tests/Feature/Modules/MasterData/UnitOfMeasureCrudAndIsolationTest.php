@@ -192,6 +192,7 @@ class UnitOfMeasureCrudAndIsolationTest extends TestCase
     #[Test]
     public function tenant_isolation_prevents_cross_tenant_access(): void
     {
+        // Create UoM for tenant A via API
         $createResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->postJson('/api/master-data/units-of-measure', [
                 'code'              => 'BOX',
@@ -201,21 +202,43 @@ class UnitOfMeasureCrudAndIsolationTest extends TestCase
                 'status'            => 1,
             ]);
         $createResponse->assertStatus(201);
-        $uomId = $createResponse->json('data.uom_id');
+        $uomIdA = $createResponse->json('data.uom_id');
 
-        // Tenant B must not see or access Tenant A data
+        // Tenant B must not be able to show Tenant A record (403 permission or 404 not found)
         $showAsB = $this->withHeaders($this->authHeaders($this->tokenB, $this->tenantB->tenant_id))
-            ->getJson('/api/master-data/units-of-measure/' . $uomId);
+            ->getJson('/api/master-data/units-of-measure/' . $uomIdA);
         $this->assertTrue(
             in_array($showAsB->status(), [403, 404]),
             'Expected isolation deny (403/404), got ' . $showAsB->status()
         );
 
-        $listAsB = $this->withHeaders($this->authHeaders($this->tokenB, $this->tenantB->tenant_id))
+        // Seed a UoM belonging only to tenant B (bypass TenantScoped for setup)
+        $uomB = UnitOfMeasure::withoutGlobalScopes()->create([
+            'uom_id'            => (string) Str::uuid(),
+            'tenant_id'         => $this->tenantB->tenant_id,
+            'code'              => 'PCS',
+            'name'              => 'Pieces',
+            'decimal_places'    => 0,
+            'conversion_factor' => 1.0,
+            'status'            => 1,
+            'row_version'       => 1,
+        ]);
+
+        // Tenant A list must not contain tenant B data
+        $listAsA = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/master-data/units-of-measure');
-        $listAsB->assertStatus(200);
-        $ids = collect($listAsB->json('data'))->pluck('uom_id')->all();
-        $this->assertNotContains($uomId, $ids);
+        $listAsA->assertStatus(200);
+        $ids = collect($listAsA->json('data'))->pluck('uom_id')->all();
+        $this->assertNotContains($uomB->uom_id, $ids);
+        $this->assertContains($uomIdA, $ids);
+
+        // Tenant A show of tenant B record must fail
+        $showAsA = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->getJson('/api/master-data/units-of-measure/' . $uomB->uom_id);
+        $this->assertTrue(
+            in_array($showAsA->status(), [403, 404]),
+            'Expected isolation deny for A viewing B record, got ' . $showAsA->status()
+        );
     }
 
     #[Test]
