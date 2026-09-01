@@ -8,13 +8,13 @@ use App\Modules\DocumentManagement\DTOs\CreateAttachmentDTO;
 use App\Modules\DocumentManagement\DTOs\UpdateDocumentDTO;
 use App\Modules\DocumentManagement\DTOs\CreateDocumentSequenceDTO;
 use App\Modules\DocumentManagement\DTOs\CreateDocumentVersionDTO;
-use App\Base\Context\TenantContext;
+use Illuminate\Support\Facades\Context;
 
 class DocumentManagementService
 {
     public function createDocument(CreateDocumentDTO $dto): Document
     {
-        $tenantId = TenantContext::getTenantId();
+        $tenantId = Context::get('tenant_id');
         
         if (Document::where('tenant_id', $tenantId)->where('document_number', $dto->documentNumber)->exists()) {
             throw new \Exception("شماره سند تکراری است.");
@@ -32,7 +32,7 @@ class DocumentManagementService
 
     public function getDocumentById(string $documentId): Document
     {
-        return Document::where('tenant_id', TenantContext::getTenantId())
+        return Document::where('tenant_id', Context::get('tenant_id'))
             ->where('document_id', $documentId)
             ->firstOrFail();
     }
@@ -41,7 +41,7 @@ class DocumentManagementService
     {
         // در یک سیستم واقعی، اینجا ابتدا هش فایل چک می‌شود تا فایل تکراری ذخیره نشود
         return Attachment::create([
-            'tenant_id' => TenantContext::getTenantId(),
+            'tenant_id' => Context::get('tenant_id'),
             'target_entity_type' => $dto->targetEntityType,
             'target_entity_id' => $dto->targetEntityId,
             'file_name' => $dto->fileName,
@@ -54,14 +54,14 @@ class DocumentManagementService
 
     public function getAllDocuments()
     {
-        return Document::where('tenant_id', TenantContext::getTenantId())
+        return Document::where('tenant_id', Context::get('tenant_id'))
             ->orderBy('created_at', 'desc')
             ->get();
     }
 
     public function updateDocument(string $documentId, UpdateDocumentDTO $dto): Document
     {
-        $tenantId = TenantContext::getTenantId();
+        $tenantId = Context::get('tenant_id');
         $document = Document::where('tenant_id', $tenantId)->where('document_id', $documentId)->firstOrFail();
 
         // بررسی یکتا بودن شماره سند جدید در صورت تغییر
@@ -84,7 +84,7 @@ class DocumentManagementService
 
     public function deleteDocument(string $documentId): void
     {
-        $document = Document::where('tenant_id', TenantContext::getTenantId())
+        $document = Document::where('tenant_id', Context::get('tenant_id'))
             ->where('document_id', $documentId)
             ->firstOrFail();
             
@@ -93,7 +93,7 @@ class DocumentManagementService
 
     public function deleteAttachment(string $attachmentId): void
     {
-        $attachment = Attachment::where('tenant_id', TenantContext::getTenantId())
+        $attachment = Attachment::where('tenant_id', Context::get('tenant_id'))
             ->where('attachment_id', $attachmentId)
             ->firstOrFail();
             
@@ -102,7 +102,7 @@ class DocumentManagementService
 
     public function createSequence(CreateDocumentSequenceDTO $dto): \App\Modules\DocumentManagement\Models\DocumentSequence
     {
-        $tenantId = TenantContext::getTenantId();
+        $tenantId = Context::get('tenant_id');
 
         // جلوگیری از ایجاد Sequence تکراری بر اساس قوانین اسناد معماری (ترکیب فیلدها)
         $exists = \App\Modules\DocumentManagement\Models\DocumentSequence::where('tenant_id', $tenantId)
@@ -133,7 +133,7 @@ class DocumentManagementService
 
     public function createVersion(CreateDocumentVersionDTO $dto): \App\Modules\DocumentManagement\Models\DocumentVersion
     {
-        $tenantId = TenantContext::getTenantId();
+        $tenantId = Context::get('tenant_id');
 
         // جلوگیری از ثبت نسخه تکراری برای یک سند
         $exists = \App\Modules\DocumentManagement\Models\DocumentVersion::where('tenant_id', $tenantId)
