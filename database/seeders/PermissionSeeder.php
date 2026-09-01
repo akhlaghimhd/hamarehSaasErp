@@ -180,6 +180,16 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.currency.update', 'name' => 'Update Currency', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.currency.delete', 'name' => 'Delete Currency', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
+            // Tax Category & Tax Definition (L5-MD-T05 / T06)
+            ['code' => 'master-data.tax-category.view', 'name' => 'View Tax Categories', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.tax-category.create', 'name' => 'Create Tax Category', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.tax-category.update', 'name' => 'Update Tax Category', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.tax-category.delete', 'name' => 'Delete Tax Category', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+            ['code' => 'master-data.tax-definition.view', 'name' => 'View Tax Definitions', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.tax-definition.create', 'name' => 'Create Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.tax-definition.update', 'name' => 'Update Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.tax-definition.delete', 'name' => 'Delete Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
             ['code' => 'accounting.fiscal-period.create', 'name' => 'Create Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.account.create', 'name' => 'Create Account', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.voucher.create', 'name' => 'Create Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
