@@ -50,12 +50,13 @@ class WarehouseService
                 $tenantId = Context::get('tenant_id');
 
                 $warehouse = Warehouse::create([
-                    'tenant_id'  => $tenantId,
-                    'code'       => $dto->code,
-                    'name'       => $dto->name,
-                    'location'   => $dto->location,
-                    'is_active'  => $dto->isActive,
-                    'created_by' => Context::get('user_id'),
+                    'tenant_id'   => $tenantId,
+                    'code'        => $dto->code,
+                    'name'        => $dto->name,
+                    'location'    => $dto->location,
+                    'is_active'   => $dto->isActive,
+                    'created_by'  => Context::get('user_id'),
+                    'row_version' => 1,
                 ]);
 
                 $this->dispatchOutboxEvent('master_data.warehouse.created', $warehouse, $tenantId);
@@ -85,6 +86,8 @@ class WarehouseService
                     'is_active'  => $dto->isActive,
                     'updated_by' => Context::get('user_id'),
                 ], fn($value) => !is_null($value));
+
+                $updateData['row_version'] = ((int) ($warehouse->row_version ?? 1)) + 1;
 
                 $warehouse->update($updateData);
 

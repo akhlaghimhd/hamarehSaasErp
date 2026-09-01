@@ -36,6 +36,7 @@ class Warehouse extends Model
         'created_by',
         'updated_by',
         'deleted_by',
+        'row_version',
     ];
 
     protected function casts(): array
