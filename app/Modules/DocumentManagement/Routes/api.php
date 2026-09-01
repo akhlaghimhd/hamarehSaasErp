@@ -15,6 +15,8 @@ Route::prefix('document-management')
             ->middleware('permission:document-management.document.view');
         Route::post('documents', [DocumentController::class, 'store'])
             ->middleware('permission:document-management.document.create');
+        Route::get('documents/{id}', [DocumentController::class, 'show'])
+            ->middleware('permission:document-management.document.view');
         Route::put('documents/{id}', [DocumentController::class, 'update'])
             ->middleware('permission:document-management.document.update');
         Route::delete('documents/{id}', [DocumentController::class, 'destroy'])

@@ -5,6 +5,9 @@ use App\Modules\DocumentManagement\Models\Document;
 use App\Modules\DocumentManagement\Models\Attachment;
 use App\Modules\DocumentManagement\DTOs\CreateDocumentDTO;
 use App\Modules\DocumentManagement\DTOs\CreateAttachmentDTO;
+use App\Modules\DocumentManagement\DTOs\UpdateDocumentDTO;
+use App\Modules\DocumentManagement\DTOs\CreateDocumentSequenceDTO;
+use App\Modules\DocumentManagement\DTOs\CreateDocumentVersionDTO;
 use App\Base\Context\TenantContext;
 
 class DocumentManagementService
@@ -27,6 +30,13 @@ class DocumentManagementService
         ]);
     }
 
+    public function getDocumentById(string $documentId): Document
+    {
+        return Document::where('tenant_id', TenantContext::getTenantId())
+            ->where('document_id', $documentId)
+            ->firstOrFail();
+    }
+
     public function createAttachment(CreateAttachmentDTO $dto): Attachment
     {
         // در یک سیستم واقعی، اینجا ابتدا هش فایل چک می‌شود تا فایل تکراری ذخیره نشود
@@ -41,6 +51,7 @@ class DocumentManagementService
             'file_hash' => $dto->fileHash,
         ]);
     }
+
     public function getAllDocuments()
     {
         return Document::where('tenant_id', TenantContext::getTenantId())
@@ -88,6 +99,7 @@ class DocumentManagementService
             
         $attachment->delete();
     }
+
     public function createSequence(CreateDocumentSequenceDTO $dto): \App\Modules\DocumentManagement\Models\DocumentSequence
     {
         $tenantId = TenantContext::getTenantId();
@@ -141,5 +153,4 @@ class DocumentManagementService
             'change_summary' => $dto->changeSummary,
         ]);
     }
-    
 }
