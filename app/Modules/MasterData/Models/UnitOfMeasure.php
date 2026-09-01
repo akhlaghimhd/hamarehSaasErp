@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * Tenant-Owned Master Data (L5-MD-P03).
+ * Decision locked 2026-09-01: Platform examples are Currency/Country only.
+ * Schema has tenant_id + unique(tenant_id, code); model uses TenantScoped.
+ */
 class UnitOfMeasure extends Model
 {
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
