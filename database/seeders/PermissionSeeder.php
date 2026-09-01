@@ -196,6 +196,22 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.tax-definition.update', 'name' => 'Update Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.tax-definition.delete', 'name' => 'Delete Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
+            // Supporting Entities L5-MD-S01..S03
+            ['code' => 'master-data.bank-account.view', 'name' => 'View Bank Accounts', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.bank-account.create', 'name' => 'Create Bank Account', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.bank-account.update', 'name' => 'Update Bank Account', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.bank-account.delete', 'name' => 'Delete Bank Account', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            ['code' => 'master-data.entity-address.view', 'name' => 'View Entity Addresses', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.entity-address.create', 'name' => 'Create Entity Address', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.entity-address.update', 'name' => 'Update Entity Address', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.entity-address.delete', 'name' => 'Delete Entity Address', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            ['code' => 'master-data.entity-contact-point.view', 'name' => 'View Entity Contact Points', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.entity-contact-point.create', 'name' => 'Create Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.entity-contact-point.update', 'name' => 'Update Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.entity-contact-point.delete', 'name' => 'Delete Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
             ['code' => 'accounting.fiscal-period.create', 'name' => 'Create Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.account.create', 'name' => 'Create Account', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.voucher.create', 'name' => 'Create Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
