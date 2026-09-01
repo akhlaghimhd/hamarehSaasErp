@@ -4,11 +4,12 @@ namespace App\Modules\DocumentManagement\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 
 class DocumentSequence extends Model
 {
-    use HasUuids, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'document_sequences';
     protected $primaryKey = 'sequence_id';
@@ -17,7 +18,8 @@ class DocumentSequence extends Model
         'tenant_id', 'company_id', 'module_code', 'document_type',
         'document_scope', 'owner_type', 'owner_id', 'prefix',
         'suffix', 'padding_length', 'current_value', 'reset_period',
-        'last_reset_at', 'is_active', 'row_version'
+        'last_reset_at', 'is_active', 'row_version',
+        'created_by', 'updated_by', 'deleted_by'
     ];
     
     protected $casts = [
