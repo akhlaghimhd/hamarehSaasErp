@@ -157,7 +157,7 @@ class SupportingEntitiesCrudTest extends TestCase
 
         $showResponse->assertStatus(200);
 
-        $updateResponse = $this->withHeaders($this->authHeaders($this_tokenA, $this->tenantA->tenant_id))
+        $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->putJson('/api/master-data/bank-accounts/' . $accountId, [
                 'bank_name' => 'Updated Bank',
                 'status'    => 1,
