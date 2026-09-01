@@ -12,6 +12,10 @@ use App\Modules\MasterData\Controllers\TaxDefinitionController;
 use App\Modules\MasterData\Controllers\BankAccountController;
 use App\Modules\MasterData\Controllers\EntityAddressController;
 use App\Modules\MasterData\Controllers\EntityContactPointController;
+use App\Modules\MasterData\Controllers\TagController;
+use App\Modules\MasterData\Controllers\EntityTagController;
+use App\Modules\MasterData\Controllers\MasterDataCategoryController;
+use App\Modules\MasterData\Controllers\MasterDataValueController;
 
 /*
 |--------------------------------------------------------------------------
@@ -153,4 +157,48 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.entity-contact-point.update');
     Route::delete('entity-contact-points/{id}', [EntityContactPointController::class, 'destroy'])
         ->middleware('permission:master-data.entity-contact-point.delete');
+
+    // Tags (L5-MD-S04)
+    Route::get('tags', [TagController::class, 'index'])
+        ->middleware('permission:master-data.tag.view');
+    Route::post('tags', [TagController::class, 'store'])
+        ->middleware('permission:master-data.tag.create');
+    Route::get('tags/{id}', [TagController::class, 'show'])
+        ->middleware('permission:master-data.tag.view');
+    Route::put('tags/{id}', [TagController::class, 'update'])
+        ->middleware('permission:master-data.tag.update');
+    Route::delete('tags/{id}', [TagController::class, 'destroy'])
+        ->middleware('permission:master-data.tag.delete');
+
+    // Entity Tags (L5-MD-S05) – attach/detach style
+    Route::get('entity-tags', [EntityTagController::class, 'index'])
+        ->middleware('permission:master-data.entity-tag.view');
+    Route::post('entity-tags', [EntityTagController::class, 'store'])
+        ->middleware('permission:master-data.entity-tag.create');
+    Route::delete('entity-tags/{id}', [EntityTagController::class, 'destroy'])
+        ->middleware('permission:master-data.entity-tag.delete');
+
+    // Master Data Categories (L5-MD-S06)
+    Route::get('master-data-categories', [MasterDataCategoryController::class, 'index'])
+        ->middleware('permission:master-data.master-data-category.view');
+    Route::post('master-data-categories', [MasterDataCategoryController::class, 'store'])
+        ->middleware('permission:master-data.master-data-category.create');
+    Route::get('master-data-categories/{id}', [MasterDataCategoryController::class, 'show'])
+        ->middleware('permission:master-data.master-data-category.view');
+    Route::put('master-data-categories/{id}', [MasterDataCategoryController::class, 'update'])
+        ->middleware('permission:master-data.master-data-category.update');
+    Route::delete('master-data-categories/{id}', [MasterDataCategoryController::class, 'destroy'])
+        ->middleware('permission:master-data.master-data-category.delete');
+
+    // Master Data Values (L5-MD-S07)
+    Route::get('master-data-values', [MasterDataValueController::class, 'index'])
+        ->middleware('permission:master-data.master-data-value.view');
+    Route::post('master-data-values', [MasterDataValueController::class, 'store'])
+        ->middleware('permission:master-data.master-data-value.create');
+    Route::get('master-data-values/{id}', [MasterDataValueController::class, 'show'])
+        ->middleware('permission:master-data.master-data-value.view');
+    Route::put('master-data-values/{id}', [MasterDataValueController::class, 'update'])
+        ->middleware('permission:master-data.master-data-value.update');
+    Route::delete('master-data-values/{id}', [MasterDataValueController::class, 'destroy'])
+        ->middleware('permission:master-data.master-data-value.delete');
 });
