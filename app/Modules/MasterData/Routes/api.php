@@ -9,6 +9,9 @@ use App\Modules\MasterData\Controllers\CurrencyController;
 use App\Modules\MasterData\Controllers\CountryController;
 use App\Modules\MasterData\Controllers\TaxCategoryController;
 use App\Modules\MasterData\Controllers\TaxDefinitionController;
+use App\Modules\MasterData\Controllers\BankAccountController;
+use App\Modules\MasterData\Controllers\EntityAddressController;
+use App\Modules\MasterData\Controllers\EntityContactPointController;
 
 /*
 |--------------------------------------------------------------------------
@@ -114,4 +117,40 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.tax-definition.update');
     Route::delete('tax-definitions/{id}', [TaxDefinitionController::class, 'destroy'])
         ->middleware('permission:master-data.tax-definition.delete');
+
+    // Bank Accounts (L5-MD-S01)
+    Route::get('bank-accounts', [BankAccountController::class, 'index'])
+        ->middleware('permission:master-data.bank-account.view');
+    Route::post('bank-accounts', [BankAccountController::class, 'store'])
+        ->middleware('permission:master-data.bank-account.create');
+    Route::get('bank-accounts/{id}', [BankAccountController::class, 'show'])
+        ->middleware('permission:master-data.bank-account.view');
+    Route::put('bank-accounts/{id}', [BankAccountController::class, 'update'])
+        ->middleware('permission:master-data.bank-account.update');
+    Route::delete('bank-accounts/{id}', [BankAccountController::class, 'destroy'])
+        ->middleware('permission:master-data.bank-account.delete');
+
+    // Entity Addresses (L5-MD-S02)
+    Route::get('entity-addresses', [EntityAddressController::class, 'index'])
+        ->middleware('permission:master-data.entity-address.view');
+    Route::post('entity-addresses', [EntityAddressController::class, 'store'])
+        ->middleware('permission:master-data.entity-address.create');
+    Route::get('entity-addresses/{id}', [EntityAddressController::class, 'show'])
+        ->middleware('permission:master-data.entity-address.view');
+    Route::put('entity-addresses/{id}', [EntityAddressController::class, 'update'])
+        ->middleware('permission:master-data.entity-address.update');
+    Route::delete('entity-addresses/{id}', [EntityAddressController::class, 'destroy'])
+        ->middleware('permission:master-data.entity-address.delete');
+
+    // Entity Contact Points (L5-MD-S03)
+    Route::get('entity-contact-points', [EntityContactPointController::class, 'index'])
+        ->middleware('permission:master-data.entity-contact-point.view');
+    Route::post('entity-contact-points', [EntityContactPointController::class, 'store'])
+        ->middleware('permission:master-data.entity-contact-point.create');
+    Route::get('entity-contact-points/{id}', [EntityContactPointController::class, 'show'])
+        ->middleware('permission:master-data.entity-contact-point.view');
+    Route::put('entity-contact-points/{id}', [EntityContactPointController::class, 'update'])
+        ->middleware('permission:master-data.entity-contact-point.update');
+    Route::delete('entity-contact-points/{id}', [EntityContactPointController::class, 'destroy'])
+        ->middleware('permission:master-data.entity-contact-point.delete');
 });
