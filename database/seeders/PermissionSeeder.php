@@ -212,6 +212,26 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.entity-contact-point.update', 'name' => 'Update Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.entity-contact-point.delete', 'name' => 'Delete Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
+            // Supporting Entities L5-MD-S04..S07
+            ['code' => 'master-data.tag.view', 'name' => 'View Tags', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.tag.create', 'name' => 'Create Tag', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.tag.update', 'name' => 'Update Tag', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.tag.delete', 'name' => 'Delete Tag', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            ['code' => 'master-data.entity-tag.view', 'name' => 'View Entity Tags', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.entity-tag.create', 'name' => 'Attach Entity Tag', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.entity-tag.delete', 'name' => 'Detach Entity Tag', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            ['code' => 'master-data.master-data-category.view', 'name' => 'View Master Data Categories', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.master-data-category.create', 'name' => 'Create Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.master-data-category.update', 'name' => 'Update Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.master-data-category.delete', 'name' => 'Delete Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
+            ['code' => 'master-data.master-data-value.view', 'name' => 'View Master Data Values', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.master-data-value.create', 'name' => 'Create Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.master-data-value.update', 'name' => 'Update Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.master-data-value.delete', 'name' => 'Delete Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
             ['code' => 'accounting.fiscal-period.create', 'name' => 'Create Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.account.create', 'name' => 'Create Account', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.voucher.create', 'name' => 'Create Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
