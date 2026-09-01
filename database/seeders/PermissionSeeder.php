@@ -186,6 +186,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.country.update', 'name' => 'Update Country', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.country.delete', 'name' => 'Delete Country', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
+            // Unit of Measure (Tenant-Owned) L5-MD-P03
+            ['code' => 'master-data.unit-of-measure.view', 'name' => 'View Units of Measure', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'master-data.unit-of-measure.create', 'name' => 'Create Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'master-data.unit-of-measure.update', 'name' => 'Update Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+            ['code' => 'master-data.unit-of-measure.delete', 'name' => 'Delete Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
+
             // Tax Category & Tax Definition (L5-MD-T05 / T06)
             ['code' => 'master-data.tax-category.view', 'name' => 'View Tax Categories', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.tax-category.create', 'name' => 'Create Tax Category', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
