@@ -6,6 +6,8 @@ use App\Modules\MasterData\Controllers\ItemController;
 use App\Modules\MasterData\Controllers\CostCenterController;
 use App\Modules\MasterData\Controllers\WarehouseController;
 use App\Modules\MasterData\Controllers\CurrencyController;
+use App\Modules\MasterData\Controllers\TaxCategoryController;
+use App\Modules\MasterData\Controllers\TaxDefinitionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -64,7 +66,6 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])
         ->middleware('permission:master-data.warehouse.delete');
 
-
     // Currencies (Platform Master Data — no tenant_id)
     Route::get('currencies', [CurrencyController::class, 'index'])
         ->middleware('permission:master-data.currency.view');
@@ -76,4 +77,28 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.currency.update');
     Route::delete('currencies/{id}', [CurrencyController::class, 'destroy'])
         ->middleware('permission:master-data.currency.delete');
+
+    // Tax Categories (Tenant-Owned)
+    Route::get('tax-categories', [TaxCategoryController::class, 'index'])
+        ->middleware('permission:master-data.tax-category.view');
+    Route::post('tax-categories', [TaxCategoryController::class, 'store'])
+        ->middleware('permission:master-data.tax-category.create');
+    Route::get('tax-categories/{id}', [TaxCategoryController::class, 'show'])
+        ->middleware('permission:master-data.tax-category.view');
+    Route::put('tax-categories/{id}', [TaxCategoryController::class, 'update'])
+        ->middleware('permission:master-data.tax-category.update');
+    Route::delete('tax-categories/{id}', [TaxCategoryController::class, 'destroy'])
+        ->middleware('permission:master-data.tax-category.delete');
+
+    // Tax Definitions (Tenant-Owned)
+    Route::get('tax-definitions', [TaxDefinitionController::class, 'index'])
+        ->middleware('permission:master-data.tax-definition.view');
+    Route::post('tax-definitions', [TaxDefinitionController::class, 'store'])
+        ->middleware('permission:master-data.tax-definition.create');
+    Route::get('tax-definitions/{id}', [TaxDefinitionController::class, 'show'])
+        ->middleware('permission:master-data.tax-definition.view');
+    Route::put('tax-definitions/{id}', [TaxDefinitionController::class, 'update'])
+        ->middleware('permission:master-data.tax-definition.update');
+    Route::delete('tax-definitions/{id}', [TaxDefinitionController::class, 'destroy'])
+        ->middleware('permission:master-data.tax-definition.delete');
 });
