@@ -16,6 +16,7 @@ use App\Modules\MasterData\Controllers\TagController;
 use App\Modules\MasterData\Controllers\EntityTagController;
 use App\Modules\MasterData\Controllers\MasterDataCategoryController;
 use App\Modules\MasterData\Controllers\MasterDataValueController;
+use App\Modules\MasterData\Controllers\UnitOfMeasureController;
 
 /*
 |--------------------------------------------------------------------------
@@ -97,6 +98,18 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.country.update');
     Route::delete('countries/{id}', [CountryController::class, 'destroy'])
         ->middleware('permission:master-data.country.delete');
+
+    // Units of Measure (Tenant-Owned) L5-MD-P03
+    Route::get('units-of-measure', [UnitOfMeasureController::class, 'index'])
+        ->middleware('permission:master-data.unit-of-measure.view');
+    Route::post('units-of-measure', [UnitOfMeasureController::class, 'store'])
+        ->middleware('permission:master-data.unit-of-measure.create');
+    Route::get('units-of-measure/{id}', [UnitOfMeasureController::class, 'show'])
+        ->middleware('permission:master-data.unit-of-measure.view');
+    Route::put('units-of-measure/{id}', [UnitOfMeasureController::class, 'update'])
+        ->middleware('permission:master-data.unit-of-measure.update');
+    Route::delete('units-of-measure/{id}', [UnitOfMeasureController::class, 'destroy'])
+        ->middleware('permission:master-data.unit-of-measure.delete');
 
     // Tax Categories (Tenant-Owned)
     Route::get('tax-categories', [TaxCategoryController::class, 'index'])
