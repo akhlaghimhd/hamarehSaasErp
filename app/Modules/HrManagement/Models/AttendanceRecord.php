@@ -15,17 +15,24 @@ class AttendanceRecord extends Model
 
     protected $table = 'attendance_records';
     protected $primaryKey = 'attendance_id';
-    
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'employee_id',
         'date',
         'check_in',
         'check_out',
-        'status', // 1: Present, 2: Absent, 3: On Leave, 4: Half-day
+        'status',
         'work_hours',
         'overtime_hours',
         'notes',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -35,11 +42,9 @@ class AttendanceRecord extends Model
         'status' => 'integer',
         'work_hours' => 'decimal:2',
         'overtime_hours' => 'decimal:2',
+        'row_version' => 'integer',
     ];
 
-    /**
-     * ارتباط با موجودیت کارمند درون همین ماژول
-     */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_id', 'employee_id');
