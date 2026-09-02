@@ -2,7 +2,6 @@
 
 namespace App\Modules\ProjectManagement\Models;
 
-use App\Base\Models\BaseModel;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +15,9 @@ class ProjectTask extends Model
     protected $table = 'project_tasks';
     protected $primaryKey = 'task_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'project_id',
@@ -26,7 +28,10 @@ class ProjectTask extends Model
         'priority',
         'start_date',
         'due_date',
-        'row_version'
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -34,16 +39,14 @@ class ProjectTask extends Model
         'due_date'    => 'date',
         'status'      => 'integer',
         'priority'    => 'integer',
-        'row_version' => 'integer'
+        'row_version' => 'integer',
     ];
 
-    // Status Constants
     public const STATUS_TODO = 1;
     public const STATUS_IN_PROGRESS = 2;
     public const STATUS_REVIEW = 3;
     public const STATUS_DONE = 4;
 
-    // Priority Constants
     public const PRIORITY_LOW = 1;
     public const PRIORITY_MEDIUM = 2;
     public const PRIORITY_HIGH = 3;
