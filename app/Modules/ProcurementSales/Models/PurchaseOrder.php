@@ -15,23 +15,31 @@ class PurchaseOrder extends Model
     protected $table = 'purchase_orders';
     protected $primaryKey = 'purchase_order_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
-        'supplier_id', // UUID منطقی - اشاره به MasterData (BusinessPartner)
+        'supplier_id',
         'order_number',
         'order_date',
         'expected_delivery_date',
         'total_amount',
-        'status', // 1: Draft, 2: Approved, 3: Completed, 4: Cancelled
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'order_date' => 'date',
         'expected_delivery_date' => 'date',
         'total_amount' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
     ];
 
-    // ارتباط درون ماژولی (مجاز)
     public function items()
     {
         return $this->hasMany(PurchaseOrderItem::class, 'purchase_order_id', 'purchase_order_id');
