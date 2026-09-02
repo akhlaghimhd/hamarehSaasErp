@@ -7,10 +7,12 @@ use Illuminate\Support\ServiceProvider;
 use App\Contracts\MasterData\ItemLookupContract;
 use App\Contracts\MasterData\WarehouseLookupContract;
 use App\Contracts\Organization\CompanyLookupContract;
+use App\Contracts\Accounting\VoucherPostingContract;
 
 use App\Modules\MasterData\Services\ItemLookupService;
 use App\Modules\MasterData\Services\WarehouseLookupService;
 use App\Modules\Organization\Services\CompanyLookupService;
+use App\Modules\Accounting\Services\VoucherPostingService;
 
 /**
  * Binds Service Contracts (interfaces) to their concrete implementations.
@@ -28,11 +30,8 @@ class ContractsServiceProvider extends ServiceProvider
         // Organization contracts
         $this->app->bind(CompanyLookupContract::class, CompanyLookupService::class);
 
-        // Accounting contracts (VoucherPosting) will be bound later when implementation is ready
-        // $this->app->bind(
-        //     \App\Contracts\Accounting\VoucherPostingContract::class,
-        //     \App\Modules\Accounting\Services\VoucherPostingService::class
-        // );
+        // Accounting contracts
+        $this->app->bind(VoucherPostingContract::class, VoucherPostingService::class);
     }
 
     public function boot(): void
