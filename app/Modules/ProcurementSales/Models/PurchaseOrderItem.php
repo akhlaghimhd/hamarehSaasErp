@@ -6,28 +6,36 @@ use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PurchaseOrderItem extends Model
 {
-    use HasFactory, HasUuids, TenantScoped;
+    use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'purchase_order_items';
     protected $primaryKey = 'purchase_order_item_id';
-    public $timestamps = false; // معمولاً اقلام سفارش به تنهایی لاگ زمان نمی‌خواهند
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
         'purchase_order_id',
-        'item_id', // UUID منطقی - اشاره به MasterData (Item)
+        'item_id',
         'quantity',
         'unit_price',
         'total_price',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'quantity' => 'decimal:4',
         'unit_price' => 'decimal:4',
         'total_price' => 'decimal:4',
+        'row_version' => 'integer',
     ];
 
     public function purchaseOrder()
