@@ -13,22 +13,25 @@ class ProductionOrder extends Model
     use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'mfg_production_orders';
-    
     protected $primaryKey = 'production_order_id';
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
         'order_number',
-        'item_id', // Logical Reference to MasterData (inv_items)
-        'bom_id',  // Physical FK to mfg_boms
+        'item_id',
+        'bom_id',
         'planned_quantity',
         'produced_quantity',
         'start_date',
         'end_date',
-        'status', // 1: Draft, 2: Released, 3: In Progress, 4: Completed, 5: Cancelled
-        'row_version',
+        'status',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -40,9 +43,6 @@ class ProductionOrder extends Model
         'row_version' => 'integer',
     ];
 
-    /**
-     * ارتباط با سربرگ فرمولاسیون (BOM)
-     */
     public function bom(): BelongsTo
     {
         return $this->belongsTo(Bom::class, 'bom_id', 'bom_id');
