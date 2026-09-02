@@ -4,28 +4,35 @@ namespace App\Modules\Manufacturing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionLog extends Model
 {
-    use HasUuids, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'mfg_production_logs';
-    
     protected $primaryKey = 'production_log_id';
 
-    public $timestamps = false; // طبق مایگریشن فقط logged_at استفاده می‌شود
+    public $incrementing = false;
+    protected $keyType = 'string';
+
+    public $timestamps = false;
 
     protected $fillable = [
         'tenant_id',
-        'production_order_id', // Physical FK
-        'routing_id',          // Optional Physical FK
-        'log_type',            // 1: Material Consumption, 2: Labor/Machine Time, 3: Scrap
-        'item_id',             // Logical Reference to MasterData (inv_items)
+        'production_order_id',
+        'routing_id',
+        'log_type',
+        'item_id',
         'quantity_consumed',
         'hours_spent',
-        'logged_at'
+        'logged_at',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -33,6 +40,7 @@ class ProductionLog extends Model
         'quantity_consumed' => 'decimal:4',
         'hours_spent' => 'decimal:4',
         'logged_at' => 'datetime',
+        'row_version' => 'integer',
     ];
 
     public function productionOrder(): BelongsTo
