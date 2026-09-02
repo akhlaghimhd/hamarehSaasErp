@@ -4,14 +4,18 @@ namespace App\Modules\Accounting\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 
 class Account extends Model
 {
-    use HasUuids, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'fin_accounts';
     protected $primaryKey = 'account_id';
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
@@ -19,15 +23,20 @@ class Account extends Model
         'code',
         'name',
         'account_type',
-        'level', // سطح در درخت (مثلاً 1=گروه، 2=کل، 3=معین)
+        'level',
         'description',
         'is_active',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'account_type' => 'integer',
         'level' => 'integer',
         'is_active' => 'boolean',
+        'row_version' => 'integer',
     ];
 
     // ارتباط درختی با پدر
