@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Contracts;
 
-use App\Contracts\MasterData\WarehouseLookupContract;
+use App\Modules\MasterData\Contracts\WarehouseLookupContract;
 use App\Modules\MasterData\Models\Warehouse;
 use App\Modules\MasterData\Services\WarehouseLookupService;
 use Illuminate\Support\Facades\Context;

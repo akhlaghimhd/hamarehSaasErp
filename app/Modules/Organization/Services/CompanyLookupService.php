@@ -2,13 +2,9 @@
 
 namespace App\Modules\Organization\Services;
 
-use App\Contracts\Organization\CompanyLookupContract;
+use App\Modules\Organization\Contracts\CompanyLookupContract;
 use App\Modules\Organization\Models\Company;
 
-/**
- * Concrete implementation of CompanyLookupContract.
- * Owned by Organization module (Single Source of Truth).
- */
 class CompanyLookupService implements CompanyLookupContract
 {
     public function findById(string $companyId): ?object

@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Contracts;
 
-use App\Contracts\Organization\CompanyLookupContract;
+use App\Modules\Organization\Contracts\CompanyLookupContract;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Services\CompanyLookupService;
 use Illuminate\Support\Facades\Context;

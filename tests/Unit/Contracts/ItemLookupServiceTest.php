@@ -2,7 +2,7 @@
 
 namespace Tests\Unit\Contracts;
 
-use App\Contracts\MasterData\ItemLookupContract;
+use App\Modules\MasterData\Contracts\ItemLookupContract;
 use App\Modules\MasterData\Models\Item;
 use App\Modules\MasterData\Services\ItemLookupService;
 use Illuminate\Support\Facades\Context;
@@ -20,7 +20,6 @@ class ItemLookupServiceTest extends TestCase
 
         $this->service = app(ItemLookupContract::class);
 
-        // Ensure we have a tenant context for TenantScoped models
         $tenantId = (string) Str::uuid();
         Context::add('tenant_id', $tenantId);
         Context::add('user_id', (string) Str::uuid());
@@ -61,7 +60,7 @@ class ItemLookupServiceTest extends TestCase
             'name'       => 'Inactive Item',
             'item_type'  => 1,
             'base_uom'   => 'PCS',
-            'status'     => 2, // Inactive
+            'status'     => 2,
             'created_by' => Context::get('user_id'),
         ]);
 

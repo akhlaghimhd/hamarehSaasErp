@@ -2,20 +2,16 @@
 
 namespace App\Modules\MasterData\Services;
 
-use App\Contracts\MasterData\ItemLookupContract;
+use App\Modules\MasterData\Contracts\ItemLookupContract;
 use App\Modules\MasterData\Models\Item;
 
-/**
- * Concrete implementation of ItemLookupContract.
- * Owned by MasterData module (Single Source of Truth).
- */
 class ItemLookupService implements ItemLookupContract
 {
     public function findById(string $itemId): ?object
     {
         return Item::query()
             ->where('item_id', $itemId)
-            ->where('status', 1) // Active only
+            ->where('status', 1)
             ->first();
     }
 

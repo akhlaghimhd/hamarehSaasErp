@@ -2,7 +2,7 @@
 
 namespace App\Modules\Accounting\Services;
 
-use App\Contracts\Accounting\VoucherPostingContract;
+use App\Modules\Accounting\Contracts\VoucherPostingContract;
 use App\Modules\Accounting\Models\FinancialVoucher;
 use App\Modules\Accounting\Models\FinancialVoucherItem;
 use Illuminate\Support\Facades\Context;
@@ -10,10 +10,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
-/**
- * Concrete implementation of VoucherPostingContract.
- * Allows other modules to post accounting vouchers without direct model coupling.
- */
 class VoucherPostingService implements VoucherPostingContract
 {
     public function postVoucher(array $header, array $lines): string
@@ -34,7 +30,6 @@ class VoucherPostingService implements VoucherPostingContract
                 $totalCredit += (float) ($line['credit'] ?? 0);
             }
 
-            // Basic balance check
             if (round($totalDebit, 4) !== round($totalCredit, 4)) {
                 throw new InvalidArgumentException('Voucher lines are not balanced (debit != credit).');
             }
@@ -46,7 +41,7 @@ class VoucherPostingService implements VoucherPostingContract
                 'total_amount'     => $totalDebit,
                 'reference_number' => $header['reference_number'] ?? null,
                 'currency_id'      => $header['currency_id'] ?? null,
-                'status'           => $header['status'] ?? 1, // 1 = Draft by default
+                'status'           => $header['status'] ?? 1,
                 'created_by'       => $userId,
                 'row_version'      => 1,
             ]);
@@ -65,7 +60,6 @@ class VoucherPostingService implements VoucherPostingContract
                 ]);
             }
 
-            // Outbox event
             DB::table('event_outbox')->insert([
                 'event_id'       => (string) Str::uuid(),
                 'tenant_id'      => $tenantId,
@@ -73,10 +67,10 @@ class VoucherPostingService implements VoucherPostingContract
                 'aggregate_id'   => $voucher->voucher_id,
                 'event_type'     => 'accounting.voucher.posted.v1',
                 'payload'        => json_encode([
-                    'voucher_id'       => $voucher->voucher_id,
-                    'source_module'    => $header['source_module'] ?? null,
+                    'voucher_id'         => $voucher->voucher_id,
+                    'source_module'      => $header['source_module'] ?? null,
                     'source_document_id' => $header['source_document_id'] ?? null,
-                    'total_amount'     => $totalDebit,
+                    'total_amount'       => $totalDebit,
                 ]),
                 'status'         => 1,
                 'retry_count'    => 0,
@@ -96,7 +90,7 @@ class VoucherPostingService implements VoucherPostingContract
             'description'        => 'Reversal of ' . $original->reference_number . ' – ' . $reason,
             'reference_number'   => 'REV-' . ($original->reference_number ?? $voucherId),
             'currency_id'        => $original->currency_id,
-            'status'             => 2, // Posted
+            'status'             => 2,
             'source_module'      => 'accounting',
             'source_document_id' => $voucherId,
         ];
@@ -105,8 +99,8 @@ class VoucherPostingService implements VoucherPostingContract
         foreach ($original->items as $item) {
             $lines[] = [
                 'account_id'     => $item->account_id,
-                'debit'          => $item->credit, // swap
-                'credit'         => $item->debit,  // swap
+                'debit'          => $item->credit,
+                'credit'         => $item->debit,
                 'cost_center_id' => $item->cost_center_id,
                 'description'    => 'Reversal: ' . ($item->description ?? ''),
             ];
