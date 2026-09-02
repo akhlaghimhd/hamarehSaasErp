@@ -2,20 +2,21 @@
 
 namespace App\Modules\ProjectManagement\Models;
 
-use App\Base\Models\BaseModel;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ResourceAllocation extends Model
 {
-    use HasFactory, HasUuids, TenantScoped;
+    use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'resource_allocations';
     protected $primaryKey = 'allocation_id';
-    
-    public $timestamps = false; // Based on your DB schema, no updated_at/created_at specified
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
@@ -24,18 +25,22 @@ class ResourceAllocation extends Model
         'resource_id',
         'allocated_quantity',
         'start_date',
-        'end_date'
+        'end_date',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'resource_type'      => 'integer',
         'allocated_quantity' => 'decimal:4',
         'start_date'         => 'date',
-        'end_date'           => 'date'
+        'end_date'           => 'date',
+        'row_version'        => 'integer',
     ];
 
-    // Resource Type Constants (Polymorphic Logical Reference)
-    public const TYPE_HUMAN    = 1; // Maps to HrManagement -> employees
-    public const TYPE_MACHINE  = 2; // Maps to Manufacturing -> mfg_work_centers
-    public const TYPE_MATERIAL = 3; // Maps to MasterData -> inv_items
+    public const TYPE_HUMAN    = 1;
+    public const TYPE_MACHINE  = 2;
+    public const TYPE_MATERIAL = 3;
 }
