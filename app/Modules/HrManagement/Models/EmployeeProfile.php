@@ -15,7 +15,10 @@ class EmployeeProfile extends Model
 
     protected $table = 'employee_profiles';
     protected $primaryKey = 'profile_id';
-    
+
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'employee_id',
@@ -23,21 +26,23 @@ class EmployeeProfile extends Model
         'last_name',
         'national_code',
         'birth_date',
-        'gender', // 1: Male, 2: Female, 3: Other
-        'marital_status', // 1: Single, 2: Married
+        'gender',
+        'marital_status',
         'address',
         'emergency_contact',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'birth_date' => 'date',
         'gender' => 'integer',
         'marital_status' => 'integer',
+        'row_version' => 'integer',
     ];
 
-    /**
-     * ارتباط یک‌به‌یک با موجودیت کارمند درون همین ماژول
-     */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'employee_id', 'employee_id');
