@@ -12,22 +12,27 @@ class Employee extends Model
     use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'employees';
+    protected $primaryKey = 'employee_id';
 
-    protected $keyType = 'string';
     public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'business_partner_id', // ارجاع منطقی به MasterData
-        'user_id',             // ارجاع منطقی به IdentityCore
+        'business_partner_id',
+        'user_id',
         'employee_code',
-        'employment_type',     // 1: Full Time, 2: Part Time, 3: Contract
+        'employment_type',
         'hire_date',
         'termination_date',
         'job_title',
-        'department_id',       // ارجاع منطقی به CostCenter در MasterData
+        'department_id',
         'branch_id',
-        'status',              // 1: Active, 2: Suspended, 3: Terminated
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -35,5 +40,6 @@ class Employee extends Model
         'termination_date' => 'date',
         'employment_type'  => 'integer',
         'status'           => 'integer',
+        'row_version'      => 'integer',
     ];
 }
