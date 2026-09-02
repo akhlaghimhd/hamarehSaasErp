@@ -3,4 +3,5 @@
 return [
     App\Providers\AppServiceProvider::class,
     App\Base\Providers\ModuleServiceProvider::class,
+    App\Providers\ContractsServiceProvider::class,
 ];
