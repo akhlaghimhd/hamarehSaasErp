@@ -4,29 +4,33 @@ namespace App\Modules\Manufacturing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionRouting extends Model
 {
-    use HasUuids, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'mfg_production_routing';
-    
     protected $primaryKey = 'routing_id';
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'production_order_id', // Physical FK
-        'work_center_id',      // Physical FK
+        'production_order_id',
+        'work_center_id',
         'operation_sequence',
         'operation_name',
         'standard_setup_time_hours',
         'standard_run_time_hours',
-        'status', // 1: Pending, 2: Active, 3: Completed
-        'row_version',
+        'status',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
