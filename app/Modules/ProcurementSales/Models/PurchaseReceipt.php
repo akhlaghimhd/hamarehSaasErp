@@ -15,21 +15,29 @@ class PurchaseReceipt extends Model
     protected $table = 'purchase_receipts';
     protected $primaryKey = 'receipt_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
-        'purchase_order_id', // UUID منطقی - اشاره به سفارش خرید (می‌تواند Null باشد اگر رسید بدون سفارش است)
-        'supplier_id',       // UUID منطقی - اشاره به MasterData
-        'warehouse_id',      // UUID منطقی - اشاره به MasterData (انباری که کالا وارد آن می‌شود)
+        'purchase_order_id',
+        'supplier_id',
+        'warehouse_id',
         'receipt_number',
         'receipt_date',
         'total_amount',
-        'status',            // 1: Draft, 2: Approved, 3: Cancelled
-        'row_version'
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'receipt_date' => 'date',
         'total_amount' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
     ];
 
     public function items()
