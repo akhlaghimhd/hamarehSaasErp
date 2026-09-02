@@ -2,7 +2,6 @@
 
 namespace App\Modules\ProjectManagement\Models;
 
-use App\Base\Models\BaseModel; // فرض بر این است که مدل پایه با HasUuids در اینجا قرار دارد
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +15,9 @@ class Project extends Model
     protected $table = 'projects';
     protected $primaryKey = 'project_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'project_code',
@@ -25,7 +27,10 @@ class Project extends Model
         'end_date',
         'actual_end_date',
         'status',
-        'row_version'
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
@@ -33,10 +38,9 @@ class Project extends Model
         'end_date' => 'date',
         'actual_end_date' => 'date',
         'status' => 'integer',
-        'row_version' => 'integer'
+        'row_version' => 'integer',
     ];
 
-    // Status Constants (Based on your Architecture 01_project_management_tables.pdf)
     public const STATUS_CANCELLED = 0;
     public const STATUS_PLANNING = 1;
     public const STATUS_ACTIVE = 2;
