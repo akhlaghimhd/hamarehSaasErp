@@ -12,27 +12,30 @@ class QualityInspection extends Model
     use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'mfg_quality_inspections';
-    
     protected $primaryKey = 'inspection_id';
+
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'inspection_type', // 1: Incoming, 2: Production Output, 3: Final Product
-        'source_document_type', // e.g., PRODUCTION_ORDER, PURCHASE_RECEIPT
-        'source_document_id', // Logical Reference
-        'item_id', // Logical Reference to inv_items
-        'batch_id', // Logical Reference to inv_stock_batches
+        'inspection_type',
+        'source_document_type',
+        'source_document_id',
+        'item_id',
+        'batch_id',
         'inspection_number',
         'inspection_date',
-        'inspector_user_id', // Logical Reference to Identity layer
+        'inspector_user_id',
         'sample_quantity',
         'accepted_quantity',
         'rejected_quantity',
-        'qc_status', // 1: Pending, 2: Approved, 3: Rejected, 4: Quarantine
+        'qc_status',
         'notes',
-        'row_version',
         'created_by',
-        'updated_by'
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
