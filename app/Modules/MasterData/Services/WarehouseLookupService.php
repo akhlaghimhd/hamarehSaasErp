@@ -2,10 +2,13 @@
 
 namespace App\Modules\MasterData\Services;
 
-use App\Modules\MasterData\Contracts\WarehouseLookupContract;
 use App\Modules\MasterData\Models\Warehouse;
 
-class WarehouseLookupService implements WarehouseLookupContract
+/**
+ * Lookup service for Warehouse – Single Source of Truth in MasterData.
+ * Other modules must use this Service (not the Warehouse model directly).
+ */
+class WarehouseLookupService
 {
     public function findById(string $warehouseId): ?object
     {

@@ -2,7 +2,6 @@
 
 namespace App\Modules\Accounting\Services;
 
-use App\Modules\Accounting\Contracts\VoucherPostingContract;
 use App\Modules\Accounting\Models\FinancialVoucher;
 use App\Modules\Accounting\Models\FinancialVoucherItem;
 use Illuminate\Support\Facades\Context;
@@ -10,7 +9,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
-class VoucherPostingService implements VoucherPostingContract
+/**
+ * Service for posting financial vouchers from other modules.
+ * Owned by Accounting. Other modules call this Service (not models directly).
+ */
+class VoucherPostingService
 {
     public function postVoucher(array $header, array $lines): string
     {

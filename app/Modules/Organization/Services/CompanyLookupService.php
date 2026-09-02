@@ -2,10 +2,13 @@
 
 namespace App\Modules\Organization\Services;
 
-use App\Modules\Organization\Contracts\CompanyLookupContract;
 use App\Modules\Organization\Models\Company;
 
-class CompanyLookupService implements CompanyLookupContract
+/**
+ * Lookup service for Company – owned by Organization module.
+ * Other modules must use this Service (not the Company model directly).
+ */
+class CompanyLookupService
 {
     public function findById(string $companyId): ?object
     {

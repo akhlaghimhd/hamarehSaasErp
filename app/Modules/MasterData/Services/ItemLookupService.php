@@ -2,10 +2,14 @@
 
 namespace App\Modules\MasterData\Services;
 
-use App\Modules\MasterData\Contracts\ItemLookupContract;
 use App\Modules\MasterData\Models\Item;
 
-class ItemLookupService implements ItemLookupContract
+/**
+ * Lookup service for Item – Single Source of Truth in MasterData.
+ * Other modules must use this Service (not the Item model directly).
+ * Per APP folder standard: inter-module access via destination module Services.
+ */
+class ItemLookupService
 {
     public function findById(string $itemId): ?object
     {
