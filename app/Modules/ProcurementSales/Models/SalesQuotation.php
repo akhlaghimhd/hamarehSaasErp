@@ -15,6 +15,9 @@ class SalesQuotation extends Model
     protected $table = 'sales_quotations';
     protected $primaryKey = 'quotation_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'customer_id',
@@ -22,14 +25,19 @@ class SalesQuotation extends Model
         'quotation_date',
         'valid_until',
         'total_amount',
-        'status', // 1: Draft, 2: Sent, 3: Accepted, 4: Rejected
-        'row_version'
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'quotation_date' => 'date',
         'valid_until' => 'date',
         'total_amount' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
     ];
 
     public function items()
