@@ -15,21 +15,29 @@ class ReturnOrder extends Model
     protected $table = 'return_orders';
     protected $primaryKey = 'return_order_id';
 
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $fillable = [
         'tenant_id',
         'business_partner_id',
-        'source_document_type', // e.g., 'SALES_DELIVERY', 'PURCHASE_RECEIPT'
+        'source_document_type',
         'source_document_id',
         'return_number',
         'return_date',
         'total_amount',
-        'status', // 1: Pending, 2: Approved, 3: Completed, 4: Rejected
-        'row_version'
+        'status',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
         'return_date' => 'date',
         'total_amount' => 'decimal:4',
+        'status' => 'integer',
+        'row_version' => 'integer',
     ];
 
     public function items()
