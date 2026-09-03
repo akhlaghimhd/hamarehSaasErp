@@ -43,9 +43,19 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('/accounts/{id}', [AccountController::class, 'destroy'])
         ->middleware('permission:accounting.account.delete');
 
-    // Vouchers (Headers)
+    // Vouchers — full CRUD + post (L6-ACC-02.3)
+    Route::get('/vouchers', [FinancialVoucherController::class, 'index'])
+        ->middleware('permission:accounting.voucher.view');
     Route::post('/vouchers', [FinancialVoucherController::class, 'store'])
         ->middleware('permission:accounting.voucher.create');
+    Route::get('/vouchers/{id}', [FinancialVoucherController::class, 'show'])
+        ->middleware('permission:accounting.voucher.view');
+    Route::put('/vouchers/{id}', [FinancialVoucherController::class, 'update'])
+        ->middleware('permission:accounting.voucher.update');
+    Route::post('/vouchers/{id}/post', [FinancialVoucherController::class, 'post'])
+        ->middleware('permission:accounting.voucher.post');
+    Route::delete('/vouchers/{id}', [FinancialVoucherController::class, 'destroy'])
+        ->middleware('permission:accounting.voucher.delete');
 
     // Voucher Items (Lines)
     Route::post('/voucher-items', [FinancialVoucherItemController::class, 'store'])
