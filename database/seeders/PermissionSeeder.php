@@ -223,8 +223,14 @@ class PermissionSeeder extends Seeder
             ['code' => 'accounting.account.update', 'name' => 'Update Account', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
             ['code' => 'accounting.account.delete', 'name' => 'Delete Account', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
-            // Accounting — Voucher / Tax (create only for now)
+            // Accounting — Voucher (L6-ACC-02.3)
+            ['code' => 'accounting.voucher.view', 'name' => 'View Financial Vouchers', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.voucher.create', 'name' => 'Create Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.voucher.update', 'name' => 'Update Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
+            ['code' => 'accounting.voucher.post', 'name' => 'Post Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'EXECUTE'],
+            ['code' => 'accounting.voucher.delete', 'name' => 'Delete Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
+
+            // Accounting — Voucher Item / Tax (create only for now)
             ['code' => 'accounting.voucher-item.create', 'name' => 'Create Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.tax-transaction.create', 'name' => 'Create Tax Transaction', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
 
