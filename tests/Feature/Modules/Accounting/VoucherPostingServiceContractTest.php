@@ -81,12 +81,11 @@ class VoucherPostingServiceContractTest extends TestCase
         /** @var VoucherPostingService $service */
         $service = app(VoucherPostingService::class);
 
-        // Simulate Inventory goods receipt posting into Accounting
         $header = [
             'voucher_date'       => '2026-04-01',
             'description'        => 'Goods receipt from PO-100',
             'reference_number'   => 'INV-GR-100',
-            'status'             => 2, // Posted immediately by inter-module path
+            'status'             => 2,
             'source_module'      => 'inventory',
             'source_document_id' => (string) Str::uuid(),
         ];
@@ -148,6 +147,7 @@ class VoucherPostingServiceContractTest extends TestCase
         $service->postVoucher(
             [
                 'voucher_date'     => '2026-04-01',
+                'description'      => 'Unbalanced attempt',
                 'reference_number' => 'BAD-1',
                 'source_module'    => 'inventory',
             ],
@@ -172,6 +172,7 @@ class VoucherPostingServiceContractTest extends TestCase
         $service->postVoucher(
             [
                 'voucher_date'     => '2026-04-01',
+                'description'      => 'Empty attempt',
                 'reference_number' => 'BAD-2',
                 'source_module'    => 'sales',
             ],
@@ -187,6 +188,7 @@ class VoucherPostingServiceContractTest extends TestCase
         $originalId = $service->postVoucher(
             [
                 'voucher_date'     => '2026-04-01',
+                'description'      => 'Original GR',
                 'reference_number' => 'ORIG-1',
                 'status'           => 2,
                 'source_module'    => 'inventory',
@@ -206,7 +208,6 @@ class VoucherPostingServiceContractTest extends TestCase
             'status'     => 2,
         ]);
 
-        // Reversal swaps debit/credit
         $this->assertDatabaseHas('fin_voucher_items', [
             'voucher_id' => $reversalId,
             'account_id' => $this->accountDebitId,

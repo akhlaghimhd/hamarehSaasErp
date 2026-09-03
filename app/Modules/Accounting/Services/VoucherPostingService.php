@@ -37,10 +37,16 @@ class VoucherPostingService
                 throw new InvalidArgumentException('Voucher lines are not balanced (debit != credit).');
             }
 
+            // description is NOT NULL in fin_vouchers — default empty for inter-module callers
+            $description = $header['description'] ?? '';
+            if ($description === null || $description === '') {
+                $description = $header['reference_number'] ?? 'Posted voucher';
+            }
+
             $voucher = FinancialVoucher::create([
                 'tenant_id'        => $tenantId,
                 'voucher_date'     => $header['voucher_date'] ?? now()->toDateString(),
-                'description'      => $header['description'] ?? null,
+                'description'      => $description,
                 'total_amount'     => $totalDebit,
                 'reference_number' => $header['reference_number'] ?? null,
                 'currency_id'      => $header['currency_id'] ?? null,
@@ -57,7 +63,7 @@ class VoucherPostingService
                     'debit'          => $line['debit'] ?? 0,
                     'credit'         => $line['credit'] ?? 0,
                     'cost_center_id' => $line['cost_center_id'] ?? null,
-                    'description'    => $line['description'] ?? null,
+                    'description'    => $line['description'] ?? ($header['reference_number'] ?? 'Line'),
                     'created_by'     => $userId,
                     'row_version'    => 1,
                 ]);
@@ -90,7 +96,7 @@ class VoucherPostingService
 
         $header = [
             'voucher_date'       => now()->toDateString(),
-            'description'        => 'Reversal of ' . $original->reference_number . ' – ' . $reason,
+            'description'        => 'Reversal of ' . ($original->reference_number ?? $voucherId) . ' – ' . $reason,
             'reference_number'   => 'REV-' . ($original->reference_number ?? $voucherId),
             'currency_id'        => $original->currency_id,
             'status'             => 2,
