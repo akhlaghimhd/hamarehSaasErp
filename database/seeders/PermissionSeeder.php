@@ -111,41 +111,29 @@ class PermissionSeeder extends Seeder
     private function getBasePermissions(): array
     {
         return [
-            // Identity — Permission
             ['code' => 'identity.permission.view', 'name' => 'View Permissions', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.permission.create', 'name' => 'Create Permission', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.permission.update', 'name' => 'Update Permission', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.permission.delete', 'name' => 'Delete Permission', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
-
-            // Identity — Role
             ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.role.create', 'name' => 'Create Role', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.role.update', 'name' => 'Update Role', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.role.delete', 'name' => 'Delete Role', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
             ['code' => 'identity.role.assign', 'name' => 'Assign Role to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.role.assign-permissions', 'name' => 'Assign Permissions to Role', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
-
-            // Identity — User / membership
             ['code' => 'identity.user.view', 'name' => 'View Tenant Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.user.create', 'name' => 'Create Tenant User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.update', 'name' => 'Update Tenant User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.user.delete', 'name' => 'Delete Tenant User', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
-
-            // Identity — Profile
             ['code' => 'identity.profile.view', 'name' => 'View User Profiles', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.profile.update', 'name' => 'Update User Profiles', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.profile.delete', 'name' => 'Delete User Profiles', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
-
-            // Identity — Membership history (read-only audit)
             ['code' => 'identity.membership_history.view', 'name' => 'View Membership History', 'module_name' => 'Identity', 'action_type' => 'READ'],
-
-            // Identity — Scope
             ['code' => 'identity.scope.view', 'name' => 'View Scopes', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.scope.create', 'name' => 'Create Scope', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.scope.update', 'name' => 'Update Scope', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.scope.delete', 'name' => 'Delete Scope', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
             ['code' => 'identity.scope.assign', 'name' => 'Assign Scope to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
-
             ['code' => 'organization.company.view', 'name' => 'View Companies', 'module_name' => 'Organization', 'action_type' => 'READ'],
             ['code' => 'organization.company.create', 'name' => 'Create Company', 'module_name' => 'Organization', 'action_type' => 'CREATE'],
             ['code' => 'organization.company.update', 'name' => 'Update Company', 'module_name' => 'Organization', 'action_type' => 'UPDATE'],
@@ -158,7 +146,6 @@ class PermissionSeeder extends Seeder
             ['code' => 'organization.department.create', 'name' => 'Create Department', 'module_name' => 'Organization', 'action_type' => 'CREATE'],
             ['code' => 'organization.department.update', 'name' => 'Update Department', 'module_name' => 'Organization', 'action_type' => 'UPDATE'],
             ['code' => 'organization.department.delete', 'name' => 'Delete Department', 'module_name' => 'Organization', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.business-partner.view', 'name' => 'View Business Partners', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.business-partner.create', 'name' => 'Create Business Partner', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.business-partner.update', 'name' => 'Update Business Partner', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
@@ -179,20 +166,14 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.currency.create', 'name' => 'Create Currency', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.currency.update', 'name' => 'Update Currency', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.currency.delete', 'name' => 'Delete Currency', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
-            // Country (Platform Master Data) L5-MD-P02
             ['code' => 'master-data.country.view', 'name' => 'View Countries', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.country.create', 'name' => 'Create Country', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.country.update', 'name' => 'Update Country', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.country.delete', 'name' => 'Delete Country', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
-            // Unit of Measure (Tenant-Owned) L5-MD-P03
             ['code' => 'master-data.unit-of-measure.view', 'name' => 'View Units of Measure', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.unit-of-measure.create', 'name' => 'Create Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.unit-of-measure.update', 'name' => 'Update Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.unit-of-measure.delete', 'name' => 'Delete Unit of Measure', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
-            // Tax Category & Tax Definition (L5-MD-T05 / T06)
             ['code' => 'master-data.tax-category.view', 'name' => 'View Tax Categories', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.tax-category.create', 'name' => 'Create Tax Category', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.tax-category.update', 'name' => 'Update Tax Category', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
@@ -201,45 +182,40 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.tax-definition.create', 'name' => 'Create Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.tax-definition.update', 'name' => 'Update Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.tax-definition.delete', 'name' => 'Delete Tax Definition', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
-            // Supporting Entities L5-MD-S01..S03
             ['code' => 'master-data.bank-account.view', 'name' => 'View Bank Accounts', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.bank-account.create', 'name' => 'Create Bank Account', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.bank-account.update', 'name' => 'Update Bank Account', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.bank-account.delete', 'name' => 'Delete Bank Account', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.entity-address.view', 'name' => 'View Entity Addresses', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.entity-address.create', 'name' => 'Create Entity Address', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.entity-address.update', 'name' => 'Update Entity Address', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.entity-address.delete', 'name' => 'Delete Entity Address', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.entity-contact-point.view', 'name' => 'View Entity Contact Points', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.entity-contact-point.create', 'name' => 'Create Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.entity-contact-point.update', 'name' => 'Update Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.entity-contact-point.delete', 'name' => 'Delete Entity Contact Point', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
-            // Supporting Entities L5-MD-S04..S07
             ['code' => 'master-data.tag.view', 'name' => 'View Tags', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.tag.create', 'name' => 'Create Tag', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.tag.update', 'name' => 'Update Tag', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.tag.delete', 'name' => 'Delete Tag', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.entity-tag.view', 'name' => 'View Entity Tags', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.entity-tag.create', 'name' => 'Attach Entity Tag', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.entity-tag.delete', 'name' => 'Detach Entity Tag', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.master-data-category.view', 'name' => 'View Master Data Categories', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.master-data-category.create', 'name' => 'Create Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.master-data-category.update', 'name' => 'Update Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.master-data-category.delete', 'name' => 'Delete Master Data Category', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
-
             ['code' => 'master-data.master-data-value.view', 'name' => 'View Master Data Values', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'master-data.master-data-value.create', 'name' => 'Create Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
             ['code' => 'master-data.master-data-value.update', 'name' => 'Update Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.master-data-value.delete', 'name' => 'Delete Master Data Value', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
-            // Accounting — Fiscal Period
+            // Accounting — Fiscal Period (L6-ACC-02.2)
+            ['code' => 'accounting.fiscal-period.view', 'name' => 'View Fiscal Periods', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.fiscal-period.create', 'name' => 'Create Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.fiscal-period.update', 'name' => 'Update Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
+            ['code' => 'accounting.fiscal-period.close', 'name' => 'Close Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'EXECUTE'],
+            ['code' => 'accounting.fiscal-period.delete', 'name' => 'Delete Fiscal Period', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
             // Accounting — Chart of Accounts (L6-ACC-02.1)
             ['code' => 'accounting.account.view', 'name' => 'View Accounts', 'module_name' => 'Accounting', 'action_type' => 'READ'],
@@ -277,7 +253,6 @@ class PermissionSeeder extends Seeder
             ['code' => 'saas-admin.coupon.create', 'name' => 'Create Coupon', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE'],
             ['code' => 'saas-admin.coupon.view', 'name' => 'View Coupons', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
 
-            // Partner Layer permissions (subset — full list preserved from prior seeder)
             ['code' => 'partner.partner.view', 'name' => 'View Partners', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
             ['code' => 'partner.partner.create', 'name' => 'Create Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
             ['code' => 'partner.partner.update', 'name' => 'Update Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
