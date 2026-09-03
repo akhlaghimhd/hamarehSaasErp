@@ -230,9 +230,17 @@ class PermissionSeeder extends Seeder
             ['code' => 'accounting.voucher.post', 'name' => 'Post Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'EXECUTE'],
             ['code' => 'accounting.voucher.delete', 'name' => 'Delete Financial Voucher', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
-            // Accounting — Voucher Item / Tax (create only for now)
+            // Accounting — Voucher Item (L6-ACC-02.4)
+            ['code' => 'accounting.voucher-item.view', 'name' => 'View Voucher Items', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.voucher-item.create', 'name' => 'Create Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.voucher-item.update', 'name' => 'Update Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
+            ['code' => 'accounting.voucher-item.delete', 'name' => 'Delete Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
+
+            // Accounting — Tax Transaction (L6-ACC-02.4)
+            ['code' => 'accounting.tax-transaction.view', 'name' => 'View Tax Transactions', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.tax-transaction.create', 'name' => 'Create Tax Transaction', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
+            ['code' => 'accounting.tax-transaction.update', 'name' => 'Update Tax Transaction', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
+            ['code' => 'accounting.tax-transaction.delete', 'name' => 'Delete Tax Transaction', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
             ['code' => 'document-management.document.view', 'name' => 'View Documents', 'module_name' => 'DocumentManagement', 'action_type' => 'READ'],
             ['code' => 'document-management.document.create', 'name' => 'Create Document', 'module_name' => 'DocumentManagement', 'action_type' => 'CREATE'],
