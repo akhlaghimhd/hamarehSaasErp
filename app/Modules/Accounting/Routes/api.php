@@ -21,14 +21,22 @@ Route::prefix('accounting')
         Route::post('/fiscal-periods', [FiscalPeriodController::class, 'store'])
             ->middleware('permission:accounting.fiscal-period.create');
 
-        // Chart of Accounts
+        // Chart of Accounts — full CRUD (L6-ACC-02.1)
+        Route::get('/accounts', [AccountController::class, 'index'])
+            ->middleware('permission:accounting.account.view');
         Route::post('/accounts', [AccountController::class, 'store'])
             ->middleware('permission:accounting.account.create');
+        Route::get('/accounts/{id}', [AccountController::class, 'show'])
+            ->middleware('permission:accounting.account.view');
+        Route::put('/accounts/{id}', [AccountController::class, 'update'])
+            ->middleware('permission:accounting.account.update');
+        Route::delete('/accounts/{id}', [AccountController::class, 'destroy'])
+            ->middleware('permission:accounting.account.delete');
 
         // Vouchers (Headers)
         Route::post('/vouchers', [FinancialVoucherController::class, 'store'])
             ->middleware('permission:accounting.voucher.create');
-        
+
         // Voucher Items (Lines)
         Route::post('/voucher-items', [FinancialVoucherItemController::class, 'store'])
             ->middleware('permission:accounting.voucher-item.create');
