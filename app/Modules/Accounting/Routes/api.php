@@ -57,11 +57,27 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('/vouchers/{id}', [FinancialVoucherController::class, 'destroy'])
         ->middleware('permission:accounting.voucher.delete');
 
-    // Voucher Items (Lines)
+    // Voucher Items — full CRUD (L6-ACC-02.4); only on Draft vouchers
+    Route::get('/voucher-items', [FinancialVoucherItemController::class, 'index'])
+        ->middleware('permission:accounting.voucher-item.view');
     Route::post('/voucher-items', [FinancialVoucherItemController::class, 'store'])
         ->middleware('permission:accounting.voucher-item.create');
+    Route::get('/voucher-items/{id}', [FinancialVoucherItemController::class, 'show'])
+        ->middleware('permission:accounting.voucher-item.view');
+    Route::put('/voucher-items/{id}', [FinancialVoucherItemController::class, 'update'])
+        ->middleware('permission:accounting.voucher-item.update');
+    Route::delete('/voucher-items/{id}', [FinancialVoucherItemController::class, 'destroy'])
+        ->middleware('permission:accounting.voucher-item.delete');
 
-    // Tax Transactions
+    // Tax Transactions — full CRUD (L6-ACC-02.4)
+    Route::get('/tax-transactions', [TaxTransactionController::class, 'index'])
+        ->middleware('permission:accounting.tax-transaction.view');
     Route::post('/tax-transactions', [TaxTransactionController::class, 'store'])
         ->middleware('permission:accounting.tax-transaction.create');
+    Route::get('/tax-transactions/{id}', [TaxTransactionController::class, 'show'])
+        ->middleware('permission:accounting.tax-transaction.view');
+    Route::put('/tax-transactions/{id}', [TaxTransactionController::class, 'update'])
+        ->middleware('permission:accounting.tax-transaction.update');
+    Route::delete('/tax-transactions/{id}', [TaxTransactionController::class, 'destroy'])
+        ->middleware('permission:accounting.tax-transaction.delete');
 });
