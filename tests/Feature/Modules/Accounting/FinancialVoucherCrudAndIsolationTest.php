@@ -10,12 +10,11 @@ use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
-use App\Modules\Accounting\Models\Account;
 use App\Modules\Accounting\Models\FinancialVoucher;
-use App\Modules\Accounting\Models\FinancialVoucherItem;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -110,29 +109,33 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
         $this->tokenA = $this->userA->createToken('vou-a', ['tenant:' . $this->tenantA->tenant_id])->plainTextToken;
         $this->tokenB = $this->userB->createToken('vou-b', ['tenant:' . $this->tenantB->tenant_id])->plainTextToken;
 
-        // Seed COA for posting balance tests (tenant A)
+        // Seed COA via DB::table so primary keys are not stripped by $fillable
         $this->accountDebitId  = (string) Str::uuid();
         $this->accountCreditId = (string) Str::uuid();
 
-        Account::withoutGlobalScopes()->create([
-            'account_id'   => $this->accountDebitId,
-            'tenant_id'    => $this->tenantA->tenant_id,
-            'code'         => '1100',
-            'name'         => 'Cash',
-            'account_type' => 1,
-            'level'        => 1,
-            'is_active'    => true,
-            'row_version'  => 1,
-        ]);
-        Account::withoutGlobalScopes()->create([
-            'account_id'   => $this->accountCreditId,
-            'tenant_id'    => $this->tenantA->tenant_id,
-            'code'         => '4100',
-            'name'         => 'Revenue',
-            'account_type' => 4,
-            'level'        => 1,
-            'is_active'    => true,
-            'row_version'  => 1,
+        DB::table('fin_accounts')->insert([
+            [
+                'account_id'   => $this->accountDebitId,
+                'tenant_id'    => $this->tenantA->tenant_id,
+                'code'         => '1100',
+                'name'         => 'Cash',
+                'account_type' => 1,
+                'level'        => 1,
+                'is_active'    => true,
+                'created_at'   => now(),
+                'row_version'  => 1,
+            ],
+            [
+                'account_id'   => $this->accountCreditId,
+                'tenant_id'    => $this->tenantA->tenant_id,
+                'code'         => '4100',
+                'name'         => 'Revenue',
+                'account_type' => 4,
+                'level'        => 1,
+                'is_active'    => true,
+                'created_at'   => now(),
+                'row_version'  => 1,
+            ],
         ]);
 
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
@@ -172,25 +175,29 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
 
     protected function addBalancedLines(string $voucherId): void
     {
-        FinancialVoucherItem::withoutGlobalScopes()->create([
-            'item_id'     => (string) Str::uuid(),
-            'tenant_id'   => $this->tenantA->tenant_id,
-            'voucher_id'  => $voucherId,
-            'account_id'  => $this->accountDebitId,
-            'description' => 'Debit line',
-            'debit'       => 1000.0000,
-            'credit'      => 0,
-            'row_version' => 1,
-        ]);
-        FinancialVoucherItem::withoutGlobalScopes()->create([
-            'item_id'     => (string) Str::uuid(),
-            'tenant_id'   => $this->tenantA->tenant_id,
-            'voucher_id'  => $voucherId,
-            'account_id'  => $this->accountCreditId,
-            'description' => 'Credit line',
-            'debit'       => 0,
-            'credit'      => 1000.0000,
-            'row_version' => 1,
+        DB::table('fin_voucher_items')->insert([
+            [
+                'item_id'     => (string) Str::uuid(),
+                'tenant_id'   => $this->tenantA->tenant_id,
+                'voucher_id'  => $voucherId,
+                'account_id'  => $this->accountDebitId,
+                'description' => 'Debit line',
+                'debit'       => 1000.0000,
+                'credit'      => 0,
+                'created_at'  => now(),
+                'row_version' => 1,
+            ],
+            [
+                'item_id'     => (string) Str::uuid(),
+                'tenant_id'   => $this->tenantA->tenant_id,
+                'voucher_id'  => $voucherId,
+                'account_id'  => $this->accountCreditId,
+                'description' => 'Credit line',
+                'debit'       => 0,
+                'credit'      => 1000.0000,
+                'created_at'  => now(),
+                'row_version' => 1,
+            ],
         ]);
     }
 
@@ -246,9 +253,9 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
         $post->assertStatus(200);
 
         $this->assertDatabaseHas('fin_vouchers', [
-            'voucher_id'  => $voucherId,
-            'status'      => 2, // Posted
-            'total_amount'=> 1000.0000,
+            'voucher_id'   => $voucherId,
+            'status'       => 2, // Posted
+            'total_amount' => 1000.0000,
         ]);
 
         // Posted cannot be updated or deleted
@@ -272,7 +279,7 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
         $this->assertTrue(in_array($postEmpty->status(), [409, 422, 400]));
 
         // Unbalanced lines
-        FinancialVoucherItem::withoutGlobalScopes()->create([
+        DB::table('fin_voucher_items')->insert([
             'item_id'     => (string) Str::uuid(),
             'tenant_id'   => $this->tenantA->tenant_id,
             'voucher_id'  => $voucherId,
@@ -280,6 +287,7 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
             'description' => 'Only debit',
             'debit'       => 500.0000,
             'credit'      => 0,
+            'created_at'  => now(),
             'row_version' => 1,
         ]);
 
@@ -297,14 +305,16 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
             ->getJson('/api/accounting/vouchers/' . $voucherIdA);
         $this->assertTrue(in_array($showAsB->status(), [403, 404]));
 
-        $voucherB = FinancialVoucher::withoutGlobalScopes()->create([
-            'voucher_id'       => (string) Str::uuid(),
+        $voucherBId = (string) Str::uuid();
+        DB::table('fin_vouchers')->insert([
+            'voucher_id'       => $voucherBId,
             'tenant_id'        => $this->tenantB->tenant_id,
             'voucher_date'     => '2026-03-15',
             'description'      => 'B voucher',
             'total_amount'     => 100,
             'reference_number' => 'V-ISO-B',
             'status'           => 1,
+            'created_at'       => now(),
             'row_version'      => 1,
         ]);
 
@@ -312,7 +322,7 @@ class FinancialVoucherCrudAndIsolationTest extends TestCase
             ->getJson('/api/accounting/vouchers');
         $listAsA->assertStatus(200);
         $ids = collect($listAsA->json('data'))->pluck('voucher_id')->all();
-        $this->assertNotContains($voucherB->voucher_id, $ids);
+        $this->assertNotContains($voucherBId, $ids);
         $this->assertContains($voucherIdA, $ids);
     }
 
