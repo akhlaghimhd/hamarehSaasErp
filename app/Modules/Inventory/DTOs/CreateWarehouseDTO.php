@@ -5,21 +5,21 @@ namespace App\Modules\Inventory\DTOs;
 readonly class CreateWarehouseDTO
 {
     public function __construct(
-        public string $tenantId,
         public string $code,
         public string $name,
-        public ?string $location = null,
-        public bool $isActive = true,
+        public string $branch_id,
+        public bool $is_bonded = false,
+        public int $status = 1,
     ) {}
 
-    public static function fromArray(array $data, string $tenantId): self
+    public static function fromArray(array $data): self
     {
         return new self(
-            tenantId: $tenantId,
             code: $data['code'],
             name: $data['name'],
-            location: $data['location'] ?? null,
-            isActive: $data['is_active'] ?? true,
+            branch_id: $data['branch_id'],
+            is_bonded: isset($data['is_bonded']) ? (bool) $data['is_bonded'] : false,
+            status: isset($data['status']) ? (int) $data['status'] : 1,
         );
     }
 }
