@@ -11,8 +11,8 @@ use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Modules\MasterData\Models\BusinessPartner;
-use App\Modules\MasterData\Models\Item;
-use App\Modules\MasterData\Models\Warehouse;
+use App\Modules\Inventory\Models\Item;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\MasterData\Models\CostCenter;
 use App\Modules\MasterData\Models\TaxCategory;
 use App\Modules\MasterData\Models\TaxDefinition;
@@ -25,6 +25,7 @@ use PHPUnit\Framework\Attributes\Test;
 /**
  * Layer 5 – MasterData CRUD + Tenant Isolation + SoftDelete + row_version
  * Covers L5-MD-T01 … T06 + L5-MD-Q04 (BusinessPartner, Item, Warehouse, CostCenter, TaxCategory, TaxDefinition)
+ * Note: Item and Warehouse ownership moved to Inventory (L6-INV-MIG)
  */
 class MasterDataCrudAndIsolationTest extends TestCase
 {
@@ -272,7 +273,7 @@ class MasterDataCrudAndIsolationTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────
-    // L5-MD-T02  Item
+    // L5-MD-T02  Item (now owned by Inventory)
     // ─────────────────────────────────────────────────────────────
 
     #[Test]
@@ -287,7 +288,7 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ];
 
         $createResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->postJson('/api/master-data/items', $createPayload);
+            ->postJson('/api/inventory/items', $createPayload);
 
         $createResponse->assertStatus(201)
             ->assertJsonPath('success', true)
@@ -303,12 +304,12 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ]);
 
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/items/' . $itemId);
+            ->getJson('/api/inventory/items/' . $itemId);
 
         $showResponse->assertStatus(200)->assertJsonPath('data.item_id', $itemId);
 
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->putJson('/api/master-data/items/' . $itemId, [
+            ->putJson('/api/inventory/items/' . $itemId, [
                 'name'   => 'CRUD Item Updated',
                 'status' => 2,
             ]);
@@ -318,7 +319,7 @@ class MasterDataCrudAndIsolationTest extends TestCase
             ->assertJsonPath('data.name', 'CRUD Item Updated');
 
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->deleteJson('/api/master-data/items/' . $itemId);
+            ->deleteJson('/api/inventory/items/' . $itemId);
 
         $deleteResponse->assertStatus(200)->assertJsonPath('success', true);
 
@@ -342,20 +343,20 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ]);
 
         $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/items');
+            ->getJson('/api/inventory/items');
 
         $indexResponse->assertStatus(200);
         $ids = collect($indexResponse->json('data'))->pluck('item_id')->toArray();
         $this->assertNotContains($itemB->item_id, $ids);
 
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/items/' . $itemB->item_id);
+            ->getJson('/api/inventory/items/' . $itemB->item_id);
 
         $showResponse->assertStatus(404);
     }
 
     // ─────────────────────────────────────────────────────────────
-    // L5-MD-T03  Warehouse
+    // L5-MD-T03  Warehouse (now owned by Inventory)
     // ─────────────────────────────────────────────────────────────
 
     #[Test]
@@ -369,7 +370,7 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ];
 
         $createResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->postJson('/api/master-data/warehouses', $createPayload);
+            ->postJson('/api/inventory/warehouses', $createPayload);
 
         $createResponse->assertStatus(201)
             ->assertJsonPath('success', true)
@@ -385,12 +386,12 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ]);
 
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/warehouses/' . $warehouseId);
+            ->getJson('/api/inventory/warehouses/' . $warehouseId);
 
         $showResponse->assertStatus(200)->assertJsonPath('data.warehouse_id', $warehouseId);
 
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->putJson('/api/master-data/warehouses/' . $warehouseId, [
+            ->putJson('/api/inventory/warehouses/' . $warehouseId, [
                 'name'      => 'CRUD Warehouse Updated',
                 'is_active' => false,
             ]);
@@ -400,7 +401,7 @@ class MasterDataCrudAndIsolationTest extends TestCase
             ->assertJsonPath('data.name', 'CRUD Warehouse Updated');
 
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->deleteJson('/api/master-data/warehouses/' . $warehouseId);
+            ->deleteJson('/api/inventory/warehouses/' . $warehouseId);
 
         $deleteResponse->assertStatus(200)->assertJsonPath('success', true);
 
@@ -422,14 +423,14 @@ class MasterDataCrudAndIsolationTest extends TestCase
         ]);
 
         $indexResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/warehouses');
+            ->getJson('/api/inventory/warehouses');
 
         $indexResponse->assertStatus(200);
         $ids = collect($indexResponse->json('data'))->pluck('warehouse_id')->toArray();
         $this->assertNotContains($warehouseB->warehouse_id, $ids);
 
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->getJson('/api/master-data/warehouses/' . $warehouseB->warehouse_id);
+            ->getJson('/api/inventory/warehouses/' . $warehouseB->warehouse_id);
 
         $showResponse->assertStatus(404);
     }
