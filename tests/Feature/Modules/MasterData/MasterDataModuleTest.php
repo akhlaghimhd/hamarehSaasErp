@@ -2,8 +2,8 @@
 
 use Tests\TestCase;
 use App\Modules\MasterData\Models\BusinessPartner;
-use App\Modules\MasterData\Models\Item;
-use App\Modules\MasterData\Models\Warehouse;
+use App\Modules\Inventory\Models\Item;
+use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\MasterData\Models\CostCenter;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
@@ -143,7 +143,7 @@ test('can create item successfully', function () {
         'Authorization' => 'Bearer ' . $this->token,
         'X-Tenant-ID'   => $this->tenantId,
         'Accept'        => 'application/json',
-    ])->postJson('/api/master-data/items', [
+    ])->postJson('/api/inventory/items', [
         'code'      => 'MAT-100',
         'name'      => 'مفتول فولادی',
         'item_type' => 1,
@@ -159,7 +159,7 @@ test('can create warehouse successfully', function () {
         'Authorization' => 'Bearer ' . $this->token,
         'X-Tenant-ID'   => $this->tenantId,
         'Accept'        => 'application/json',
-    ])->postJson('/api/master-data/warehouses', [
+    ])->postJson('/api/inventory/warehouses', [
         'code'      => 'WH-CENTRAL',
         'name'      => 'انبار مرکزی',
         'location'  => 'تهران - کیلومتر جاده مخصوص',

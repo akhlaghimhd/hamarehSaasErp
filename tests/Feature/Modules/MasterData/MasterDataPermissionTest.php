@@ -144,7 +144,7 @@ class MasterDataPermissionTest extends TestCase
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/master-data/items', [
+        ])->postJson('/api/inventory/items', [
             'code'      => 'ITEM-FORB',
             'name'      => 'Forbidden Item',
             'item_type' => 1,
@@ -162,7 +162,7 @@ class MasterDataPermissionTest extends TestCase
             'Authorization' => 'Bearer ' . $this->unauthorizedToken,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/master-data/warehouses', [
+        ])->postJson('/api/inventory/warehouses', [
             'code'      => 'WH-FORB',
             'name'      => 'Forbidden Warehouse',
             'location'  => 'Nowhere',
