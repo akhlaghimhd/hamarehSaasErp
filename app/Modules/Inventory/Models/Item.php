@@ -8,33 +8,44 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+/**
+ * inv_items — Inventory Master Data (Owner: Inventory module)
+ * Per Inventory_Logistics_Module.md
+ */
 class Item extends Model
 {
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
-    protected $table = 'items';
-    
+    protected $table = 'inv_items';
+
     protected $primaryKey = 'item_id';
-    
+
     public $incrementing = false;
-    
+
     protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'code',           // کد کالا یا SKU
-        'name',           // نام کالا
-        'item_type',      // 1: Raw Material, 2: Finished Product, 3: Service
-        'base_uom',       // واحد اندازه گیری پایه (مثل PCS, KG)
-        'status',         // 1: Active, 2: Inactive
+        'item_group_id',
+        'uom_id',
+        'code',
+        'name',
+        'description',
+        'item_type',
+        'valuation_method',
+        'extra_attributes',
+        'status',
         'created_by',
         'updated_by',
         'deleted_by',
-        'row_version'
+        'row_version',
     ];
 
     protected $casts = [
-        'item_type' => 'integer',
-        'status' => 'integer',
+        'item_type'         => 'integer',
+        'valuation_method'  => 'integer',
+        'status'            => 'integer',
+        'extra_attributes'  => 'array',
+        'row_version'       => 'integer',
     ];
 }

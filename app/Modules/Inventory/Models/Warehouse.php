@@ -9,18 +9,19 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * inv_warehouses — Inventory Master Data (Owner: Inventory module)
+ * Per Inventory_Logistics_Module.md
+ * Scope type WAREHOUSE for Resource-level filtering (Law 4.2 / 4.3)
+ */
 class Warehouse extends Model
 {
     use HasUuids, HasFactory, TenantScoped, ScopeScoped, SoftDeletes;
 
-    protected $table = 'warehouses';
+    protected $table = 'inv_warehouses';
 
-    // طبق قانون ۳.۴: نام Primary Key باید نام مفرد + _id باشد
     protected $primaryKey = 'warehouse_id';
 
-    /**
-     * Scope type and column for Resource-level filtering (Law 4.2 / 4.3)
-     */
     protected static string $scopeType = 'WAREHOUSE';
     protected static string $scopeColumn = 'warehouse_id';
 
@@ -29,10 +30,11 @@ class Warehouse extends Model
 
     protected $fillable = [
         'tenant_id',
+        'branch_id',
         'code',
         'name',
-        'location',
-        'is_active',
+        'is_bonded',
+        'status',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -42,15 +44,12 @@ class Warehouse extends Model
     protected function casts(): array
     {
         return [
-            'is_active'  => 'boolean',
+            'is_bonded'  => 'boolean',
+            'status'     => 'integer',
+            'row_version'=> 'integer',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
-    }
-
-    public function tenant()
-    {
-        return $this->belongsTo(\App\Modules\SaasPlatform\Models\Tenant::class, 'tenant_id', 'tenant_id');
     }
 }

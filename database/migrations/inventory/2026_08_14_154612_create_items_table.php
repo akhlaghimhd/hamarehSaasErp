@@ -5,26 +5,32 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * inv_items — per Inventory_Logistics_Module.md (Owner: Inventory)
+ * Logical refs only: item_group_id, uom_id (no physical FK across modules)
+ */
 return new class extends Migration
 {
     public function up(): void
     {
-        // اطمینان از وجود افزونه pgcrypto برای gen_random_uuid طبق سند معماری Database
         DB::statement('CREATE EXTENSION IF NOT EXISTS pgcrypto;');
 
-        Schema::create('items', function (Blueprint $table) {
-            // کلید اصلی بر اساس استاندارد معماری: singular_entity_name + _id
+        Schema::create('inv_items', function (Blueprint $table) {
             $table->uuid('item_id')->primary()->default(DB::raw('gen_random_uuid()'));
-            $table->uuid('tenant_id'); // ایزوله‌سازی چندمستأجری
-            
-            // فیلدهای اصلی موجود در تست‌ها و داکیومنت
-            $table->string('code', 50);
-            $table->string('name', 200);
-            $table->smallInteger('item_type')->default(1); // 1: Product, etc.
-            $table->string('base_uom', 50)->default('PCS');
+            $table->uuid('tenant_id');
+
+            // Logical references (Master Data / supporting entities) — no physical FK
+            $table->uuid('item_group_id');
+            $table->uuid('uom_id');
+
+            $table->string('code', 100);
+            $table->string('name', 300);
+            $table->string('description', 500)->nullable();
+            $table->smallInteger('item_type')->default(1); // 1: Stockable, 2: Service, 3: Expense
+            $table->smallInteger('valuation_method')->default(1); // 1: FIFO, 2: Moving Average
+            $table->jsonb('extra_attributes')->nullable();
             $table->smallInteger('status')->default(1);
 
-            // فیلدهای حسابرسی (Audit) و متادیتای الزامی پلتفرم
             $table->timestampTz('created_at')->default(DB::raw('NOW()'));
             $table->uuid('created_by')->nullable();
             $table->timestampTz('updated_at')->nullable();
@@ -34,12 +40,13 @@ return new class extends Migration
             $table->bigInteger('row_version')->default(1);
         });
 
-        // ایجاد ایندکس یکتا روی ترکیب Tenant و Code فقط برای رکوردهای حذف‌نشده (جلوگیری از Data Bleed)
-        DB::statement('CREATE UNIQUE INDEX uq_items_tenant_code ON items(tenant_id, code) WHERE deleted_at IS NULL;');
+        DB::statement('CREATE UNIQUE INDEX uq_inv_items_code ON inv_items(tenant_id, code) WHERE deleted_at IS NULL;');
+        DB::statement('CREATE INDEX idx_inv_items_extra_attributes ON inv_items USING GIN (extra_attributes);');
+        DB::statement('CREATE INDEX idx_inv_items_tenant ON inv_items(tenant_id) WHERE deleted_at IS NULL;');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('items');
+        Schema::dropIfExists('inv_items');
     }
 };
