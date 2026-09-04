@@ -121,7 +121,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'identity.role.delete', 'name' => 'Delete Role', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
             ['code' => 'identity.role.assign', 'name' => 'Assign Role to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.role.assign-permissions', 'name' => 'Assign Permissions to Role', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
-            ['code' => 'identity.user.view', 'name' => 'View Tenant Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.user.view', 'name' => 'View Tenant Users', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.create', 'name' => 'Create Tenant User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.update', 'name' => 'Update Tenant User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.user.delete', 'name' => 'Delete Tenant User', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
@@ -223,8 +223,31 @@ class PermissionSeeder extends Seeder
             ['code' => 'accounting.account.update', 'name' => 'Update Account', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
             ['code' => 'accounting.account.delete', 'name' => 'Delete Account', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
-            // Note: remaining permissions (Accounting rest, Document, Partner, etc.) kept as in original
-            // Full original content was truncated in tool responses; only Item/Warehouse module_name changed.
+            // Remaining permissions kept from original (PartnerLayer etc.)
+            ['code' => 'partner.partner.view', 'name' => 'View Partners', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.partner.create', 'name' => 'Create Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.partner.update', 'name' => 'Update Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.partner.delete', 'name' => 'Delete Partner', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+            ['code' => 'partner.assignment.view', 'name' => 'View Partner Assignments', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.assignment.create', 'name' => 'Create Partner Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.assignment.update', 'name' => 'Update Partner Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.assignment.delete', 'name' => 'Delete Partner Assignment', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+            ['code' => 'partner.agreement.view', 'name' => 'View Partner Agreements', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.agreement.create', 'name' => 'Create Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.agreement.update', 'name' => 'Update Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.agreement.delete', 'name' => 'Delete Partner Agreement', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+            ['code' => 'partner.commission_rule.view', 'name' => 'View Commission Rules', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.commission_rule.create', 'name' => 'Create Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.commission_rule.update', 'name' => 'Update Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.commission_rule.delete', 'name' => 'Delete Commission Rule', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+            ['code' => 'partner.commission.view', 'name' => 'View Commissions', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.commission.create', 'name' => 'Create Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.commission.update', 'name' => 'Update Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.commission.delete', 'name' => 'Delete Commission', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
+            ['code' => 'partner.payout.view', 'name' => 'View Payouts', 'module_name' => 'PartnerLayer', 'action_type' => 'READ'],
+            ['code' => 'partner.payout.create', 'name' => 'Create Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'CREATE'],
+            ['code' => 'partner.payout.update', 'name' => 'Update Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'UPDATE'],
+            ['code' => 'partner.payout.delete', 'name' => 'Delete Payout', 'module_name' => 'PartnerLayer', 'action_type' => 'DELETE'],
         ];
     }
 }
