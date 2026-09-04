@@ -308,7 +308,7 @@ class ScopeService
                 ->where('department_id', $referenceId)
                 ->whereNull('deleted_at')
                 ->exists(),
-            'WAREHOUSE' => DB::table('warehouses')
+            'WAREHOUSE' => DB::table('inv_warehouses')
                 ->where('tenant_id', $tenantId)
                 ->where('warehouse_id', $referenceId)
                 ->whereNull('deleted_at')
