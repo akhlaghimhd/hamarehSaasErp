@@ -145,11 +145,13 @@ class MasterDataPermissionTest extends TestCase
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
         ])->postJson('/api/inventory/items', [
-            'code'      => 'ITEM-FORB',
-            'name'      => 'Forbidden Item',
-            'item_type' => 1,
-            'base_uom'  => 'PCS',
-            'status'    => 1,
+            'code'             => 'ITEM-FORB',
+            'name'             => 'Forbidden Item',
+            'item_group_id'    => (string) Str::uuid(),
+            'uom_id'           => (string) Str::uuid(),
+            'item_type'        => 1,
+            'valuation_method' => 1,
+            'status'           => 1,
         ]);
 
         $response->assertStatus(403);
@@ -165,8 +167,9 @@ class MasterDataPermissionTest extends TestCase
         ])->postJson('/api/inventory/warehouses', [
             'code'      => 'WH-FORB',
             'name'      => 'Forbidden Warehouse',
-            'location'  => 'Nowhere',
-            'is_active' => true,
+            'branch_id' => (string) Str::uuid(),
+            'is_bonded' => false,
+            'status'    => 1,
         ]);
 
         $response->assertStatus(403);
