@@ -6,6 +6,7 @@ use App\Modules\Inventory\Controllers\WarehouseController;
 use App\Modules\Inventory\Controllers\LocationController;
 use App\Modules\Inventory\Controllers\InventoryDocumentController;
 use App\Modules\Inventory\Controllers\InventoryDocumentItemController;
+use App\Modules\Inventory\Controllers\StockBalanceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,6 +52,12 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.location.update');
     Route::delete('locations/{id}', [LocationController::class, 'destroy'])
         ->middleware('permission:inventory.location.delete');
+
+    // Stock balances (read-only ledger; mutated only via document post / future void-reserve)
+    Route::get('stock-balances', [StockBalanceController::class, 'index'])
+        ->middleware('permission:inventory.stock-balance.view');
+    Route::get('stock-balances/{id}', [StockBalanceController::class, 'show'])
+        ->middleware('permission:inventory.stock-balance.view');
 
     // Inventory Documents (Receipt / Issue / Transfer / Adjustment headers)
     Route::get('documents', [InventoryDocumentController::class, 'index'])
