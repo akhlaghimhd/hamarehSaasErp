@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * inv_locations — per Inventory_Logistics_Module.md (Owner: Inventory)
  * Physical FK to inv_warehouses and self (same Bounded Context — Rule 2.4)
+ * Self-referencing parent FK is added AFTER create so PostgreSQL sees the PK constraint.
  */
 return new class extends Migration
 {
@@ -34,9 +35,13 @@ return new class extends Migration
             $table->uuid('deleted_by')->nullable();
             $table->bigInteger('row_version')->default(1);
 
-            // Physical FKs within Inventory Bounded Context (Rule 2.4)
+            // Physical FK to warehouse (same Bounded Context)
             $table->foreign('warehouse_id', 'fk_inv_locations_warehouse')
                 ->references('warehouse_id')->on('inv_warehouses')->onDelete('restrict');
+        });
+
+        // Self-referencing FK must be added after the table (and its PK) exists
+        Schema::table('inv_locations', function (Blueprint $table) {
             $table->foreign('parent_location_id', 'fk_inv_locations_parent')
                 ->references('location_id')->on('inv_locations')->onDelete('restrict');
         });
