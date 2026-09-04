@@ -7,6 +7,7 @@ use App\Modules\Inventory\Controllers\LocationController;
 use App\Modules\Inventory\Controllers\InventoryDocumentController;
 use App\Modules\Inventory\Controllers\InventoryDocumentItemController;
 use App\Modules\Inventory\Controllers\StockBalanceController;
+use App\Modules\Inventory\Controllers\StockBatchController;
 
 /*
 |--------------------------------------------------------------------------
@@ -52,6 +53,18 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.location.update');
     Route::delete('locations/{id}', [LocationController::class, 'destroy'])
         ->middleware('permission:inventory.location.delete');
+
+    // Stock batches (lot / expiration / QC quarantine)
+    Route::get('stock-batches', [StockBatchController::class, 'index'])
+        ->middleware('permission:inventory.stock-batch.view');
+    Route::post('stock-batches', [StockBatchController::class, 'store'])
+        ->middleware('permission:inventory.stock-batch.create');
+    Route::get('stock-batches/{id}', [StockBatchController::class, 'show'])
+        ->middleware('permission:inventory.stock-batch.view');
+    Route::put('stock-batches/{id}', [StockBatchController::class, 'update'])
+        ->middleware('permission:inventory.stock-batch.update');
+    Route::delete('stock-batches/{id}', [StockBatchController::class, 'destroy'])
+        ->middleware('permission:inventory.stock-batch.delete');
 
     // Stock balances (read-only ledger; mutated only via document post / void / future reserve)
     Route::get('stock-balances', [StockBalanceController::class, 'index'])
