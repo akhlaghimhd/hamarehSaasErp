@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\Inventory\Controllers\ItemController;
 use App\Modules\Inventory\Controllers\WarehouseController;
 use App\Modules\Inventory\Controllers\LocationController;
+use App\Modules\Inventory\Controllers\InventoryDocumentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -49,5 +50,17 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.location.update');
     Route::delete('locations/{id}', [LocationController::class, 'destroy'])
         ->middleware('permission:inventory.location.delete');
+
+    // Inventory Documents (Receipt / Issue / Transfer / Adjustment headers)
+    Route::get('documents', [InventoryDocumentController::class, 'index'])
+        ->middleware('permission:inventory.document.view');
+    Route::post('documents', [InventoryDocumentController::class, 'store'])
+        ->middleware('permission:inventory.document.create');
+    Route::get('documents/{id}', [InventoryDocumentController::class, 'show'])
+        ->middleware('permission:inventory.document.view');
+    Route::put('documents/{id}', [InventoryDocumentController::class, 'update'])
+        ->middleware('permission:inventory.document.update');
+    Route::delete('documents/{id}', [InventoryDocumentController::class, 'destroy'])
+        ->middleware('permission:inventory.document.delete');
 
 });
