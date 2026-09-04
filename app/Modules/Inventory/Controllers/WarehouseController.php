@@ -3,11 +3,11 @@
 namespace App\Modules\Inventory\Controllers;
 
 use App\Base\Controller;
+use App\Modules\Inventory\Services\WarehouseService;
 use App\Modules\Inventory\Requests\CreateWarehouseRequest;
 use App\Modules\Inventory\Requests\UpdateWarehouseRequest;
 use App\Modules\Inventory\DTOs\CreateWarehouseDTO;
 use App\Modules\Inventory\DTOs\UpdateWarehouseDTO;
-use App\Modules\Inventory\Services\WarehouseService;
 use Illuminate\Http\JsonResponse;
 use Exception;
 
@@ -36,7 +36,7 @@ class WarehouseController extends Controller
     public function store(CreateWarehouseRequest $request): JsonResponse
     {
         try {
-            $dto = CreateWarehouseDTO::fromArray($request->validated(), '');
+            $dto = CreateWarehouseDTO::fromArray($request->validated());
             $warehouse = $this->warehouseService->createWarehouse($dto);
 
             return response()->json([
