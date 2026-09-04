@@ -22,13 +22,14 @@ class CreateWarehouseRequest extends FormRequest
                 'required',
                 'string',
                 'max:50',
-                Rule::unique('warehouses', 'code')->where(function ($query) use ($tenantId) {
+                Rule::unique('inv_warehouses', 'code')->where(function ($query) use ($tenantId) {
                     return $query->where('tenant_id', $tenantId)->whereNull('deleted_at');
                 }),
             ],
-            'name'      => ['required', 'string', 'max:200'],
-            'location'  => ['nullable', 'string', 'max:500'],
-            'is_active' => ['sometimes', 'boolean'],
+            'name'       => ['required', 'string', 'max:200'],
+            'branch_id'  => ['required', 'uuid'],
+            'is_bonded'  => ['sometimes', 'boolean'],
+            'status'     => ['sometimes', 'integer', 'in:1,2'],
         ];
     }
 }

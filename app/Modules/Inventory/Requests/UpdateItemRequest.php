@@ -14,11 +14,14 @@ class UpdateItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // کد کالا (code) نباید بعد از ثبت قابل تغییر باشد (یک قانون بیزینسی)
-            'name' => 'sometimes|required|string|max:255',
-            'item_type' => 'sometimes|required|integer|in:1,2,3',
-            'base_uom' => 'sometimes|required|string|max:50',
-            'status' => 'sometimes|required|integer|in:1,2',
+            'name'              => 'sometimes|required|string|max:300',
+            'description'       => 'nullable|string|max:500',
+            'item_group_id'     => 'sometimes|required|uuid',
+            'uom_id'            => 'sometimes|required|uuid',
+            'item_type'         => 'sometimes|required|integer|in:1,2,3',
+            'valuation_method'  => 'sometimes|required|integer|in:1,2',
+            'extra_attributes'  => 'nullable|array',
+            'status'            => 'sometimes|required|integer|in:1,2',
         ];
     }
 }

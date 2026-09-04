@@ -7,7 +7,6 @@ use App\Modules\Inventory\Models\Item;
 /**
  * Lookup service for Item – Single Source of Truth in Inventory.
  * Other modules must use this Service (not the Item model directly).
- * Per APP folder standard: inter-module access via destination module Services.
  */
 class ItemLookupService
 {
@@ -44,12 +43,13 @@ class ItemLookupService
         }
 
         return [
-            'item_id'   => $item->item_id,
-            'code'      => $item->code,
-            'name'      => $item->name,
-            'item_type' => $item->item_type,
-            'base_uom'  => $item->base_uom,
-            'status'    => $item->status,
+            'item_id'           => $item->item_id,
+            'code'              => $item->code,
+            'name'              => $item->name,
+            'item_type'         => $item->item_type,
+            'uom_id'            => $item->uom_id,
+            'valuation_method'  => $item->valuation_method,
+            'status'            => $item->status,
         ];
     }
 }

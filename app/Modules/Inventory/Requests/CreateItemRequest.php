@@ -10,7 +10,7 @@ class CreateItemRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // مدیریت دسترسی توسط میدل‌ور کانتکست انجام می‌شود
+        return true;
     }
 
     public function rules(): array
@@ -22,13 +22,16 @@ class CreateItemRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                // کد کالا باید در سطح شرکت فعلی یکتا باشد
-                Rule::unique('items', 'code')->where('tenant_id', $tenantId)->whereNull('deleted_at')
+                Rule::unique('inv_items', 'code')->where('tenant_id', $tenantId)->whereNull('deleted_at'),
             ],
-            'name' => 'required|string|max:255',
-            'item_type' => 'required|integer|in:1,2,3', // 1: Material, 2: Product, 3: Service
-            'base_uom' => 'required|string|max:50',
-            'status' => 'sometimes|integer|in:1,2',
+            'name'              => 'required|string|max:300',
+            'item_group_id'     => 'required|uuid',
+            'uom_id'            => 'required|uuid',
+            'description'       => 'nullable|string|max:500',
+            'item_type'         => 'sometimes|integer|in:1,2,3',
+            'valuation_method'  => 'sometimes|integer|in:1,2',
+            'extra_attributes'  => 'nullable|array',
+            'status'            => 'sometimes|integer|in:1,2',
         ];
     }
 }

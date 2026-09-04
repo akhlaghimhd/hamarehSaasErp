@@ -14,7 +14,7 @@ class WarehouseLookupService
     {
         return Warehouse::query()
             ->where('warehouse_id', $warehouseId)
-            ->where('is_active', true)
+            ->where('status', 1)
             ->first();
     }
 
@@ -22,7 +22,7 @@ class WarehouseLookupService
     {
         return Warehouse::query()
             ->where('warehouse_id', $warehouseId)
-            ->where('is_active', true)
+            ->where('status', 1)
             ->exists();
     }
 
@@ -38,8 +38,9 @@ class WarehouseLookupService
             'warehouse_id' => $warehouse->warehouse_id,
             'code'         => $warehouse->code,
             'name'         => $warehouse->name,
-            'location'     => $warehouse->location,
-            'is_active'    => $warehouse->is_active,
+            'branch_id'    => $warehouse->branch_id,
+            'is_bonded'    => $warehouse->is_bonded,
+            'status'       => $warehouse->status,
         ];
     }
 }
