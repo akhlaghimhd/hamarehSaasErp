@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Modules\Inventory\Controllers\ItemController;
 use App\Modules\Inventory\Controllers\WarehouseController;
+use App\Modules\Inventory\Controllers\LocationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,5 +37,17 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.warehouse.update');
     Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])
         ->middleware('permission:master-data.warehouse.delete');
+
+    // Locations (bins / shelves under a warehouse)
+    Route::get('locations', [LocationController::class, 'index'])
+        ->middleware('permission:inventory.location.view');
+    Route::post('locations', [LocationController::class, 'store'])
+        ->middleware('permission:inventory.location.create');
+    Route::get('locations/{id}', [LocationController::class, 'show'])
+        ->middleware('permission:inventory.location.view');
+    Route::put('locations/{id}', [LocationController::class, 'update'])
+        ->middleware('permission:inventory.location.update');
+    Route::delete('locations/{id}', [LocationController::class, 'destroy'])
+        ->middleware('permission:inventory.location.delete');
 
 });
