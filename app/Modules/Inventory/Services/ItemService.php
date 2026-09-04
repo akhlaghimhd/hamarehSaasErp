@@ -31,16 +31,21 @@ class ItemService
                 $tenantId = Context::get('tenant_id');
 
                 $item = Item::create([
-                    'tenant_id' => $tenantId,
-                    'code' => $dto->code,
-                    'name' => $dto->name,
-                    'item_type' => $dto->item_type,
-                    'base_uom' => $dto->base_uom,
-                    'status' => $dto->status,
-                    'created_by' => Context::get('user_id'),
+                    'tenant_id'         => $tenantId,
+                    'item_group_id'     => $dto->item_group_id,
+                    'uom_id'            => $dto->uom_id,
+                    'code'              => $dto->code,
+                    'name'              => $dto->name,
+                    'description'       => $dto->description,
+                    'item_type'         => $dto->item_type,
+                    'valuation_method'  => $dto->valuation_method,
+                    'extra_attributes'  => $dto->extra_attributes,
+                    'status'            => $dto->status,
+                    'created_by'        => Context::get('user_id'),
+                    'row_version'       => 1,
                 ]);
 
-                $this->dispatchOutboxEvent('inventory.item.created', $item, $tenantId);
+                $this->dispatchOutboxEvent('inventory.item.created.v1', $item, $tenantId);
 
                 return $item;
             });
@@ -58,18 +63,27 @@ class ItemService
                 $tenantId = Context::get('tenant_id');
 
                 $updateData = array_filter([
-                    'name' => $dto->name,
-                    'item_type' => $dto->item_type,
-                    'base_uom' => $dto->base_uom,
-                    'status' => $dto->status,
-                    'updated_by' => Context::get('user_id'),
-                ], fn($value) => !is_null($value));
+                    'name'              => $dto->name,
+                    'description'       => $dto->description,
+                    'item_type'         => $dto->item_type,
+                    'valuation_method'  => $dto->valuation_method,
+                    'item_group_id'     => $dto->item_group_id,
+                    'uom_id'            => $dto->uom_id,
+                    'status'            => $dto->status,
+                    'updated_by'        => Context::get('user_id'),
+                ], fn ($value) => !is_null($value));
+
+                if ($dto->extra_attributes !== null) {
+                    $updateData['extra_attributes'] = $dto->extra_attributes;
+                }
+
+                $updateData['row_version'] = ((int) ($item->row_version ?? 1)) + 1;
 
                 $item->update($updateData);
 
-                $this->dispatchOutboxEvent('inventory.item.updated', $item, $tenantId);
+                $this->dispatchOutboxEvent('inventory.item.updated.v1', $item, $tenantId);
 
-                return $item;
+                return $item->fresh();
             });
         } catch (Exception $e) {
             Log::error('Failed to update Item: ' . $e->getMessage());
@@ -83,11 +97,11 @@ class ItemService
             DB::transaction(function () use ($id) {
                 $item = Item::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
-                
+
                 $item->update(['deleted_by' => Context::get('user_id')]);
                 $item->delete();
 
-                $this->dispatchOutboxEvent('inventory.item.deleted', $item, $tenantId);
+                $this->dispatchOutboxEvent('inventory.item.deleted.v1', $item, $tenantId);
             });
         } catch (Exception $e) {
             Log::error('Failed to delete Item: ' . $e->getMessage());
@@ -98,14 +112,14 @@ class ItemService
     private function dispatchOutboxEvent(string $eventType, Item $item, string $tenantId): void
     {
         DB::table('event_outbox')->insert([
-            'event_id' => Str::uuid()->toString(),
-            'tenant_id' => $tenantId,
-            'aggregate_type' => 'items',
-            'aggregate_id' => $item->item_id,
-            'event_type' => $eventType,
-            'payload' => json_encode($item->toArray()),
-            'status' => 1, // Pending
-            'created_at' => now(),
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => 'inv_items',
+            'aggregate_id'   => $item->item_id,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($item->toArray()),
+            'status'         => 1,
+            'created_at'     => now(),
         ]);
     }
 }
