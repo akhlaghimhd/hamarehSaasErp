@@ -53,7 +53,7 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('locations/{id}', [LocationController::class, 'destroy'])
         ->middleware('permission:inventory.location.delete');
 
-    // Stock balances (read-only ledger; mutated only via document post / future void-reserve)
+    // Stock balances (read-only ledger; mutated only via document post / void / future reserve)
     Route::get('stock-balances', [StockBalanceController::class, 'index'])
         ->middleware('permission:inventory.stock-balance.view');
     Route::get('stock-balances/{id}', [StockBalanceController::class, 'show'])
@@ -70,6 +70,8 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.document.update');
     Route::post('documents/{id}/post', [InventoryDocumentController::class, 'post'])
         ->middleware('permission:inventory.document.post');
+    Route::post('documents/{id}/void', [InventoryDocumentController::class, 'void'])
+        ->middleware('permission:inventory.document.void');
     Route::delete('documents/{id}', [InventoryDocumentController::class, 'destroy'])
         ->middleware('permission:inventory.document.delete');
 

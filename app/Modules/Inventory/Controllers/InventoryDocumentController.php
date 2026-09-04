@@ -92,6 +92,24 @@ class InventoryDocumentController extends Controller
         }
     }
 
+    public function void(string $id): JsonResponse
+    {
+        try {
+            $document = $this->documentService->voidDocument($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Inventory document voided successfully.',
+                'data'    => $document,
+            ]);
+        } catch (ConflictHttpException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 409);
+        }
+    }
+
     public function destroy(string $id): JsonResponse
     {
         try {

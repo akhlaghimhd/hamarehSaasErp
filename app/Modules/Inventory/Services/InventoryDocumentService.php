@@ -199,6 +199,48 @@ class InventoryDocumentService
         }
     }
 
+    /**
+     * Void a posted document (Posted → Voided) and reverse stock movements.
+     */
+    public function voidDocument(string $id): InventoryDocument
+    {
+        try {
+            return DB::transaction(function () use ($id) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+
+                $document = InventoryDocument::with('items')->findOrFail($id);
+
+                if ((int) $document->status !== self::STATUS_POSTED) {
+                    throw new ConflictHttpException('Only posted inventory documents can be voided.');
+                }
+
+                if ($document->items->isEmpty()) {
+                    throw new ConflictHttpException('Posted document has no line items to reverse.');
+                }
+
+                $type = (int) $document->document_type;
+
+                foreach ($document->items as $line) {
+                    $this->reverseStockMovement($tenantId, $line, $type);
+                }
+
+                $document->update([
+                    'status'      => self::STATUS_VOIDED,
+                    'updated_by'  => $userId,
+                    'row_version' => ((int) ($document->row_version ?? 1)) + 1,
+                ]);
+
+                $this->dispatchOutboxEvent('inventory.document.voided.v1', $document->fresh(), $tenantId);
+
+                return $document->fresh(['items']);
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to void InventoryDocument: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
     private function validateLineForPost(InventoryDocumentItem $line, int $type): void
     {
         $qty = (float) $line->quantity;
@@ -255,6 +297,29 @@ class InventoryDocumentService
                 $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, $qty);
             } else {
                 $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, -$qty);
+            }
+        }
+    }
+
+    /**
+     * Inverse of applyStockMovement for voiding a posted document.
+     */
+    private function reverseStockMovement(string $tenantId, InventoryDocumentItem $line, int $type): void
+    {
+        $qty = (float) $line->quantity;
+
+        if ($type === self::TYPE_RECEIPT) {
+            $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, -$qty);
+        } elseif ($type === self::TYPE_ISSUE) {
+            $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, $qty);
+        } elseif ($type === self::TYPE_TRANSFER) {
+            $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, -$qty);
+            $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, $qty);
+        } elseif ($type === self::TYPE_ADJUSTMENT) {
+            if (!empty($line->to_location_id)) {
+                $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, -$qty);
+            } else {
+                $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, $qty);
             }
         }
     }
