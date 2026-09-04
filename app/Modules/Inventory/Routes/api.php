@@ -5,6 +5,7 @@ use App\Modules\Inventory\Controllers\ItemController;
 use App\Modules\Inventory\Controllers\WarehouseController;
 use App\Modules\Inventory\Controllers\LocationController;
 use App\Modules\Inventory\Controllers\InventoryDocumentController;
+use App\Modules\Inventory\Controllers\InventoryDocumentItemController;
 
 /*
 |--------------------------------------------------------------------------
@@ -62,5 +63,17 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.document.update');
     Route::delete('documents/{id}', [InventoryDocumentController::class, 'destroy'])
         ->middleware('permission:inventory.document.delete');
+
+    // Document line items (draft document only for mutations)
+    Route::get('document-items', [InventoryDocumentItemController::class, 'index'])
+        ->middleware('permission:inventory.document-item.view');
+    Route::post('document-items', [InventoryDocumentItemController::class, 'store'])
+        ->middleware('permission:inventory.document-item.create');
+    Route::get('document-items/{id}', [InventoryDocumentItemController::class, 'show'])
+        ->middleware('permission:inventory.document-item.view');
+    Route::put('document-items/{id}', [InventoryDocumentItemController::class, 'update'])
+        ->middleware('permission:inventory.document-item.update');
+    Route::delete('document-items/{id}', [InventoryDocumentItemController::class, 'destroy'])
+        ->middleware('permission:inventory.document-item.delete');
 
 });
