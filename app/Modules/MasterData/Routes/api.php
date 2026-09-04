@@ -2,9 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Modules\MasterData\Controllers\BusinessPartnerController;
-use App\Modules\MasterData\Controllers\ItemController;
 use App\Modules\MasterData\Controllers\CostCenterController;
-use App\Modules\MasterData\Controllers\WarehouseController;
 use App\Modules\MasterData\Controllers\CurrencyController;
 use App\Modules\MasterData\Controllers\CountryController;
 use App\Modules\MasterData\Controllers\TaxCategoryController;
@@ -23,6 +21,7 @@ use App\Modules\MasterData\Controllers\UnitOfMeasureController;
 | Master Data API Routes
 |--------------------------------------------------------------------------
 | Prefix پیش‌فرض توسط ModuleServiceProvider: /api/master-data
+| Note: Item and Warehouse routes moved to Inventory module (L6-INV-MIG-06)
 */
 
 Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {
@@ -39,18 +38,6 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('business-partners/{id}', [BusinessPartnerController::class, 'destroy'])
         ->middleware('permission:master-data.business-partner.delete');
 
-    // Items
-    Route::get('items', [ItemController::class, 'index'])
-        ->middleware('permission:master-data.item.view');
-    Route::post('items', [ItemController::class, 'store'])
-        ->middleware('permission:master-data.item.create');
-    Route::get('items/{id}', [ItemController::class, 'show'])
-        ->middleware('permission:master-data.item.view');
-    Route::put('items/{id}', [ItemController::class, 'update'])
-        ->middleware('permission:master-data.item.update');
-    Route::delete('items/{id}', [ItemController::class, 'destroy'])
-        ->middleware('permission:master-data.item.delete');
-
     // Cost Centers
     Route::get('cost-centers', [CostCenterController::class, 'index'])
         ->middleware('permission:master-data.cost-center.view');
@@ -62,18 +49,6 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:master-data.cost-center.update');
     Route::delete('cost-centers/{id}', [CostCenterController::class, 'destroy'])
         ->middleware('permission:master-data.cost-center.delete');
-
-    // Warehouses
-    Route::get('warehouses', [WarehouseController::class, 'index'])
-        ->middleware('permission:master-data.warehouse.view');
-    Route::post('warehouses', [WarehouseController::class, 'store'])
-        ->middleware('permission:master-data.warehouse.create');
-    Route::get('warehouses/{id}', [WarehouseController::class, 'show'])
-        ->middleware('permission:master-data.warehouse.view');
-    Route::put('warehouses/{id}', [WarehouseController::class, 'update'])
-        ->middleware('permission:master-data.warehouse.update');
-    Route::delete('warehouses/{id}', [WarehouseController::class, 'destroy'])
-        ->middleware('permission:master-data.warehouse.delete');
 
     // Currencies (Platform Master Data — no tenant_id)
     Route::get('currencies', [CurrencyController::class, 'index'])
