@@ -23,7 +23,8 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * L6-INV-06 — Post inventory document and update stock balances
+ * L6-INV-06/07 — Post inventory document and update stock balances
+ * Covers Receipt, Issue, Transfer, Adjustment + validation failures
  */
 class InventoryDocumentPostTest extends TestCase
 {
@@ -312,6 +313,179 @@ class InventoryDocumentPostTest extends TestCase
 
         $this->withHeaders($this->authHeaders())
             ->postJson('/api/inventory/documents/' . $posted->document_id . '/post')
+            ->assertStatus(409);
+    }
+
+    #[Test]
+    public function posting_transfer_moves_stock_between_locations(): void
+    {
+        StockBalance::withoutGlobalScopes()->create([
+            'stock_balance_id'  => (string) Str::uuid(),
+            'tenant_id'         => $this->tenantA->tenant_id,
+            'warehouse_id'      => $this->warehouseId,
+            'location_id'       => $this->locationId,
+            'item_id'           => $this->itemId,
+            'quantity_on_hand'  => 20,
+            'quantity_reserved' => 0,
+            'row_version'       => 1,
+            'updated_at'        => now(),
+        ]);
+
+        $doc = InventoryDocument::withoutGlobalScopes()->create([
+            'document_id'      => (string) Str::uuid(),
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'fiscal_period_id' => (string) Str::uuid(),
+            'document_type'    => 3,
+            'document_number'  => 'TR-POST-01',
+            'status'           => 1,
+        ]);
+
+        InventoryDocumentItem::withoutGlobalScopes()->create([
+            'document_item_id' => (string) Str::uuid(),
+            'document_id'      => $doc->document_id,
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'item_id'          => $this->itemId,
+            'from_location_id' => $this->locationId,
+            'to_location_id'   => $this->locationId2,
+            'quantity'         => 7,
+            'unit_cost'        => 10,
+            'sort_order'       => 1,
+        ]);
+
+        $response = $this->withHeaders($this->authHeaders())
+            ->postJson('/api/inventory/documents/' . $doc->document_id . '/post');
+
+        $response->assertStatus(200)->assertJsonPath('data.status', 3);
+
+        $from = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId)
+            ->where('item_id', $this->itemId)
+            ->first();
+        $to = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId2)
+            ->where('item_id', $this->itemId)
+            ->first();
+
+        $this->assertEquals('13.0000', (string) $from->quantity_on_hand);
+        $this->assertNotNull($to);
+        $this->assertEquals('7.0000', (string) $to->quantity_on_hand);
+    }
+
+    #[Test]
+    public function posting_transfer_rejects_same_from_and_to_location(): void
+    {
+        $doc = InventoryDocument::withoutGlobalScopes()->create([
+            'document_id'      => (string) Str::uuid(),
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'fiscal_period_id' => (string) Str::uuid(),
+            'document_type'    => 3,
+            'document_number'  => 'TR-SAME-LOC',
+            'status'           => 1,
+        ]);
+
+        InventoryDocumentItem::withoutGlobalScopes()->create([
+            'document_item_id' => (string) Str::uuid(),
+            'document_id'      => $doc->document_id,
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'item_id'          => $this->itemId,
+            'from_location_id' => $this->locationId,
+            'to_location_id'   => $this->locationId,
+            'quantity'         => 1,
+            'unit_cost'        => 1,
+            'sort_order'       => 1,
+        ]);
+
+        $this->withHeaders($this->authHeaders())
+            ->postJson('/api/inventory/documents/' . $doc->document_id . '/post')
+            ->assertStatus(409);
+    }
+
+    #[Test]
+    public function posting_adjustment_increase_and_decrease(): void
+    {
+        $docInc = InventoryDocument::withoutGlobalScopes()->create([
+            'document_id'      => (string) Str::uuid(),
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'fiscal_period_id' => (string) Str::uuid(),
+            'document_type'    => 4,
+            'document_number'  => 'ADJ-INC-01',
+            'status'           => 1,
+        ]);
+
+        InventoryDocumentItem::withoutGlobalScopes()->create([
+            'document_item_id' => (string) Str::uuid(),
+            'document_id'      => $docInc->document_id,
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'item_id'          => $this->itemId,
+            'to_location_id'   => $this->locationId,
+            'quantity'         => 15,
+            'unit_cost'        => 5,
+            'sort_order'       => 1,
+        ]);
+
+        $this->withHeaders($this->authHeaders())
+            ->postJson('/api/inventory/documents/' . $docInc->document_id . '/post')
+            ->assertStatus(200)
+            ->assertJsonPath('data.status', 3);
+
+        $balance = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId)
+            ->where('item_id', $this->itemId)
+            ->first();
+        $this->assertEquals('15.0000', (string) $balance->quantity_on_hand);
+
+        $docDec = InventoryDocument::withoutGlobalScopes()->create([
+            'document_id'      => (string) Str::uuid(),
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'fiscal_period_id' => (string) Str::uuid(),
+            'document_type'    => 4,
+            'document_number'  => 'ADJ-DEC-01',
+            'status'           => 1,
+        ]);
+
+        InventoryDocumentItem::withoutGlobalScopes()->create([
+            'document_item_id' => (string) Str::uuid(),
+            'document_id'      => $docDec->document_id,
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'item_id'          => $this->itemId,
+            'from_location_id' => $this->locationId,
+            'quantity'         => 5,
+            'unit_cost'        => 5,
+            'sort_order'       => 1,
+        ]);
+
+        $this->withHeaders($this->authHeaders())
+            ->postJson('/api/inventory/documents/' . $docDec->document_id . '/post')
+            ->assertStatus(200);
+
+        $balance->refresh();
+        $this->assertEquals('10.0000', (string) $balance->quantity_on_hand);
+    }
+
+    #[Test]
+    public function posting_adjustment_without_location_is_rejected(): void
+    {
+        $doc = InventoryDocument::withoutGlobalScopes()->create([
+            'document_id'      => (string) Str::uuid(),
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'fiscal_period_id' => (string) Str::uuid(),
+            'document_type'    => 4,
+            'document_number'  => 'ADJ-NO-LOC',
+            'status'           => 1,
+        ]);
+
+        InventoryDocumentItem::withoutGlobalScopes()->create([
+            'document_item_id' => (string) Str::uuid(),
+            'document_id'      => $doc->document_id,
+            'tenant_id'        => $this->tenantA->tenant_id,
+            'item_id'          => $this->itemId,
+            'quantity'         => 3,
+            'unit_cost'        => 1,
+            'sort_order'       => 1,
+        ]);
+
+        $this->withHeaders($this->authHeaders())
+            ->postJson('/api/inventory/documents/' . $doc->document_id . '/post')
             ->assertStatus(409);
     }
 }
