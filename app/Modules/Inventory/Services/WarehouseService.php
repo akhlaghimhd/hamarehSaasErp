@@ -51,22 +51,26 @@ class WarehouseService
 
                 $warehouse = Warehouse::create([
                     'tenant_id'   => $tenantId,
+                    'branch_id'   => $dto->branch_id,
                     'code'        => $dto->code,
                     'name'        => $dto->name,
-                    'location'    => $dto->location,
-                    'is_active'   => $dto->isActive,
+                    'is_bonded'   => $dto->is_bonded,
+                    'status'      => $dto->status,
                     'created_by'  => Context::get('user_id'),
                     'row_version' => 1,
                 ]);
 
-                $this->dispatchOutboxEvent('inventory.warehouse.created', $warehouse, $tenantId);
+                $this->dispatchOutboxEvent('inventory.warehouse.created.v1', $warehouse, $tenantId);
 
-                Log::info("Warehouse created successfully.", ['id' => $warehouse->warehouse_id, 'tenant_id' => $tenantId]);
+                Log::info('Warehouse created successfully.', [
+                    'id'        => $warehouse->warehouse_id,
+                    'tenant_id' => $tenantId,
+                ]);
 
                 return $warehouse;
             });
         } catch (Exception $e) {
-            Log::error("Failed to create Warehouse: " . $e->getMessage());
+            Log::error('Failed to create Warehouse: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -82,21 +86,22 @@ class WarehouseService
 
                 $updateData = array_filter([
                     'name'       => $dto->name,
-                    'location'   => $dto->location,
-                    'is_active'  => $dto->isActive,
+                    'branch_id'  => $dto->branch_id,
+                    'is_bonded'  => $dto->is_bonded,
+                    'status'     => $dto->status,
                     'updated_by' => Context::get('user_id'),
-                ], fn($value) => !is_null($value));
+                ], fn ($value) => !is_null($value));
 
                 $updateData['row_version'] = ((int) ($warehouse->row_version ?? 1)) + 1;
 
                 $warehouse->update($updateData);
 
-                $this->dispatchOutboxEvent('inventory.warehouse.updated', $warehouse, $tenantId);
+                $this->dispatchOutboxEvent('inventory.warehouse.updated.v1', $warehouse, $tenantId);
 
-                return $warehouse;
+                return $warehouse->fresh();
             });
         } catch (Exception $e) {
-            Log::error("Failed to update Warehouse: " . $e->getMessage());
+            Log::error('Failed to update Warehouse: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -113,10 +118,10 @@ class WarehouseService
                 $warehouse->update(['deleted_by' => Context::get('user_id')]);
                 $warehouse->delete();
 
-                $this->dispatchOutboxEvent('inventory.warehouse.deleted', $warehouse, $tenantId);
+                $this->dispatchOutboxEvent('inventory.warehouse.deleted.v1', $warehouse, $tenantId);
             });
         } catch (Exception $e) {
-            Log::error("Failed to delete Warehouse: " . $e->getMessage());
+            Log::error('Failed to delete Warehouse: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -126,7 +131,7 @@ class WarehouseService
         DB::table('event_outbox')->insert([
             'event_id'       => Str::uuid()->toString(),
             'tenant_id'      => $tenantId,
-            'aggregate_type' => 'warehouses',
+            'aggregate_type' => 'inv_warehouses',
             'aggregate_id'   => $warehouse->warehouse_id,
             'event_type'     => $eventType,
             'payload'        => json_encode($warehouse->toArray()),
