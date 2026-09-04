@@ -74,6 +74,24 @@ class InventoryDocumentController extends Controller
         }
     }
 
+    public function post(string $id): JsonResponse
+    {
+        try {
+            $document = $this->documentService->postDocument($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Inventory document posted successfully.',
+                'data'    => $document,
+            ]);
+        } catch (ConflictHttpException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 409);
+        }
+    }
+
     public function destroy(string $id): JsonResponse
     {
         try {

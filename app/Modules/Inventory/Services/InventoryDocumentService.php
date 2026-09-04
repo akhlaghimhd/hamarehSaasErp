@@ -3,6 +3,9 @@
 namespace App\Modules\Inventory\Services;
 
 use App\Modules\Inventory\Models\InventoryDocument;
+use App\Modules\Inventory\Models\InventoryDocumentItem;
+use App\Modules\Inventory\Models\Location;
+use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\DTOs\CreateInventoryDocumentDTO;
 use App\Modules\Inventory\DTOs\UpdateInventoryDocumentDTO;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +53,6 @@ class InventoryDocumentService
             return DB::transaction(function () use ($dto) {
                 $tenantId = Context::get('tenant_id');
 
-                // New documents start as Draft unless explicitly Pending (approval workflow later)
                 $status = in_array($dto->status, [self::STATUS_DRAFT, self::STATUS_PENDING], true)
                     ? $dto->status
                     : self::STATUS_DRAFT;
@@ -152,6 +154,154 @@ class InventoryDocumentService
             Log::error('Failed to delete InventoryDocument: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Post a draft document (Draft → Posted) and apply stock movements to inv_stock_balances.
+     */
+    public function postDocument(string $id): InventoryDocument
+    {
+        try {
+            return DB::transaction(function () use ($id) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+
+                $document = InventoryDocument::with('items')->findOrFail($id);
+
+                if ((int) $document->status !== self::STATUS_DRAFT) {
+                    throw new ConflictHttpException('Only draft inventory documents can be posted.');
+                }
+
+                if ($document->items->isEmpty()) {
+                    throw new ConflictHttpException('Document must have at least one line item before posting.');
+                }
+
+                $type = (int) $document->document_type;
+
+                foreach ($document->items as $line) {
+                    $this->validateLineForPost($line, $type);
+                    $this->applyStockMovement($tenantId, $line, $type);
+                }
+
+                $document->update([
+                    'status'      => self::STATUS_POSTED,
+                    'updated_by'  => $userId,
+                    'row_version' => ((int) ($document->row_version ?? 1)) + 1,
+                ]);
+
+                $this->dispatchOutboxEvent('inventory.document.posted.v1', $document->fresh(), $tenantId);
+
+                return $document->fresh(['items']);
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to post InventoryDocument: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function validateLineForPost(InventoryDocumentItem $line, int $type): void
+    {
+        $qty = (float) $line->quantity;
+        if ($qty <= 0) {
+            throw new ConflictHttpException('Line quantity must be greater than zero.');
+        }
+
+        match ($type) {
+            self::TYPE_RECEIPT => $this->requireLocation($line->to_location_id, 'to_location_id', 'Receipt'),
+            self::TYPE_ISSUE => $this->requireLocation($line->from_location_id, 'from_location_id', 'Issue'),
+            self::TYPE_TRANSFER => $this->requireTransferLocations($line),
+            self::TYPE_ADJUSTMENT => $this->requireAdjustmentLocation($line),
+            default => throw new ConflictHttpException('Unsupported document type for posting.'),
+        };
+    }
+
+    private function requireLocation(?string $locationId, string $field, string $docLabel): void
+    {
+        if (empty($locationId)) {
+            throw new ConflictHttpException("{$docLabel} lines require {$field}.");
+        }
+    }
+
+    private function requireTransferLocations(InventoryDocumentItem $line): void
+    {
+        if (empty($line->from_location_id) || empty($line->to_location_id)) {
+            throw new ConflictHttpException('Transfer lines require both from_location_id and to_location_id.');
+        }
+        if ($line->from_location_id === $line->to_location_id) {
+            throw new ConflictHttpException('Transfer from and to locations must be different.');
+        }
+    }
+
+    private function requireAdjustmentLocation(InventoryDocumentItem $line): void
+    {
+        if (empty($line->to_location_id) && empty($line->from_location_id)) {
+            throw new ConflictHttpException('Adjustment lines require to_location_id (increase) or from_location_id (decrease).');
+        }
+    }
+
+    private function applyStockMovement(string $tenantId, InventoryDocumentItem $line, int $type): void
+    {
+        $qty = (float) $line->quantity;
+
+        if ($type === self::TYPE_RECEIPT) {
+            $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, $qty);
+        } elseif ($type === self::TYPE_ISSUE) {
+            $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, -$qty);
+        } elseif ($type === self::TYPE_TRANSFER) {
+            $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, -$qty);
+            $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, $qty);
+        } elseif ($type === self::TYPE_ADJUSTMENT) {
+            if (!empty($line->to_location_id)) {
+                $this->adjustBalance($tenantId, $line->to_location_id, $line->item_id, $qty);
+            } else {
+                $this->adjustBalance($tenantId, $line->from_location_id, $line->item_id, -$qty);
+            }
+        }
+    }
+
+    private function adjustBalance(string $tenantId, string $locationId, string $itemId, float $delta): void
+    {
+        $location = Location::findOrFail($locationId);
+
+        $balance = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $locationId)
+            ->where('item_id', $itemId)
+            ->lockForUpdate()
+            ->first();
+
+        if ($balance === null) {
+            if ($delta < 0) {
+                throw new ConflictHttpException(
+                    "Insufficient stock for item {$itemId} at location {$locationId}."
+                );
+            }
+
+            StockBalance::create([
+                'tenant_id'         => $tenantId,
+                'warehouse_id'      => $location->warehouse_id,
+                'location_id'       => $locationId,
+                'item_id'           => $itemId,
+                'quantity_on_hand'  => $delta,
+                'quantity_reserved' => 0,
+                'row_version'       => 1,
+                'updated_at'        => now(),
+            ]);
+
+            return;
+        }
+
+        $newOnHand = (float) $balance->quantity_on_hand + $delta;
+        if ($newOnHand < 0) {
+            throw new ConflictHttpException(
+                "Insufficient stock for item {$itemId} at location {$locationId}."
+            );
+        }
+
+        $balance->update([
+            'quantity_on_hand' => $newOnHand,
+            'row_version'      => ((int) ($balance->row_version ?? 1)) + 1,
+            'updated_at'       => now(),
+        ]);
     }
 
     private function dispatchOutboxEvent(string $eventType, InventoryDocument $document, string $tenantId): void
