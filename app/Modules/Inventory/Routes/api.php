@@ -61,6 +61,8 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.document.view');
     Route::put('documents/{id}', [InventoryDocumentController::class, 'update'])
         ->middleware('permission:inventory.document.update');
+    Route::post('documents/{id}/post', [InventoryDocumentController::class, 'post'])
+        ->middleware('permission:inventory.document.post');
     Route::delete('documents/{id}', [InventoryDocumentController::class, 'destroy'])
         ->middleware('permission:inventory.document.delete');
 
