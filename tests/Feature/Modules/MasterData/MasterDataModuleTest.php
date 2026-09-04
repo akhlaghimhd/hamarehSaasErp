@@ -121,12 +121,14 @@ test('tenant isolation prevents accessing other tenant data', function () {
     app()->instance('current_tenant_id', $tenantA);
 
     Item::create([
-        'tenant_id' => $tenantA,
-        'code'      => 'ITEM-A',
-        'name'      => 'کالای مستأجر الف',
-        'item_type' => 1,
-        'base_uom'  => 'PCS',
-        'status'    => 1,
+        'tenant_id'        => $tenantA,
+        'item_group_id'    => (string) Str::uuid(),
+        'uom_id'           => (string) Str::uuid(),
+        'code'             => 'ITEM-A',
+        'name'             => 'کالای مستأجر الف',
+        'item_type'        => 1,
+        'valuation_method' => 1,
+        'status'           => 1,
     ]);
 
     // سوییچ کامل به مستأجر B
@@ -144,11 +146,13 @@ test('can create item successfully', function () {
         'X-Tenant-ID'   => $this->tenantId,
         'Accept'        => 'application/json',
     ])->postJson('/api/inventory/items', [
-        'code'      => 'MAT-100',
-        'name'      => 'مفتول فولادی',
-        'item_type' => 1,
-        'base_uom'  => 'KG',
-        'status'    => 1,
+        'code'             => 'MAT-100',
+        'name'             => 'مفتول فولادی',
+        'item_group_id'    => (string) Str::uuid(),
+        'uom_id'           => (string) Str::uuid(),
+        'item_type'        => 1,
+        'valuation_method' => 1,
+        'status'           => 1,
     ]);
 
     $response->assertStatus(201)->assertJson(['success' => true]);
@@ -162,8 +166,9 @@ test('can create warehouse successfully', function () {
     ])->postJson('/api/inventory/warehouses', [
         'code'      => 'WH-CENTRAL',
         'name'      => 'انبار مرکزی',
-        'location'  => 'تهران - کیلومتر جاده مخصوص',
-        'is_active' => true,
+        'branch_id' => (string) Str::uuid(),
+        'is_bonded' => false,
+        'status'    => 1,
     ]);
 
     if ($response->status() !== 201) {
