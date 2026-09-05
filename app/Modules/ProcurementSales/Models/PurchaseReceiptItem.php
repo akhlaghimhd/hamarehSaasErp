@@ -13,18 +13,23 @@ class PurchaseReceiptItem extends Model
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'purchase_receipt_items';
-    protected $primaryKey = 'receipt_item_id';
+    protected $primaryKey = 'purchase_receipt_item_id';
 
     public $incrementing = false;
     protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'receipt_id',
+        'purchase_receipt_id',
+        'purchase_order_item_id',
         'item_id',
+        'ordered_quantity',
         'received_quantity',
         'unit_price',
         'total_price',
+        'uom_code',
+        'line_number',
+        'notes',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -32,14 +37,16 @@ class PurchaseReceiptItem extends Model
     ];
 
     protected $casts = [
+        'ordered_quantity'  => 'decimal:4',
         'received_quantity' => 'decimal:4',
-        'unit_price' => 'decimal:4',
-        'total_price' => 'decimal:4',
-        'row_version' => 'integer',
+        'unit_price'        => 'decimal:4',
+        'total_price'       => 'decimal:4',
+        'line_number'       => 'integer',
+        'row_version'       => 'integer',
     ];
 
     public function receipt()
     {
-        return $this->belongsTo(PurchaseReceipt::class, 'receipt_id', 'receipt_id');
+        return $this->belongsTo(PurchaseReceipt::class, 'purchase_receipt_id', 'purchase_receipt_id');
     }
 }

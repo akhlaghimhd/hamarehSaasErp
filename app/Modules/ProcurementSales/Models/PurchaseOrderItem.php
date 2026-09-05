@@ -24,7 +24,12 @@ class PurchaseOrderItem extends Model
         'item_id',
         'quantity',
         'unit_price',
+        'discount_amount',
+        'tax_amount',
         'total_price',
+        'uom_code',
+        'line_number',
+        'description',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -32,10 +37,13 @@ class PurchaseOrderItem extends Model
     ];
 
     protected $casts = [
-        'quantity' => 'decimal:4',
-        'unit_price' => 'decimal:4',
-        'total_price' => 'decimal:4',
-        'row_version' => 'integer',
+        'quantity'        => 'decimal:4',
+        'unit_price'      => 'decimal:4',
+        'discount_amount' => 'decimal:4',
+        'tax_amount'      => 'decimal:4',
+        'total_price'     => 'decimal:4',
+        'line_number'     => 'integer',
+        'row_version'     => 'integer',
     ];
 
     public function purchaseOrder()

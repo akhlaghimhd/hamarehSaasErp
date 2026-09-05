@@ -13,20 +13,19 @@ class PurchaseReceipt extends Model
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'purchase_receipts';
-    protected $primaryKey = 'receipt_id';
+    protected $primaryKey = 'purchase_receipt_id';
 
     public $incrementing = false;
     protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'purchase_order_id',
-        'supplier_id',
-        'warehouse_id',
         'receipt_number',
+        'id_purchase_order_source',
+        'supplier_id',
         'receipt_date',
-        'total_amount',
         'status',
+        'notes',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -34,14 +33,13 @@ class PurchaseReceipt extends Model
     ];
 
     protected $casts = [
-        'receipt_date' => 'date',
-        'total_amount' => 'decimal:4',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'receipt_date' => 'datetime',
+        'status'       => 'integer',
+        'row_version'  => 'integer',
     ];
 
     public function items()
     {
-        return $this->hasMany(PurchaseReceiptItem::class, 'receipt_id', 'receipt_id');
+        return $this->hasMany(PurchaseReceiptItem::class, 'purchase_receipt_id', 'purchase_receipt_id');
     }
 }
