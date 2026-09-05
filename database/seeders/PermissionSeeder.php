@@ -169,6 +169,8 @@ class PermissionSeeder extends Seeder
 
             // Inventory — Stock Balance (read-only)
             ['code' => 'inventory.stock-balance.view', 'name' => 'View Stock Balances', 'module_name' => 'Inventory', 'action_type' => 'READ'],
+            ['code' => 'inventory.stock-reservation.reserve', 'name' => 'Reserve Stock', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
+            ['code' => 'inventory.stock-reservation.release', 'name' => 'Release Stock Reservation', 'module_name' => 'Inventory', 'action_type' => 'UPDATE'],
 
             // Inventory — Document
             ['code' => 'inventory.document.view', 'name' => 'View Inventory Documents', 'module_name' => 'Inventory', 'action_type' => 'READ'],
