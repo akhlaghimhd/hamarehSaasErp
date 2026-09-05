@@ -9,6 +9,7 @@ use App\Modules\Inventory\Controllers\InventoryDocumentItemController;
 use App\Modules\Inventory\Controllers\StockBalanceController;
 use App\Modules\Inventory\Controllers\StockReservationController;
 use App\Modules\Inventory\Controllers\StockBatchController;
+use App\Modules\Inventory\Controllers\ItemBarcodeController;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +67,18 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:inventory.stock-batch.update');
     Route::delete('stock-batches/{id}', [StockBatchController::class, 'destroy'])
         ->middleware('permission:inventory.stock-batch.delete');
+
+    // Item barcodes (L6-INV-17 — Owner: Inventory)
+    Route::get('item-barcodes', [ItemBarcodeController::class, 'index'])
+        ->middleware('permission:inventory.item-barcode.view');
+    Route::post('item-barcodes', [ItemBarcodeController::class, 'store'])
+        ->middleware('permission:inventory.item-barcode.create');
+    Route::get('item-barcodes/{id}', [ItemBarcodeController::class, 'show'])
+        ->middleware('permission:inventory.item-barcode.view');
+    Route::put('item-barcodes/{id}', [ItemBarcodeController::class, 'update'])
+        ->middleware('permission:inventory.item-barcode.update');
+    Route::delete('item-barcodes/{id}', [ItemBarcodeController::class, 'destroy'])
+        ->middleware('permission:inventory.item-barcode.delete');
 
     // Stock balances (read-only ledger; mutated via document post/void and reservation)
     Route::get('stock-balances', [StockBalanceController::class, 'index'])
