@@ -16,6 +16,11 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class InventoryDocumentItemService
 {
+    public function __construct(
+        private readonly ItemLookupService $itemLookup,
+    ) {
+    }
+
     public function getAllItems(?string $documentId = null): Collection
     {
         $query = InventoryDocumentItem::query();
@@ -42,6 +47,8 @@ class InventoryDocumentItemService
                 if ((int) $document->status !== InventoryDocumentService::STATUS_DRAFT) {
                     throw new ConflictHttpException('Items can only be added to draft inventory documents.');
                 }
+
+                $this->itemLookup->requireActive($dto->item_id);
 
                 $line = InventoryDocumentItem::create([
                     'tenant_id'        => $tenantId,
