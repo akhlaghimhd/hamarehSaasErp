@@ -7,6 +7,7 @@ use App\Modules\Inventory\Controllers\LocationController;
 use App\Modules\Inventory\Controllers\InventoryDocumentController;
 use App\Modules\Inventory\Controllers\InventoryDocumentItemController;
 use App\Modules\Inventory\Controllers\StockBalanceController;
+use App\Modules\Inventory\Controllers\StockReservationController;
 use App\Modules\Inventory\Controllers\StockBatchController;
 
 /*
@@ -54,7 +55,7 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('locations/{id}', [LocationController::class, 'destroy'])
         ->middleware('permission:inventory.location.delete');
 
-    // Stock batches (lot / expiration / QC quarantine)
+    // Stock batches (lot / expiry / QC)
     Route::get('stock-batches', [StockBatchController::class, 'index'])
         ->middleware('permission:inventory.stock-batch.view');
     Route::post('stock-batches', [StockBatchController::class, 'store'])
@@ -66,11 +67,17 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::delete('stock-batches/{id}', [StockBatchController::class, 'destroy'])
         ->middleware('permission:inventory.stock-batch.delete');
 
-    // Stock balances (read-only ledger; mutated only via document post / void / future reserve)
+    // Stock balances (read-only ledger; mutated via document post/void and reservation)
     Route::get('stock-balances', [StockBalanceController::class, 'index'])
         ->middleware('permission:inventory.stock-balance.view');
     Route::get('stock-balances/{id}', [StockBalanceController::class, 'show'])
         ->middleware('permission:inventory.stock-balance.view');
+
+    // Soft stock reservation (L6-INV-13)
+    Route::post('stock-reservations/reserve', [StockReservationController::class, 'reserve'])
+        ->middleware('permission:inventory.stock-reservation.reserve');
+    Route::post('stock-reservations/release', [StockReservationController::class, 'release'])
+        ->middleware('permission:inventory.stock-reservation.release');
 
     // Inventory Documents (Receipt / Issue / Transfer / Adjustment headers)
     Route::get('documents', [InventoryDocumentController::class, 'index'])
