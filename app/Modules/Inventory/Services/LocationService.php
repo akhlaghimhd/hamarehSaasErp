@@ -15,6 +15,11 @@ use Illuminate\Validation\ValidationException;
 
 class LocationService
 {
+    public function __construct(
+        private readonly WarehouseLookupService $warehouseLookup,
+    ) {
+    }
+
     public function getAllLocations(?string $warehouseId = null): Collection
     {
         $query = Location::query();
@@ -36,6 +41,8 @@ class LocationService
         try {
             return DB::transaction(function () use ($dto) {
                 $tenantId = Context::get('tenant_id');
+
+                $this->warehouseLookup->requireActive($dto->warehouse_id);
 
                 if ($dto->parent_location_id) {
                     $parent = Location::findOrFail($dto->parent_location_id);
