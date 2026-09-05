@@ -16,6 +16,10 @@ use Illuminate\Support\Str;
 use Exception;
 use Illuminate\Database\Eloquent\Collection;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use App\Modules\Inventory\Support\OutboxPublisher;
+use App\Modules\Inventory\Events\StockMovementPostedV1;
+use App\Modules\Inventory\Events\InventoryDocumentPostedV1;
+use App\Modules\Inventory\Events\InventoryDocumentVoidedV1;
 
 class InventoryDocumentService
 {
@@ -199,7 +203,20 @@ class InventoryDocumentService
                     $fresh = $fresh->fresh(['items']);
                 }
 
-                $this->dispatchOutboxEvent('inventory.document.posted.v1', $fresh, $tenantId);
+                OutboxPublisher::publish(
+                    $tenantId,
+                    InventoryDocumentPostedV1::AGGREGATE_TYPE,
+                    $fresh->document_id,
+                    InventoryDocumentPostedV1::EVENT_TYPE,
+                    InventoryDocumentPostedV1::payload($fresh)
+                );
+                OutboxPublisher::publish(
+                    $tenantId,
+                    StockMovementPostedV1::AGGREGATE_TYPE,
+                    $fresh->document_id,
+                    StockMovementPostedV1::EVENT_TYPE,
+                    StockMovementPostedV1::payload($fresh)
+                );
 
                 return $fresh;
             });
@@ -244,7 +261,13 @@ class InventoryDocumentService
                 ]);
 
                 $fresh = $document->fresh(['items']);
-                $this->dispatchOutboxEvent('inventory.document.voided.v1', $fresh, $tenantId);
+                OutboxPublisher::publish(
+                    $tenantId,
+                    InventoryDocumentVoidedV1::AGGREGATE_TYPE,
+                    $fresh->document_id,
+                    InventoryDocumentVoidedV1::EVENT_TYPE,
+                    InventoryDocumentVoidedV1::payload($fresh)
+                );
 
                 if ($reversalId) {
                     Log::info('Inventory void created reversal voucher', [
@@ -415,20 +438,17 @@ class InventoryDocumentService
 
     private function dispatchOutboxEvent(string $eventType, InventoryDocument $document, string $tenantId): void
     {
-        DB::table('event_outbox')->insert([
-            'event_id'       => Str::uuid()->toString(),
-            'tenant_id'      => $tenantId,
-            'aggregate_type' => 'inv_documents',
-            'aggregate_id'   => $document->document_id,
-            'event_type'     => $eventType,
-            'payload'        => json_encode([
+        OutboxPublisher::publish(
+            $tenantId,
+            'inv_documents',
+            $document->document_id,
+            $eventType,
+            [
                 'document_id'     => $document->document_id,
                 'document_number' => $document->document_number,
                 'document_type'   => $document->document_type,
                 'status'          => $document->status,
-            ]),
-            'status'         => 1,
-            'created_at'     => now(),
-        ]);
+            ]
+        );
     }
 }
