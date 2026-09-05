@@ -93,6 +93,8 @@ class InventoryArchitectureRulesAuditTest extends TestCase
     #[Test]
     public function physical_foreign_keys_only_reference_inventory_tables(): void
     {
+        // NOTE: PostgreSQL LIKE treats '_' as single-char wildcard, so
+        // LIKE 'inv_%' also matches invoice_* — use regex ^inv_ instead.
         $fks = DB::select(
             "SELECT
                 tc.table_name,
@@ -107,7 +109,7 @@ class InventoryArchitectureRulesAuditTest extends TestCase
               AND ccu.table_schema = tc.table_schema
              WHERE tc.constraint_type = 'FOREIGN KEY'
                AND tc.table_schema = 'public'
-               AND tc.table_name LIKE 'inv_%'"
+               AND tc.table_name ~ '^inv_'"
         );
 
         $this->assertNotEmpty($fks, 'Expected intra-module FKs on inv_* tables');
@@ -144,7 +146,7 @@ class InventoryArchitectureRulesAuditTest extends TestCase
               AND tc.table_schema = kcu.table_schema
              WHERE tc.constraint_type = 'FOREIGN KEY'
                AND tc.table_schema = 'public'
-               AND tc.table_name LIKE 'inv_%'"
+               AND tc.table_name ~ '^inv_'"
         );
         foreach ($fks as $fk) {
             $fkSet[$fk->table_name . '.' . $fk->column_name] = true;
@@ -169,7 +171,7 @@ class InventoryArchitectureRulesAuditTest extends TestCase
             "SELECT indexname, indexdef
              FROM pg_indexes
              WHERE schemaname = 'public'
-               AND tablename LIKE 'inv_%'
+               AND tablename ~ '^inv_'
                AND indexdef ILIKE '%UNIQUE%'"
         );
 
