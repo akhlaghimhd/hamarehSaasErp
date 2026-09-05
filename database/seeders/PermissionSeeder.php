@@ -86,21 +86,25 @@ class PermissionSeeder extends Seeder
             ]);
         }
 
-        foreach ($permissionIds as $permissionId) {
-            $exists = DB::table('tenant_role_permissions')
-                ->where('tenant_role_id', $actualRoleId)
-                ->where('tenant_permission_id', $permissionId)
-                ->exists();
+        DB::table('tenant_role_permissions')
+            ->where('tenant_id', $demoTenantId)
+            ->where('tenant_role_id', $actualRoleId)
+            ->delete();
 
-            if (!$exists) {
-                DB::table('tenant_role_permissions')->insert([
-                    'tenant_role_permission_id' => (string) Str::uuid(),
-                    'tenant_role_id'            => $actualRoleId,
-                    'tenant_permission_id'      => $permissionId,
-                    'created_at'                => now(),
-                    'updated_at'                => now(),
-                ]);
-            }
+        $insertData = [];
+        foreach ($permissionIds as $permId) {
+            $insertData[] = [
+                'tenant_role_permission_id' => (string) Str::uuid(),
+                'tenant_id'                 => $demoTenantId,
+                'tenant_role_id'            => $actualRoleId,
+                'tenant_permission_id'      => $permId,
+                'created_at'                => now(),
+                'updated_at'                => now(),
+            ];
+        }
+
+        if (!empty($insertData)) {
+            DB::table('tenant_role_permissions')->insert($insertData);
         }
     }
 
