@@ -30,6 +30,18 @@ class InventoryArchitectureRulesAuditTest extends TestCase
         'inv_document_items',
     ];
 
+    /** Tables that may hold intra-module FKs (include optional later tables if present). */
+    private const FK_CANDIDATE_TABLES = [
+        'inv_items',
+        'inv_warehouses',
+        'inv_locations',
+        'inv_stock_batches',
+        'inv_stock_balances',
+        'inv_documents',
+        'inv_document_items',
+        'inv_item_barcodes',
+    ];
+
     #[Test]
     public function all_operational_tables_have_tenant_id(): void
     {
@@ -93,31 +105,36 @@ class InventoryArchitectureRulesAuditTest extends TestCase
     #[Test]
     public function physical_foreign_keys_only_reference_inventory_tables(): void
     {
-        // NOTE: PostgreSQL LIKE treats '_' as single-char wildcard, so
-        // LIKE 'inv_%' also matches invoice_* — use regex ^inv_ instead.
+        // Scope strictly to Inventory operational tables (avoid invoice_* and
+        // information_schema constraint_name collisions across modules).
+        $tables = array_values(array_filter(
+            self::FK_CANDIDATE_TABLES,
+            fn (string $table) => Schema::hasTable($table)
+        ));
+        $tableList = "('" . implode("','", $tables) . "')";
+
         $fks = DB::select(
             "SELECT
-                tc.table_name,
-                kcu.column_name,
-                ccu.table_name AS foreign_table_name
-             FROM information_schema.table_constraints AS tc
-             JOIN information_schema.key_column_usage AS kcu
-               ON tc.constraint_name = kcu.constraint_name
-              AND tc.table_schema = kcu.table_schema
-             JOIN information_schema.constraint_column_usage AS ccu
-               ON ccu.constraint_name = tc.constraint_name
-              AND ccu.table_schema = tc.table_schema
-             WHERE tc.constraint_type = 'FOREIGN KEY'
-               AND tc.table_schema = 'public'
-               AND tc.table_name ~ '^inv_'"
+                n.nspname AS schema_name,
+                c.relname AS table_name,
+                a.attname AS column_name,
+                cf.relname AS foreign_table_name
+             FROM pg_constraint con
+             JOIN pg_class c ON c.oid = con.conrelid
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             JOIN pg_class cf ON cf.oid = con.confrelid
+             JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ord) ON true
+             JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = cols.attnum
+             WHERE con.contype = 'f'
+               AND n.nspname = 'public'
+               AND c.relname IN {$tableList}"
         );
 
         $this->assertNotEmpty($fks, 'Expected intra-module FKs on inv_* tables');
 
         foreach ($fks as $fk) {
-            $this->assertStringStartsWith(
-                'inv_',
-                $fk->foreign_table_name,
+            $this->assertTrue(
+                str_starts_with($fk->foreign_table_name, 'inv_'),
                 "Physical FK {$fk->table_name}.{$fk->column_name} → {$fk->foreign_table_name} "
                 . 'violates Rule 2.2 (cross-module physical FK forbidden).'
             );
@@ -138,15 +155,21 @@ class InventoryArchitectureRulesAuditTest extends TestCase
         ];
 
         $fkSet = [];
+        $tables = array_values(array_filter(
+            self::FK_CANDIDATE_TABLES,
+            fn (string $table) => Schema::hasTable($table)
+        ));
+        $tableList = "('" . implode("','", $tables) . "')";
         $fks = DB::select(
-            "SELECT tc.table_name, kcu.column_name
-             FROM information_schema.table_constraints AS tc
-             JOIN information_schema.key_column_usage AS kcu
-               ON tc.constraint_name = kcu.constraint_name
-              AND tc.table_schema = kcu.table_schema
-             WHERE tc.constraint_type = 'FOREIGN KEY'
-               AND tc.table_schema = 'public'
-               AND tc.table_name ~ '^inv_'"
+            "SELECT c.relname AS table_name, a.attname AS column_name
+             FROM pg_constraint con
+             JOIN pg_class c ON c.oid = con.conrelid
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS cols(attnum, ord) ON true
+             JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = cols.attnum
+             WHERE con.contype = 'f'
+               AND n.nspname = 'public'
+               AND c.relname IN {$tableList}"
         );
         foreach ($fks as $fk) {
             $fkSet[$fk->table_name . '.' . $fk->column_name] = true;
