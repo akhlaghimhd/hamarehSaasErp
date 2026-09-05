@@ -8,17 +8,36 @@ use App\Modules\ProcurementSales\Controllers\SalesDeliveryOrderController;
 use App\Modules\ProcurementSales\Controllers\SalesQuotationController;
 use App\Modules\ProcurementSales\Controllers\ReturnOrderController;
 
-Route::prefix('api/procurement-sales')->middleware(['api', 'tenant.context'])->group(function () {
-    
-    // Procurement
-    Route::post('/purchase-orders', [PurchaseOrderController::class, 'store']);
-    Route::post('/purchase-receipts', [PurchaseReceiptController::class, 'store']);
-    
-    // Sales
-    Route::post('/sales-quotations', [SalesQuotationController::class, 'store']);
-    Route::post('/sales-orders', [SalesOrderController::class, 'store']);
-    Route::post('/sales-deliveries', [SalesDeliveryOrderController::class, 'store']);
-    
+/*
+|--------------------------------------------------------------------------
+| Procurement & Sales Module API Routes
+|--------------------------------------------------------------------------
+| Prefix applied by ModuleServiceProvider: /api/procurement-sales
+*/
+
+Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {
+
+    // Purchase Orders
+    Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])
+        ->middleware('permission:procurement.purchase-order.create');
+
+    // Purchase Receipts
+    Route::post('purchase-receipts', [PurchaseReceiptController::class, 'store'])
+        ->middleware('permission:procurement.purchase-receipt.create');
+
+    // Sales Quotations
+    Route::post('sales-quotations', [SalesQuotationController::class, 'store'])
+        ->middleware('permission:procurement.sales-quotation.create');
+
+    // Sales Orders
+    Route::post('sales-orders', [SalesOrderController::class, 'store'])
+        ->middleware('permission:procurement.sales-order.create');
+
+    // Sales Deliveries
+    Route::post('sales-deliveries', [SalesDeliveryOrderController::class, 'store'])
+        ->middleware('permission:procurement.sales-delivery.create');
+
     // Returns
-    Route::post('/returns', [ReturnOrderController::class, 'store']);
+    Route::post('returns', [ReturnOrderController::class, 'store'])
+        ->middleware('permission:procurement.return-order.create');
 });
