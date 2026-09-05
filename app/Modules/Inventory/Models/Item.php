@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * inv_items — Inventory Master Data (Owner: Inventory module)
@@ -48,4 +49,9 @@ class Item extends Model
         'extra_attributes'  => 'array',
         'row_version'       => 'integer',
     ];
+
+    public function barcodes(): HasMany
+    {
+        return $this->hasMany(ItemBarcode::class, 'item_id', 'item_id');
+    }
 }
