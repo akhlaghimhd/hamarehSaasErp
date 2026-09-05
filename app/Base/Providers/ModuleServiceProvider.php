@@ -6,6 +6,9 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schedule;
+use Illuminate\Support\Facades\Event;
+use App\Modules\Inventory\Listeners\PurchaseReceiptPostedListener;
+use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -33,6 +36,7 @@ class ModuleServiceProvider extends ServiceProvider
     {
         $this->mapApiRoutes();
         $this->loadDynamicMigrations(); // اضافه شدن لودر هوشمند مایگریشن‌ها
+        $this->registerCrossModuleEventListeners();
 
         // ثبت زمان‌بندی (Schedule) پردازش صف Outbox منحصراً در محیط کنسول
         if ($this->app->runningInConsole()) {
@@ -40,6 +44,17 @@ class ModuleServiceProvider extends ServiceProvider
                 ->everyMinute()
                 ->withoutOverlapping();
         }
+    }
+
+    /**
+     * L6-PS-04 – Wire boundary events fired by ProcessOutboxMessageJob (string event names).
+     */
+    protected function registerCrossModuleEventListeners(): void
+    {
+        Event::listen(
+            PurchaseReceiptPostedV1::EVENT_TYPE,
+            [PurchaseReceiptPostedListener::class, 'handle']
+        );
     }
 
     /**
