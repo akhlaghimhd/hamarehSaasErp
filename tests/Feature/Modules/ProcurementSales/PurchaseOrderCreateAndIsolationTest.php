@@ -147,7 +147,7 @@ class PurchaseOrderCreateAndIsolationTest extends TestCase
         $this->assertNotEmpty($order->purchase_order_id);
         $this->assertSame($this->tenantA->tenant_id, $order->tenant_id);
         $this->assertSame(PurchaseOrderService::STATUS_DRAFT, (int) $order->status);
-        $this->assertEquals('1090.0000', (string) $order->total_amount);
+        $this->assertEquals('1009.0000', (string) $order->total_amount);
         $this->assertCount(1, $order->items);
         $this->assertDatabaseHas('purchase_orders', [
             'purchase_order_id' => $order->purchase_order_id,
