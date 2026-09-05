@@ -24,6 +24,10 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     // Purchase Receipts
     Route::post('purchase-receipts', [PurchaseReceiptController::class, 'store'])
         ->middleware('permission:procurement.purchase-receipt.create');
+    Route::get('purchase-receipts/{id}', [PurchaseReceiptController::class, 'show'])
+        ->middleware('permission:procurement.purchase-receipt.view');
+    Route::post('purchase-receipts/{id}/post', [PurchaseReceiptController::class, 'post'])
+        ->middleware('permission:procurement.purchase-receipt.post');
 
     // Sales Quotations
     Route::post('sales-quotations', [SalesQuotationController::class, 'store'])
