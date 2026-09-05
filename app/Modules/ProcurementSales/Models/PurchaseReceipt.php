@@ -23,6 +23,7 @@ class PurchaseReceipt extends Model
         'receipt_number',
         'id_purchase_order_source',
         'supplier_id',
+        'warehouse_id',
         'receipt_date',
         'status',
         'notes',
