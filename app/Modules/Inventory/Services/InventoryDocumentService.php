@@ -429,6 +429,15 @@ class InventoryDocumentService
             );
         }
 
+        // Cannot reduce on-hand below reserved quantity (L6-INV-13)
+        $reserved = (float) $balance->quantity_reserved;
+        if ($newOnHand + 1e-9 < $reserved) {
+            throw new ConflictHttpException(
+                "Cannot reduce stock below reserved quantity for item {$itemId} at location {$locationId}. "
+                . "Reserved: {$reserved}."
+            );
+        }
+
         $balance->update([
             'quantity_on_hand' => $newOnHand,
             'row_version'      => ((int) ($balance->row_version ?? 1)) + 1,
