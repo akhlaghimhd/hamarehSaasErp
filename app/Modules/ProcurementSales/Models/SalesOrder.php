@@ -20,12 +20,17 @@ class SalesOrder extends Model
 
     protected $fillable = [
         'tenant_id',
-        'customer_id',
         'order_number',
+        'customer_id',
+        'quotation_id',
         'order_date',
-        'expected_delivery_date',
+        'delivery_date',
+        'subtotal_amount',
+        'tax_amount',
+        'discount_amount',
         'total_amount',
         'status',
+        'currency_id',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -33,11 +38,14 @@ class SalesOrder extends Model
     ];
 
     protected $casts = [
-        'order_date' => 'date',
-        'expected_delivery_date' => 'date',
-        'total_amount' => 'decimal:4',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'order_date'      => 'date',
+        'delivery_date'   => 'date',
+        'subtotal_amount' => 'decimal:4',
+        'tax_amount'      => 'decimal:4',
+        'discount_amount' => 'decimal:4',
+        'total_amount'    => 'decimal:4',
+        'status'          => 'integer',
+        'row_version'     => 'integer',
     ];
 
     public function items()
