@@ -145,7 +145,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'master-data.business-partner.update', 'name' => 'Update Business Partner', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
             ['code' => 'master-data.business-partner.delete', 'name' => 'Delete Business Partner', 'module_name' => 'MasterData', 'action_type' => 'DELETE'],
 
-            // Inventory-owned Item / Warehouse (codes keep master-data prefix for backward compatibility)
+            // Inventory-owned Item / Warehouse
             ['code' => 'master-data.item.view', 'name' => 'View Items', 'module_name' => 'Inventory', 'action_type' => 'READ'],
             ['code' => 'master-data.item.create', 'name' => 'Create Item', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
             ['code' => 'master-data.item.update', 'name' => 'Update Item', 'module_name' => 'Inventory', 'action_type' => 'UPDATE'],
@@ -166,6 +166,12 @@ class PermissionSeeder extends Seeder
             ['code' => 'inventory.stock-batch.create', 'name' => 'Create Stock Batch', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
             ['code' => 'inventory.stock-batch.update', 'name' => 'Update Stock Batch', 'module_name' => 'Inventory', 'action_type' => 'UPDATE'],
             ['code' => 'inventory.stock-batch.delete', 'name' => 'Delete Stock Batch', 'module_name' => 'Inventory', 'action_type' => 'DELETE'],
+
+            // Inventory — Item Barcode (L6-INV-17)
+            ['code' => 'inventory.item-barcode.view', 'name' => 'View Item Barcodes', 'module_name' => 'Inventory', 'action_type' => 'READ'],
+            ['code' => 'inventory.item-barcode.create', 'name' => 'Create Item Barcode', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
+            ['code' => 'inventory.item-barcode.update', 'name' => 'Update Item Barcode', 'module_name' => 'Inventory', 'action_type' => 'UPDATE'],
+            ['code' => 'inventory.item-barcode.delete', 'name' => 'Delete Item Barcode', 'module_name' => 'Inventory', 'action_type' => 'DELETE'],
 
             // Inventory — Stock Balance (read-only)
             ['code' => 'inventory.stock-balance.view', 'name' => 'View Stock Balances', 'module_name' => 'Inventory', 'action_type' => 'READ'],
@@ -222,14 +228,14 @@ class PermissionSeeder extends Seeder
             ['code' => 'accounting.account.update', 'name' => 'Update Account', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
             ['code' => 'accounting.account.delete', 'name' => 'Delete Account', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
-            // Accounting — Voucher (L6-ACC-02.3)
+            // Accounting — Voucher
             ['code' => 'accounting.voucher.view', 'name' => 'View Vouchers', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.voucher.create', 'name' => 'Create Voucher', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.voucher.update', 'name' => 'Update Voucher', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
             ['code' => 'accounting.voucher.post', 'name' => 'Post Voucher', 'module_name' => 'Accounting', 'action_type' => 'EXECUTE'],
             ['code' => 'accounting.voucher.delete', 'name' => 'Delete Voucher', 'module_name' => 'Accounting', 'action_type' => 'DELETE'],
 
-            // Accounting — Voucher Item / Tax (L6-ACC-02.4)
+            // Accounting — Voucher Item / Tax
             ['code' => 'accounting.voucher-item.view', 'name' => 'View Voucher Items', 'module_name' => 'Accounting', 'action_type' => 'READ'],
             ['code' => 'accounting.voucher-item.create', 'name' => 'Create Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'CREATE'],
             ['code' => 'accounting.voucher-item.update', 'name' => 'Update Voucher Item', 'module_name' => 'Accounting', 'action_type' => 'UPDATE'],
