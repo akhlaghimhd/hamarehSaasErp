@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Per Inventory_Logistics_Module.md
  * document_type: 1 Receipt, 2 Issue, 3 Transfer, 4 Cycle Adjustment
  * status: 1 Draft, 2 Pending Approval, 3 Posted, 4 Voided
- * fiscal_period_id / business_partner_id / source_document_* are logical UUIDs only.
+ * fiscal_period_id / business_partner_id / source_document_* / accounting_voucher_id are logical UUIDs only.
  */
 class InventoryDocument extends Model
 {
@@ -37,6 +37,7 @@ class InventoryDocument extends Model
         'source_document_type',
         'source_document_id',
         'business_partner_id',
+        'accounting_voucher_id',
         'status',
         'description',
         'created_by',
