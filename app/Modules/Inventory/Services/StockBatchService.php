@@ -3,7 +3,6 @@
 namespace App\Modules\Inventory\Services;
 
 use App\Modules\Inventory\Models\StockBatch;
-use App\Modules\Inventory\Models\Item;
 use App\Modules\Inventory\DTOs\CreateStockBatchDTO;
 use App\Modules\Inventory\DTOs\UpdateStockBatchDTO;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +21,11 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  */
 class StockBatchService
 {
+    public function __construct(
+        private readonly ItemLookupService $itemLookup,
+    ) {
+    }
+
     public const QC_PENDING = 1;
     public const QC_APPROVED = 2;
     public const QC_QUARANTINED = 3;
@@ -58,7 +62,7 @@ class StockBatchService
             return DB::transaction(function () use ($dto) {
                 $tenantId = Context::get('tenant_id');
 
-                Item::where('item_id', $dto->item_id)->where('tenant_id', $tenantId)->firstOrFail();
+                $this->itemLookup->requireActive($dto->item_id);
 
                 $produced = (float) $dto->quantity_produced;
                 $remaining = (float) $dto->quantity_remaining;
