@@ -19,6 +19,7 @@ use App\Modules\ProcurementSales\Models\PurchaseReceipt;
 use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -35,6 +36,8 @@ use PHPUnit\Framework\Attributes\Test;
  */
 class ProcurementSalesAccountingBridgeTest extends TestCase
 {
+    use RefreshDatabase;
+
     protected Tenant $tenantA;
     protected Tenant $tenantB;
     protected User $userA;
@@ -68,13 +71,18 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
         app()->instance('current_tenant_id', $this->tenantA->tenant_id);
         ScopeContext::resetInstance();
 
+        // Ensure no leftover open periods for this tenant
+        FiscalPeriod::withoutGlobalScopes()
+            ->where('tenant_id', $this->tenantA->tenant_id)
+            ->delete();
+
         // Open fiscal period covering today for tenant A
         $this->periodIdA = (string) Str::uuid();
         FiscalPeriod::withoutGlobalScopes()->create([
             'period_id'   => $this->periodIdA,
             'tenant_id'   => $this->tenantA->tenant_id,
-            'name'        => 'FY-2026-Q3',
-            'start_date'  => now()->subMonths(1)->toDateString(),
+            'name'        => 'FY-2026-Q3-PSACC',
+            'start_date'  => now()->subDays(7)->toDateString(),
             'end_date'    => now()->addMonths(2)->toDateString(),
             'is_closed'   => false,
             'created_by'  => $this->userA->user_id,
