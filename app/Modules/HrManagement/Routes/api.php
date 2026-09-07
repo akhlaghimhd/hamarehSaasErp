@@ -2,34 +2,33 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Modules\HrManagement\Controllers\EmployeeController;
-use App\Modules\HrManagement\Controllers\EmployeeProfileController;
-use App\Modules\HrManagement\Controllers\HrDocumentController;
 use App\Modules\HrManagement\Controllers\AttendanceRecordController;
-use App\Modules\HrManagement\Controllers\PayrollRecordController;
 
 /*
 |--------------------------------------------------------------------------
 | HR Management API Routes
+| Prefix by ModuleServiceProvider: /api/hr-management
 |--------------------------------------------------------------------------
 */
 
-Route::middleware(['api', 'tenant.context'])
-    ->prefix('api/hr-management')
-    ->group(function () {
+Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {
 
-        // Employee Routes
-        Route::post('/employees', [EmployeeController::class, 'store']);
+    Route::get('employees', [EmployeeController::class, 'index'])
+        ->middleware('permission:hr.employee.view');
+    Route::post('employees', [EmployeeController::class, 'store'])
+        ->middleware('permission:hr.employee.create');
+    Route::get('employees/{id}', [EmployeeController::class, 'show'])
+        ->middleware('permission:hr.employee.view');
+    Route::put('employees/{id}', [EmployeeController::class, 'update'])
+        ->middleware('permission:hr.employee.update');
+    Route::post('employees/{id}/terminate', [EmployeeController::class, 'terminate'])
+        ->middleware('permission:hr.employee.terminate');
 
-        // Employee Profile Routes
-        Route::post('/employee-profiles', [EmployeeProfileController::class, 'store']);
+    Route::get('employees/{employeeId}/attendance', [AttendanceRecordController::class, 'index'])
+        ->middleware('permission:hr.attendance.view');
+    Route::post('employees/{employeeId}/attendance/clock-in', [AttendanceRecordController::class, 'clockIn'])
+        ->middleware('permission:hr.attendance.clock');
+    Route::post('employees/{employeeId}/attendance/clock-out', [AttendanceRecordController::class, 'clockOut'])
+        ->middleware('permission:hr.attendance.clock');
 
-        // HR Document Routes
-        Route::post('/documents', [HrDocumentController::class, 'store']);
-
-        // Attendance Routes
-        Route::post('/attendance', [AttendanceRecordController::class, 'store']);
-
-        // Payroll Routes (محاسبات حقوق و دستمزد)
-        Route::post('/payroll-records', [PayrollRecordController::class, 'store']);
-
-    });
+});

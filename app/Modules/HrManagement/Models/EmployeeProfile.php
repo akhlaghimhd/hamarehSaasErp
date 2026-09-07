@@ -4,14 +4,13 @@ namespace App\Modules\HrManagement\Models;
 
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EmployeeProfile extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'employee_profiles';
     protected $primaryKey = 'profile_id';
@@ -22,14 +21,14 @@ class EmployeeProfile extends Model
     protected $fillable = [
         'tenant_id',
         'employee_id',
-        'first_name',
-        'last_name',
         'national_code',
-        'birth_date',
+        'father_name',
         'gender',
         'marital_status',
+        'birth_date',
         'address',
-        'emergency_contact',
+        'emergency_contact_name',
+        'emergency_contact_phone',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -37,10 +36,10 @@ class EmployeeProfile extends Model
     ];
 
     protected $casts = [
-        'birth_date' => 'date',
-        'gender' => 'integer',
+        'gender'         => 'integer',
         'marital_status' => 'integer',
-        'row_version' => 'integer',
+        'birth_date'     => 'date',
+        'row_version'    => 'integer',
     ];
 
     public function employee(): BelongsTo

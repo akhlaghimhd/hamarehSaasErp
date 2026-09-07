@@ -3,29 +3,49 @@
 namespace App\Modules\HrManagement\Controllers;
 
 use App\Base\Controller;
-use App\Modules\HrManagement\DTOs\CreateAttendanceRecordDTO;
-use App\Modules\HrManagement\Requests\CreateAttendanceRecordRequest;
 use App\Modules\HrManagement\Services\AttendanceRecordService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AttendanceRecordController extends Controller
 {
     public function __construct(
-        private readonly AttendanceRecordService $attendanceService
-    ) {}
+        private readonly AttendanceRecordService $service
+    ) {
+    }
 
-    /**
-     * API-First: تبدیل Request به DTO و فراخوانی Service
-     */
-    public function store(CreateAttendanceRecordRequest $request): JsonResponse
+    public function index(string $employeeId): JsonResponse
     {
-        $dto = CreateAttendanceRecordDTO::fromRequest($request->validated());
-        
-        $attendance = $this->attendanceService->recordAttendance($dto);
-
         return response()->json([
-            'message' => 'Attendance record created successfully.',
-            'data' => $attendance
-        ], 201);
+            'success' => true,
+            'data'    => $this->service->listForEmployee($employeeId),
+        ]);
+    }
+
+    public function clockIn(Request $request, string $employeeId): JsonResponse
+    {
+        $data = $request->validate([
+            'attendance_date' => ['nullable', 'date'],
+        ]);
+
+        $row = $this->service->clockIn($employeeId, $data['attendance_date'] ?? null);
+
+        return response()->json(['success' => true, 'data' => $row], 201);
+    }
+
+    public function clockOut(Request $request, string $employeeId): JsonResponse
+    {
+        $data = $request->validate([
+            'attendance_date' => ['nullable', 'date'],
+            'overtime_hours'  => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $row = $this->service->clockOut(
+            $employeeId,
+            $data['attendance_date'] ?? null,
+            (float) ($data['overtime_hours'] ?? 0)
+        );
+
+        return response()->json(['success' => true, 'data' => $row]);
     }
 }
