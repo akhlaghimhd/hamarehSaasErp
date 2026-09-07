@@ -8,7 +8,9 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Event;
 use App\Modules\Inventory\Listeners\PurchaseReceiptPostedListener;
+use App\Modules\Inventory\Listeners\SalesOrderConfirmedListener;
 use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
+use App\Modules\ProcurementSales\Events\SalesOrderConfirmedV1;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -47,13 +49,17 @@ class ModuleServiceProvider extends ServiceProvider
     }
 
     /**
-     * L6-PS-04 – Wire boundary events fired by ProcessOutboxMessageJob (string event names).
+     * L6-PS-04/05 – Wire boundary events fired by ProcessOutboxMessageJob (string event names).
      */
     protected function registerCrossModuleEventListeners(): void
     {
         Event::listen(
             PurchaseReceiptPostedV1::EVENT_TYPE,
             [PurchaseReceiptPostedListener::class, 'handle']
+        );
+        Event::listen(
+            SalesOrderConfirmedV1::EVENT_TYPE,
+            [SalesOrderConfirmedListener::class, 'handle']
         );
     }
 
