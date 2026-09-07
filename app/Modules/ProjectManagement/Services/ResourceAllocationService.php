@@ -2,49 +2,89 @@
 
 namespace App\Modules\ProjectManagement\Services;
 
-use App\Modules\ProjectManagement\DTOs\ResourceAllocation\AllocateResourceDTO;
+use App\Modules\ProjectManagement\Models\ProjectTask;
 use App\Modules\ProjectManagement\Models\ResourceAllocation;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Exception;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ResourceAllocationService
 {
-    public function allocate(AllocateResourceDTO $dto): ResourceAllocation
+    public function listForTask(string $taskId): Collection
     {
-        return DB::transaction(function () use ($dto) {
-            $allocation = ResourceAllocation::create([
-                'task_id'            => $dto->task_id,
-                'resource_type'      => $dto->resource_type,
-                'resource_id'        => $dto->resource_id,
-                'allocated_quantity' => $dto->allocated_quantity,
-                'start_date'         => $dto->start_date,
-                'end_date'           => $dto->end_date
-            ]);
-
-            $this->publishEventToOutbox($allocation);
-
-            return $allocation;
-        });
+        return ResourceAllocation::query()
+            ->where('task_id', $taskId)
+            ->orderBy('start_date')
+            ->get();
     }
 
-    private function publishEventToOutbox(ResourceAllocation $allocation): void
+    /**
+     * @param  array{resource_type:int,resource_id:string,allocated_quantity?:float,start_date:string,end_date:string}  $data
+     */
+    public function allocate(string $taskId, array $data): ResourceAllocation
     {
-        DB::table('event_outbox')->insert([
-            'event_id'       => Str::uuid()->toString(),
-            'tenant_id'      => $allocation->tenant_id,
-            'aggregate_type' => 'resource_allocations',
-            'aggregate_id'   => $allocation->allocation_id,
-            'event_type'     => 'project_management.resource.allocated',
-            'payload'        => json_encode([
-                'allocation_id'      => $allocation->allocation_id,
-                'task_id'            => $allocation->task_id,
-                'resource_type'      => $allocation->resource_type,
-                'resource_id'        => $allocation->resource_id,
-                'allocated_quantity' => $allocation->allocated_quantity
-            ]),
-            'status'         => 1, // Pending
-            'retry_count'    => 0,
-            'created_at'     => now(),
+        try {
+            return DB::transaction(function () use ($taskId, $data) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+                if (!$tenantId) {
+                    throw new Exception('Tenant Context is missing.');
+                }
+
+                $task = ProjectTask::query()->find($taskId);
+                if (!$task) {
+                    throw new NotFoundHttpException('Task not found.');
+                }
+                if ((int) $task->status === ProjectTask::STATUS_DONE) {
+                    throw new ConflictHttpException('Cannot allocate resources to a completed task.');
+                }
+
+                $type = (int) $data['resource_type'];
+                if (!in_array($type, [
+                    ResourceAllocation::TYPE_HUMAN,
+                    ResourceAllocation::TYPE_MACHINE,
+                    ResourceAllocation::TYPE_MATERIAL,
+                ], true)) {
+                    throw new ConflictHttpException('Invalid resource_type.');
+                }
+
+                if ($data['end_date'] < $data['start_date']) {
+                    throw new ConflictHttpException('end_date must be on or after start_date.');
+                }
+
+                return ResourceAllocation::create([
+                    'tenant_id'          => $tenantId,
+                    'task_id'            => $taskId,
+                    'resource_type'      => $type,
+                    'resource_id'        => $data['resource_id'],
+                    'allocated_quantity' => $data['allocated_quantity'] ?? 1,
+                    'start_date'         => $data['start_date'],
+                    'end_date'           => $data['end_date'],
+                    'created_by'         => $userId,
+                    'row_version'        => 1,
+                ]);
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to allocate resource: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function release(string $allocationId): void
+    {
+        $row = ResourceAllocation::query()->find($allocationId);
+        if (!$row) {
+            throw new NotFoundHttpException('Resource allocation not found.');
+        }
+
+        $row->update([
+            'deleted_by'  => Context::get('user_id'),
+            'row_version' => ((int) ($row->row_version ?? 1)) + 1,
         ]);
+        $row->delete();
     }
 }

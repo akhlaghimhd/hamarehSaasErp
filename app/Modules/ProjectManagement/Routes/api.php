@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\ProjectManagement\Controllers\ProjectController;
 use App\Modules\ProjectManagement\Controllers\ProjectTaskController;
 use App\Modules\ProjectManagement\Controllers\ProjectMemberController;
+use App\Modules\ProjectManagement\Controllers\ResourceAllocationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,5 +41,12 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:project.member.create');
     Route::post('members/{memberId}/remove', [ProjectMemberController::class, 'remove'])
         ->middleware('permission:project.member.update');
+
+    Route::get('tasks/{taskId}/allocations', [ResourceAllocationController::class, 'index'])
+        ->middleware('permission:project.allocation.view');
+    Route::post('tasks/{taskId}/allocations', [ResourceAllocationController::class, 'store'])
+        ->middleware('permission:project.allocation.create');
+    Route::delete('allocations/{allocationId}', [ResourceAllocationController::class, 'destroy'])
+        ->middleware('permission:project.allocation.delete');
 
 });
