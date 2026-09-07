@@ -14,7 +14,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * L6-HR-02 — Payroll record create + mark disbursed.
- * net_payable is DB-generated; do not write it.
+ * net_payable is DB-generated; always refresh after write.
  */
 class PayrollRecordService
 {
@@ -65,7 +65,7 @@ class PayrollRecordService
                     throw new ConflictHttpException('Payroll already exists for this employee and fiscal period.');
                 }
 
-                return PayrollRecord::create([
+                $row = PayrollRecord::create([
                     'tenant_id'          => $tenantId,
                     'employee_id'        => $data['employee_id'],
                     'fiscal_period_id'   => $data['fiscal_period_id'],
@@ -78,6 +78,9 @@ class PayrollRecordService
                     'created_by'         => $userId,
                     'row_version'        => 1,
                 ]);
+
+                // Reload so PostgreSQL generated net_payable is present on the model
+                return $row->fresh();
             });
         } catch (Exception $e) {
             Log::error('Failed to create payroll: ' . $e->getMessage());
