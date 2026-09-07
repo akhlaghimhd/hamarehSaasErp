@@ -1,1 +1,162 @@
-PLACEHOLDER2
+<?php
+
+namespace App\Modules\Inventory\Services;
+
+use App\Modules\Accounting\Services\FiscalPeriodService;
+use App\Modules\Inventory\DTOs\CreateInventoryDocumentDTO;
+use App\Modules\Inventory\DTOs\CreateInventoryDocumentItemDTO;
+use App\Modules\Inventory\Models\InventoryDocument;
+use App\Modules\Inventory\Models\Location;
+use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
+use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Exception;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+
+/**
+ * L6-PS-04 – Inventory side: create + post Goods Receipt from PurchaseReceiptPostedV1.
+ * No physical FK to Procurement; linkage via source_document_type / source_document_id.
+ * Post applies stock (quantity_on_hand) so the purchase→inventory loop is complete.
+ *
+ * L6-PS-06: fiscal_period_id resolved from open Accounting fiscal period (no random UUID).
+ */
+class PurchaseReceiptGoodsReceiptService
+{
+    public const SOURCE_TYPE = 'PUR_RECEIPT';
+
+    public function __construct(
+        private readonly InventoryDocumentService $documentService,
+        private readonly InventoryDocumentItemService $itemService,
+        private readonly FiscalPeriodService $fiscalPeriodService,
+    ) {
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload  Outbox payload from PurchaseReceiptPostedV1 (+ warehouse_id)
+     */
+    public function createFromPostedReceipt(array $payload): InventoryDocument
+    {
+        $tenantId = Context::get('tenant_id') ?: ($payload['tenant_id'] ?? null);
+        if (!$tenantId) {
+            throw new Exception('Tenant Context is missing for PurchaseReceipt → Goods Receipt.');
+        }
+        Context::add('tenant_id', $tenantId);
+
+        if (!Context::get('user_id') && !empty($payload['posted_by'])) {
+            Context::add('user_id', $payload['posted_by']);
+        }
+
+        $purchaseReceiptId = $payload['purchase_receipt_id'] ?? null;
+        $warehouseId = $payload['warehouse_id'] ?? null;
+        $lines = $payload['lines'] ?? [];
+
+        if (empty($purchaseReceiptId)) {
+            throw new Exception('purchase_receipt_id is required in PurchaseReceiptPosted payload.');
+        }
+        if (empty($warehouseId)) {
+            throw new Exception('warehouse_id is required in PurchaseReceiptPosted payload.');
+        }
+        if (!is_array($lines) || count($lines) < 1) {
+            throw new Exception('PurchaseReceiptPosted payload must contain at least one line.');
+        }
+
+        // Idempotency: one GR document per posted purchase receipt
+        $existing = InventoryDocument::query()
+            ->where('source_document_type', self::SOURCE_TYPE)
+            ->where('source_document_id', $purchaseReceiptId)
+            ->first();
+
+        if ($existing) {
+            Log::info('Goods Receipt already exists for purchase receipt (idempotent)', [
+                'document_id'         => $existing->document_id,
+                'status'              => $existing->status,
+            ]);
+
+            // If still draft (legacy path), complete post so stock is applied
+            if ((int) $existing->status === InventoryDocumentService::STATUS_DRAFT) {
+                return $this->documentService->postDocument($existing->document_id);
+            }
+
+            return $existing->load('items');
+        }
+
+        $toLocationId = $this->resolveDefaultLocationId($warehouseId);
+
+        $document = DB::transaction(function () use ($payload, $purchaseReceiptId, $warehouseId, $lines, $toLocationId) {
+            $receiptNumber = $payload['receipt_number'] ?? Str::random(8);
+            $documentNumber = 'GR-' . $receiptNumber;
+            $postingDate = isset($payload['receipt_date'])
+                ? substr((string) $payload['receipt_date'], 0, 10)
+                : now()->toDateString();
+
+            // L6-PS-06: resolve open fiscal period from Accounting (fallback only if none configured)
+            $fiscalPeriodId = $this->fiscalPeriodService->resolveOpenPeriodIdForDate($postingDate)
+                ?? (string) Str::uuid();
+
+            $dto = new CreateInventoryDocumentDTO(
+                fiscal_period_id: $fiscalPeriodId,
+                document_type: InventoryDocumentService::TYPE_RECEIPT,
+                document_number: $documentNumber,
+                posting_date: $postingDate,
+                source_document_type: self::SOURCE_TYPE,
+                source_document_id: $purchaseReceiptId,
+                business_partner_id: $payload['supplier_id'] ?? null,
+                description: 'Auto Goods Receipt from Purchase Receipt ' . $receiptNumber
+                    . ' (warehouse ' . $warehouseId . ')',
+                status: InventoryDocumentService::STATUS_DRAFT,
+            );
+
+            $document = $this->documentService->createDocument($dto);
+
+            $sort = 1;
+            foreach ($lines as $line) {
+                $itemId = $line['item_id'] ?? null;
+                $qty = (float) ($line['quantity'] ?? 0);
+                $unitCost = (float) ($line['unit_price'] ?? 0);
+
+                if (empty($itemId) || $qty <= 0) {
+                    throw new ConflictHttpException('Invalid line in PurchaseReceiptPosted payload.');
+                }
+
+                $itemDto = new CreateInventoryDocumentItemDTO(
+                    document_id: $document->document_id,
+                    item_id: $itemId,
+                    quantity: $qty,
+                    unit_cost: $unitCost,
+                    from_location_id: null,
+                    to_location_id: $toLocationId,
+                    batch_number: null,
+                    sort_order: (int) ($line['line_number'] ?? $sort),
+                );
+
+                $this->itemService->createItem($itemDto);
+                $sort++;
+            }
+
+            return $document->fresh(['items']);
+        });
+
+        // Close physical loop: post GR so quantity_on_hand increases
+        return $this->documentService->postDocument($document->document_id);
+    }
+
+    private function resolveDefaultLocationId(string $warehouseId): string
+    {
+        $location = Location::query()
+            ->where('warehouse_id', $warehouseId)
+            ->where('status', 1)
+            ->orderBy('code')
+            ->first();
+
+        if (!$location) {
+            throw new ConflictHttpException(
+                'No active location found for warehouse ' . $warehouseId
+                . '. Create a location before posting purchase receipts.'
+            );
+        }
+
+        return $location->location_id;
+    }
+}
