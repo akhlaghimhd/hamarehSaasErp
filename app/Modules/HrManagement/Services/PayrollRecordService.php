@@ -13,11 +13,15 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * L6-HR-02 — Payroll record create + mark disbursed.
- * net_payable is DB-generated; always refresh after write.
+ * L6-HR-02/03 — Payroll create + disburse (optional accounting voucher).
  */
 class PayrollRecordService
 {
+    public function __construct(
+        private readonly HrPayrollAccountingService $payrollAccounting,
+    ) {
+    }
+
     public function listForEmployee(string $employeeId): Collection
     {
         return PayrollRecord::query()
@@ -79,7 +83,6 @@ class PayrollRecordService
                     'row_version'        => 1,
                 ]);
 
-                // Reload so PostgreSQL generated net_payable is present on the model
                 return $row->fresh();
             });
         } catch (Exception $e) {
@@ -90,22 +93,34 @@ class PayrollRecordService
 
     public function markDisbursed(string $id, ?string $journalEntryId = null): PayrollRecord
     {
-        $row = PayrollRecord::query()->lockForUpdate()->find($id);
-        if (!$row) {
-            throw new NotFoundHttpException('Payroll record not found.');
-        }
-        if ($row->is_disbursed) {
-            throw new ConflictHttpException('Payroll is already disbursed.');
-        }
+        try {
+            return DB::transaction(function () use ($id, $journalEntryId) {
+                $row = PayrollRecord::query()->lockForUpdate()->find($id);
+                if (!$row) {
+                    throw new NotFoundHttpException('Payroll record not found.');
+                }
+                if ($row->is_disbursed) {
+                    throw new ConflictHttpException('Payroll is already disbursed.');
+                }
 
-        $row->update([
-            'is_disbursed'      => true,
-            'disbursed_at'      => now(),
-            'journal_entry_id'  => $journalEntryId,
-            'updated_by'        => Context::get('user_id'),
-            'row_version'       => ((int) ($row->row_version ?? 1)) + 1,
-        ]);
+                $voucherId = $journalEntryId;
+                if ($voucherId === null) {
+                    $voucherId = $this->payrollAccounting->postDisbursement($row);
+                }
 
-        return $row->fresh();
+                $row->update([
+                    'is_disbursed'     => true,
+                    'disbursed_at'     => now(),
+                    'journal_entry_id' => $voucherId,
+                    'updated_by'       => Context::get('user_id'),
+                    'row_version'      => ((int) ($row->row_version ?? 1)) + 1,
+                ]);
+
+                return $row->fresh();
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to disburse payroll: ' . $e->getMessage());
+            throw $e;
+        }
     }
 }
