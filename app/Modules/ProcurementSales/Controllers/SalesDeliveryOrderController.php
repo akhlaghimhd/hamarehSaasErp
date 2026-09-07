@@ -23,23 +23,46 @@ class SalesDeliveryOrderController extends Controller
             return new SalesDeliveryOrderItemDTO(
                 itemId: $item['item_id'],
                 deliveredQuantity: (float) $item['delivered_quantity'],
-                unitPrice: (float) $item['unit_price']
+                unitPrice: (float) ($item['unit_price'] ?? 0),
+                orderedQuantity: isset($item['ordered_quantity']) ? (float) $item['ordered_quantity'] : null,
+                salesOrderItemId: $item['sales_order_item_id'] ?? null,
+                uomCode: $item['uom_code'] ?? null,
+                lineNumber: (int) ($item['line_number'] ?? 1),
+                notes: $item['notes'] ?? null,
             );
         }, $validated['items']);
 
         $dto = new CreateSalesDeliveryOrderDTO(
-            salesOrderId: $validated['sales_order_id'] ?? null,
             customerId: $validated['customer_id'],
             warehouseId: $validated['warehouse_id'],
-            deliveryDate: $validated['delivery_date'],
-            items: $itemsDto
+            shippingDate: $validated['shipping_date'],
+            salesOrderId: $validated['sales_order_id'] ?? null,
+            items: $itemsDto,
+            shippingAddress: $validated['shipping_address'] ?? null,
         );
 
         $deliveryOrder = $this->deliveryOrderService->createDeliveryOrder($dto);
 
         return response()->json([
-            'message' => 'حواله خروج فروش با موفقیت ایجاد شد.',
-            'data' => $deliveryOrder
+            'message' => 'Sales delivery order created successfully.',
+            'data'    => $deliveryOrder,
         ], 201);
+    }
+
+    public function show(string $id): JsonResponse
+    {
+        $delivery = $this->deliveryOrderService->getById($id);
+
+        return response()->json(['data' => $delivery]);
+    }
+
+    public function post(string $id): JsonResponse
+    {
+        $delivery = $this->deliveryOrderService->post($id);
+
+        return response()->json([
+            'message' => 'Sales delivery posted; inventory issue event published.',
+            'data'    => $delivery,
+        ]);
     }
 }

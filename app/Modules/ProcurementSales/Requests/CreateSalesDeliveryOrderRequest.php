@@ -14,14 +14,20 @@ class CreateSalesDeliveryOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sales_order_id' => ['nullable', 'uuid'],
-            'customer_id' => ['required', 'uuid'],
-            'warehouse_id' => ['required', 'uuid'],
-            'delivery_date' => ['required', 'date'],
-            'items' => ['required', 'array', 'min:1'],
-            'items.*.item_id' => ['required', 'uuid'],
-            'items.*.delivered_quantity' => ['required', 'numeric', 'min:0.0001'],
-            'items.*.unit_price' => ['required', 'numeric', 'min:0'],
+            'sales_order_id'               => ['nullable', 'uuid'],
+            'customer_id'                  => ['required', 'uuid'],
+            'warehouse_id'                 => ['required', 'uuid'],
+            'shipping_date'                => ['required', 'date'],
+            'shipping_address'             => ['nullable', 'string'],
+            'items'                        => ['required', 'array', 'min:1'],
+            'items.*.item_id'              => ['required', 'uuid'],
+            'items.*.delivered_quantity'   => ['required', 'numeric', 'gt:0'],
+            'items.*.unit_price'           => ['nullable', 'numeric', 'gte:0'],
+            'items.*.ordered_quantity'     => ['nullable', 'numeric', 'gte:0'],
+            'items.*.sales_order_item_id'  => ['nullable', 'uuid'],
+            'items.*.uom_code'             => ['nullable', 'string', 'max:30'],
+            'items.*.line_number'          => ['nullable', 'integer', 'min:1'],
+            'items.*.notes'                => ['nullable', 'string'],
         ];
     }
 }
