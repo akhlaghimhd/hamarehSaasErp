@@ -4,49 +4,89 @@ namespace App\Modules\Manufacturing\Services;
 
 use App\Modules\Manufacturing\Models\ProductionLog;
 use App\Modules\Manufacturing\Models\ProductionOrder;
-use App\Modules\Manufacturing\DTOs\ProductionLogDTO;
+use App\Modules\Manufacturing\Models\ProductionRouting;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Exception;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+/**
+ * L6-MFG-03 — Shop-floor logs.
+ * log_type: 1 Material, 2 Labor/Machine time, 3 Scrap
+ */
 class ProductionLogService
 {
-    public function createLog(ProductionLogDTO $dto): ProductionLog
+    public const TYPE_MATERIAL = 1;
+    public const TYPE_LABOR = 2;
+    public const TYPE_SCRAP = 3;
+
+    public function listForOrder(string $productionOrderId): Collection
     {
-        return DB::transaction(function () use ($dto) {
-            
-            $log = ProductionLog::create([
-                'production_order_id' => $dto->productionOrderId,
-                'routing_id' => $dto->routingId,
-                'log_type' => $dto->logType,
-                'item_id' => $dto->itemId,
-                'quantity_consumed' => $dto->quantityConsumed,
-                'hours_spent' => $dto->hoursSpent,
-                'logged_at' => $dto->loggedAt,
-            ]);
+        return ProductionLog::query()
+            ->where('production_order_id', $productionOrderId)
+            ->orderByDesc('logged_at')
+            ->get();
+    }
 
-            // اگر نوع لاگ مصرف کالا (1) یا ضایعات (3) است، به انبار اطلاع می‌دهیم
-            if (in_array($dto->logType, [1, 3]) && $dto->itemId) {
-                DB::table('event_outbox')->insert([
-                    'event_id' => Str::uuid(),
-                    'tenant_id' => $log->tenant_id ?? DB::raw('current_setting(\'app.current_tenant_id\')::uuid'),
-                    'aggregate_type' => 'mfg_production_orders', 
-                    'aggregate_id' => $dto->productionOrderId,
-                    'event_type' => 'manufacturing.material.consumed',
-                    'payload' => json_encode([
-                        'log_id' => $log->production_log_id,
-                        'order_id' => $dto->productionOrderId,
-                        'item_id' => $dto->itemId,
-                        'quantity' => $dto->quantityConsumed,
-                        'type' => $dto->logType === 1 ? 'CONSUMPTION' : 'SCRAP',
-                        'logged_at' => $dto->loggedAt
-                    ]),
-                    'status' => 1,
-                    'retry_count' => 0,
-                    'created_at' => now(),
+    /**
+     * @param  array{log_type:int,routing_id?:?string,item_id?:?string,quantity_consumed?:float,hours_spent?:float}  $data
+     */
+    public function log(string $productionOrderId, array $data): ProductionLog
+    {
+        try {
+            return DB::transaction(function () use ($productionOrderId, $data) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+                if (!$tenantId) {
+                    throw new Exception('Tenant Context is missing.');
+                }
+
+                $order = ProductionOrder::query()->find($productionOrderId);
+                if (!$order) {
+                    throw new NotFoundHttpException('Production order not found.');
+                }
+                if (in_array((int) $order->status, [
+                    ProductionOrderService::STATUS_DRAFT,
+                    ProductionOrderService::STATUS_CANCELLED,
+                ], true)) {
+                    throw new ConflictHttpException('Cannot log against draft or cancelled production orders.');
+                }
+
+                $logType = (int) $data['log_type'];
+                if (!in_array($logType, [self::TYPE_MATERIAL, self::TYPE_LABOR, self::TYPE_SCRAP], true)) {
+                    throw new ConflictHttpException('Invalid log_type.');
+                }
+
+                $routingId = $data['routing_id'] ?? null;
+                if ($routingId) {
+                    $step = ProductionRouting::query()
+                        ->where('routing_id', $routingId)
+                        ->where('production_order_id', $productionOrderId)
+                        ->first();
+                    if (!$step) {
+                        throw new NotFoundHttpException('Routing step not found for this production order.');
+                    }
+                }
+
+                return ProductionLog::create([
+                    'tenant_id'           => $tenantId,
+                    'production_order_id' => $productionOrderId,
+                    'routing_id'          => $routingId,
+                    'log_type'            => $logType,
+                    'item_id'             => $data['item_id'] ?? null,
+                    'quantity_consumed'   => $data['quantity_consumed'] ?? 0,
+                    'hours_spent'         => $data['hours_spent'] ?? 0,
+                    'logged_at'           => now(),
+                    'created_by'          => $userId,
+                    'row_version'         => 1,
                 ]);
-            }
-
-            return $log;
-        });
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to write production log: ' . $e->getMessage());
+            throw $e;
+        }
     }
 }

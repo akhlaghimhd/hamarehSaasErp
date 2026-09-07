@@ -18,8 +18,6 @@ class ProductionLog extends Model
     public $incrementing = false;
     protected $keyType = 'string';
 
-    public $timestamps = false;
-
     protected $fillable = [
         'tenant_id',
         'production_order_id',
@@ -36,15 +34,20 @@ class ProductionLog extends Model
     ];
 
     protected $casts = [
-        'log_type' => 'integer',
+        'log_type'          => 'integer',
         'quantity_consumed' => 'decimal:4',
-        'hours_spent' => 'decimal:4',
-        'logged_at' => 'datetime',
-        'row_version' => 'integer',
+        'hours_spent'       => 'decimal:4',
+        'logged_at'         => 'datetime',
+        'row_version'       => 'integer',
     ];
 
     public function productionOrder(): BelongsTo
     {
         return $this->belongsTo(ProductionOrder::class, 'production_order_id', 'production_order_id');
+    }
+
+    public function routing(): BelongsTo
+    {
+        return $this->belongsTo(ProductionRouting::class, 'routing_id', 'routing_id');
     }
 }

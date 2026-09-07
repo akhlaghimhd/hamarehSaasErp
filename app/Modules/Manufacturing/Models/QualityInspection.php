@@ -7,6 +7,11 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Base\Traits\TenantScoped;
 
+/**
+ * mfg_quality_inspections
+ * inspection_type: 1 Incoming, 2 Production Output, 3 Final Product
+ * qc_status: 1 Pending, 2 Approved, 3 Rejected, 4 Quarantine
+ */
 class QualityInspection extends Model
 {
     use HasUuids, SoftDeletes, TenantScoped;
@@ -39,12 +44,12 @@ class QualityInspection extends Model
     ];
 
     protected $casts = [
-        'inspection_type' => 'integer',
-        'inspection_date' => 'datetime',
-        'sample_quantity' => 'decimal:4',
-        'accepted_quantity' => 'decimal:4',
-        'rejected_quantity' => 'decimal:4',
-        'qc_status' => 'integer',
-        'row_version' => 'integer',
+        'inspection_type'    => 'integer',
+        'inspection_date'    => 'datetime',
+        'sample_quantity'    => 'decimal:4',
+        'accepted_quantity'  => 'decimal:4',
+        'rejected_quantity'  => 'decimal:4',
+        'qc_status'          => 'integer',
+        'row_version'        => 'integer',
     ];
 }
