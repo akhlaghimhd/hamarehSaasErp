@@ -3,6 +3,9 @@
 use Illuminate\Support\Facades\Route;
 use App\Modules\HrManagement\Controllers\EmployeeController;
 use App\Modules\HrManagement\Controllers\AttendanceRecordController;
+use App\Modules\HrManagement\Controllers\EmployeeProfileController;
+use App\Modules\HrManagement\Controllers\PayrollRecordController;
+use App\Modules\HrManagement\Controllers\HrDocumentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,5 +33,22 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:hr.attendance.clock');
     Route::post('employees/{employeeId}/attendance/clock-out', [AttendanceRecordController::class, 'clockOut'])
         ->middleware('permission:hr.attendance.clock');
+
+    Route::get('employees/{employeeId}/profile', [EmployeeProfileController::class, 'show'])
+        ->middleware('permission:hr.employee.view');
+    Route::put('employees/{employeeId}/profile', [EmployeeProfileController::class, 'upsert'])
+        ->middleware('permission:hr.employee.update');
+
+    Route::get('employees/{employeeId}/payroll', [PayrollRecordController::class, 'index'])
+        ->middleware('permission:hr.payroll.view');
+    Route::post('payroll-records', [PayrollRecordController::class, 'store'])
+        ->middleware('permission:hr.payroll.create');
+    Route::post('payroll-records/{id}/disburse', [PayrollRecordController::class, 'disburse'])
+        ->middleware('permission:hr.payroll.disburse');
+
+    Route::get('employees/{employeeId}/documents', [HrDocumentController::class, 'index'])
+        ->middleware('permission:hr.document.view');
+    Route::post('documents', [HrDocumentController::class, 'store'])
+        ->middleware('permission:hr.document.create');
 
 });

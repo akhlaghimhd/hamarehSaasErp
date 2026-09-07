@@ -3,29 +3,50 @@
 namespace App\Modules\HrManagement\Controllers;
 
 use App\Base\Controller;
-use App\Modules\HrManagement\DTOs\CreatePayrollRecordDTO;
-use App\Modules\HrManagement\Requests\CreatePayrollRecordRequest;
 use App\Modules\HrManagement\Services\PayrollRecordService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PayrollRecordController extends Controller
 {
     public function __construct(
-        private readonly PayrollRecordService $payrollService
-    ) {}
+        private readonly PayrollRecordService $service
+    ) {
+    }
 
-    public function store(CreatePayrollRecordRequest $request): JsonResponse
+    public function index(string $employeeId): JsonResponse
     {
-        $dto = CreatePayrollRecordDTO::fromRequest($request->validated());
-        
-        $payroll = $this->payrollService->generatePayroll($dto);
-
-        // واکشی مجدد رکورد برای دریافت مقدار محاسبه شده net_payable از دیتابیس
-        $payroll->refresh();
-
         return response()->json([
-            'message' => 'Payroll record generated successfully.',
-            'data' => $payroll
-        ], 201);
+            'success' => true,
+            'data'    => $this->service->listForEmployee($employeeId),
+        ]);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'employee_id'        => ['required', 'uuid'],
+            'fiscal_period_id'   => ['required', 'uuid'],
+            'base_salary'        => ['required', 'numeric', 'min:0'],
+            'allowances_total'   => ['nullable', 'numeric', 'min:0'],
+            'deductions_total'   => ['nullable', 'numeric', 'min:0'],
+            'tax_withheld'       => ['nullable', 'numeric', 'min:0'],
+            'insurance_premium'  => ['nullable', 'numeric', 'min:0'],
+        ]);
+
+        $row = $this->service->create($data);
+
+        return response()->json(['success' => true, 'data' => $row], 201);
+    }
+
+    public function disburse(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'journal_entry_id' => ['nullable', 'uuid'],
+        ]);
+
+        $row = $this->service->markDisbursed($id, $data['journal_entry_id'] ?? null);
+
+        return response()->json(['success' => true, 'data' => $row]);
     }
 }

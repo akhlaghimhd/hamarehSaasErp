@@ -4,14 +4,13 @@ namespace App\Modules\HrManagement\Models;
 
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class HrDocument extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'hr_documents';
     protected $primaryKey = 'hr_document_id';
@@ -35,9 +34,9 @@ class HrDocument extends Model
     ];
 
     protected $casts = [
-        'issue_date' => 'date',
+        'issue_date'  => 'date',
         'expiry_date' => 'date',
-        'status' => 'integer',
+        'status'      => 'integer',
         'row_version' => 'integer',
     ];
 

@@ -2,30 +2,41 @@
 
 namespace App\Modules\HrManagement\Controllers;
 
-use App\Base\Controller; // کنترلر پایه لاغر
-use App\Modules\HrManagement\DTOs\CreateEmployeeProfileDTO;
-use App\Modules\HrManagement\Requests\CreateEmployeeProfileRequest;
+use App\Base\Controller;
 use App\Modules\HrManagement\Services\EmployeeProfileService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class EmployeeProfileController extends Controller
 {
     public function __construct(
-        private readonly EmployeeProfileService $profileService
-    ) {}
+        private readonly EmployeeProfileService $service
+    ) {
+    }
 
-    /**
-     * API First: فقط تبدیل Request به DTO و تحویل به Service
-     */
-    public function store(CreateEmployeeProfileRequest $request): JsonResponse
+    public function show(string $employeeId): JsonResponse
     {
-        $dto = CreateEmployeeProfileDTO::fromRequest($request->validated());
-        
-        $profile = $this->profileService->createProfile($dto);
-
         return response()->json([
-            'message' => 'Employee profile created successfully.',
-            'data' => $profile
-        ], 201);
+            'success' => true,
+            'data'    => $this->service->getByEmployee($employeeId),
+        ]);
+    }
+
+    public function upsert(Request $request, string $employeeId): JsonResponse
+    {
+        $data = $request->validate([
+            'national_code'           => ['nullable', 'string', 'max:20'],
+            'father_name'             => ['nullable', 'string', 'max:100'],
+            'gender'                  => ['nullable', 'integer', 'in:1,2'],
+            'marital_status'          => ['nullable', 'integer', 'in:1,2'],
+            'birth_date'              => ['nullable', 'date'],
+            'address'                 => ['nullable', 'string'],
+            'emergency_contact_name'  => ['nullable', 'string', 'max:150'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+        ]);
+
+        $profile = $this->service->upsert($employeeId, $data);
+
+        return response()->json(['success' => true, 'data' => $profile]);
     }
 }
