@@ -50,6 +50,8 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
     protected string $accountAp;
     protected string $accountAr;
     protected string $accountRevenue;
+    protected string $accountCogs;
+    protected string $accountAdj;
 
     protected function setUp(): void
     {
@@ -89,12 +91,15 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
         ]);
         $this->periodIdA = $period->period_id;
 
-        // COA for tenant A
+        // COA for tenant A — InventoryAccountingService requires all four of:
+        // 1200 asset, 2100 GR/IR, 5100 COGS, 5200 adjustment
         $this->accountAsset    = (string) Str::uuid();
         $this->accountClearing = (string) Str::uuid();
         $this->accountAp       = (string) Str::uuid();
         $this->accountAr       = (string) Str::uuid();
         $this->accountRevenue  = (string) Str::uuid();
+        $this->accountCogs     = (string) Str::uuid();
+        $this->accountAdj      = (string) Str::uuid();
 
         DB::table('fin_accounts')->insert([
             [
@@ -120,6 +125,16 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
             [
                 'account_id' => $this->accountRevenue, 'tenant_id' => $this->tenantA->tenant_id,
                 'code' => '4000', 'name' => 'Sales Revenue', 'account_type' => 4, 'level' => 1,
+                'is_active' => true, 'created_at' => now(), 'row_version' => 1,
+            ],
+            [
+                'account_id' => $this->accountCogs, 'tenant_id' => $this->tenantA->tenant_id,
+                'code' => '5100', 'name' => 'COGS', 'account_type' => 5, 'level' => 1,
+                'is_active' => true, 'created_at' => now(), 'row_version' => 1,
+            ],
+            [
+                'account_id' => $this->accountAdj, 'tenant_id' => $this->tenantA->tenant_id,
+                'code' => '5200', 'name' => 'Inventory Adjustment', 'account_type' => 5, 'level' => 1,
                 'is_active' => true, 'created_at' => now(), 'row_version' => 1,
             ],
         ]);
