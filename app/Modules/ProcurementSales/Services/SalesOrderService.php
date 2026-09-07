@@ -7,6 +7,7 @@ use App\Modules\ProcurementSales\Events\SalesOrderConfirmedV1;
 use App\Modules\ProcurementSales\Models\SalesOrder;
 use App\Modules\ProcurementSales\Models\SalesOrderItem;
 use App\Modules\ProcurementSales\Support\OutboxPublisher;
+use App\Modules\Workflow\Services\WorkflowEngineService;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,7 +17,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * L6-PS-05 – Sales Order create (Draft) and confirm (→ Outbox for stock reservation).
+ * L6-PS-05 / L6-WF-04 – Sales Order create, workflow approval, confirm.
  */
 class SalesOrderService
 {
@@ -26,6 +27,7 @@ class SalesOrderService
     public const STATUS_DELIVERED = 4;
     public const STATUS_INVOICED = 5;
     public const STATUS_CANCELLED = 0;
+    public const STATUS_PENDING_APPROVAL = 6;
 
     public function createSalesOrder(CreateSalesOrderDTO $dto): SalesOrder
     {
@@ -80,20 +82,17 @@ class SalesOrderService
                     SalesOrderItem::create([
                         'tenant_id'        => $tenantId,
                         'sales_order_id'   => $salesOrder->sales_order_id,
+                        'line_number'      => $lineNumber++,
                         'item_id'          => $item->itemId,
                         'quantity'         => $item->quantity,
                         'unit_price'       => $item->unitPrice,
                         'discount_amount'  => $item->discountAmount,
                         'tax_amount'       => $item->taxAmount,
-                        'total_price'      => $lineNet + $item->taxAmount,
-                        'uom_code'         => $item->uomCode,
-                        'line_number'      => $item->lineNumber ?: $lineNumber,
-                        'description'      => $item->description,
+                        'line_total'       => $lineNet + $item->taxAmount,
                         'created_by'       => $userId,
                         'updated_by'       => $userId,
                         'row_version'      => 1,
                     ]);
-                    $lineNumber++;
                 }
 
                 return $salesOrder->load('items');
@@ -105,7 +104,7 @@ class SalesOrderService
     }
 
     /**
-     * Confirm Draft SO → STATUS_CONFIRMED + publish SalesOrderConfirmedV1 for Inventory reservation.
+     * Confirm Draft/Pending SO → STATUS_CONFIRMED + publish SalesOrderConfirmedV1 for Inventory reservation.
      */
     public function confirm(string $id): SalesOrder
     {
@@ -118,16 +117,17 @@ class SalesOrderService
                     throw new Exception('Tenant Context is missing.');
                 }
 
-                $order = SalesOrder::with('items')->find($id);
+                $order = SalesOrder::query()->lockForUpdate()->find($id);
                 if (!$order) {
                     throw new NotFoundHttpException('Sales order not found.');
                 }
 
-                if ((int) $order->status !== self::STATUS_DRAFT) {
-                    throw new ConflictHttpException('Only draft sales orders can be confirmed.');
+                $status = (int) $order->status;
+                if ($status !== self::STATUS_DRAFT && $status !== self::STATUS_PENDING_APPROVAL) {
+                    throw new ConflictHttpException('Only draft or pending-approval sales orders can be confirmed.');
                 }
 
-                if ($order->items->isEmpty()) {
+                if ($order->items()->count() === 0) {
                     throw new ConflictHttpException('Cannot confirm a sales order with no lines.');
                 }
 
@@ -143,12 +143,13 @@ class SalesOrderService
                     'row_version' => ((int) ($order->row_version ?? 1)) + 1,
                 ]);
 
+                $order = $order->fresh(['items']);
+
                 $lines = [];
                 foreach ($order->items as $item) {
                     $lines[] = [
                         'item_id'     => $item->item_id,
                         'quantity'    => (string) $item->quantity,
-                        'unit_price'  => (string) $item->unit_price,
                         'line_number' => (int) $item->line_number,
                     ];
                 }
@@ -173,7 +174,7 @@ class SalesOrderService
                     $payload,
                 );
 
-                return $order->fresh(['items']);
+                return $order;
             });
         } catch (Exception $e) {
             Log::error('Failed to confirm SalesOrder: ' . $e->getMessage());
@@ -181,13 +182,79 @@ class SalesOrderService
         }
     }
 
-    public function getById(string $id): SalesOrder
+    /**
+     * L6-WF-04 – Submit draft SO to workflow approval (does not confirm stock yet).
+     */
+    public function submitForApproval(
+        string $id,
+        string $definitionCode = 'SALES_ORDER_APPROVAL_V1'
+    ): SalesOrder {
+        try {
+            return DB::transaction(function () use ($id, $definitionCode) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+                if (!$tenantId) {
+                    throw new Exception('Tenant Context is missing.');
+                }
+
+                $order = SalesOrder::query()->lockForUpdate()->find($id);
+                if (!$order) {
+                    throw new NotFoundHttpException('Sales order not found.');
+                }
+                if ((int) $order->status !== self::STATUS_DRAFT) {
+                    throw new ConflictHttpException('Only draft sales orders can be submitted for approval.');
+                }
+                if ($order->items()->count() === 0) {
+                    throw new ConflictHttpException('Cannot submit a sales order with no lines.');
+                }
+
+                $engine = app(WorkflowEngineService::class);
+                $engine->startInstance(
+                    definitionCode: $definitionCode,
+                    targetAggregateType: 'sales_orders',
+                    targetAggregateId: $order->sales_order_id,
+                    contextSnapshot: [
+                        'order_number'  => $order->order_number,
+                        'total_amount'  => (string) $order->total_amount,
+                        'customer_id'   => $order->customer_id,
+                        'warehouse_id'  => $order->warehouse_id,
+                    ],
+                );
+
+                $order->update([
+                    'status'      => self::STATUS_PENDING_APPROVAL,
+                    'updated_by'  => $userId,
+                    'row_version' => ((int) ($order->row_version ?? 1)) + 1,
+                ]);
+
+                return $order->fresh(['items']);
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to submit SalesOrder for approval: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * L6-WF-04 – Apply workflow rejection: return to draft or cancel.
+     */
+    public function rejectFromWorkflow(string $id, bool $cancel = false): SalesOrder
     {
-        $order = SalesOrder::with('items')->find($id);
+        $order = SalesOrder::query()->lockForUpdate()->find($id);
         if (!$order) {
             throw new NotFoundHttpException('Sales order not found.');
         }
+        if ((int) $order->status !== self::STATUS_PENDING_APPROVAL) {
+            throw new ConflictHttpException('Only pending-approval sales orders can be rejected from workflow.');
+        }
 
-        return $order;
+        $userId = Context::get('user_id');
+        $order->update([
+            'status'      => $cancel ? self::STATUS_CANCELLED : self::STATUS_DRAFT,
+            'updated_by'  => $userId,
+            'row_version' => ((int) ($order->row_version ?? 1)) + 1,
+        ]);
+
+        return $order->fresh(['items']);
     }
 }
