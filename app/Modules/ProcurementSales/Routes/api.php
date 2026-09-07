@@ -36,6 +36,10 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     // Sales Orders
     Route::post('sales-orders', [SalesOrderController::class, 'store'])
         ->middleware('permission:procurement.sales-order.create');
+    Route::get('sales-orders/{id}', [SalesOrderController::class, 'show'])
+        ->middleware('permission:procurement.sales-order.view');
+    Route::post('sales-orders/{id}/confirm', [SalesOrderController::class, 'confirm'])
+        ->middleware('permission:procurement.sales-order.confirm');
 
     // Sales Deliveries
     Route::post('sales-deliveries', [SalesDeliveryOrderController::class, 'store'])
