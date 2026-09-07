@@ -5,6 +5,8 @@ namespace App\Modules\Workflow\Services;
 use App\Modules\Workflow\Models\ProcessDefinition;
 use App\Modules\Workflow\Models\ProcessInstance;
 use App\Modules\Workflow\Models\Task;
+use App\Modules\Workflow\Events\WorkflowTaskCompletedV1;
+use App\Modules\Workflow\Support\OutboxPublisher;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,7 +15,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * L6-WF-00/01/02 – Dynamic workflow engine (ADD-04).
+ * L6-WF-00/01/02/03 – Dynamic workflow engine (ADD-04).
  * flow_graph shape (v1):
  * {
  *   "initial_state": "pending_approval",
@@ -189,6 +191,8 @@ class WorkflowEngineService
                     throw new ConflictHttpException('Current state missing from flow_graph.');
                 }
 
+                $previousState = $instance->current_state;
+
                 $task->update([
                     'status'      => $approve ? self::TASK_APPROVED : self::TASK_REJECTED,
                     'actioned_at' => now(),
@@ -200,17 +204,18 @@ class WorkflowEngineService
                 $nextKey = $approve ? 'on_approve' : 'on_reject';
                 $nextState = $stateConfig[$nextKey] ?? null;
                 if (!$nextState || empty($graph['states'][$nextState])) {
-                    throw new ConflictHttpException("flow_graph missing transition [{$nextKey}] from [{$instance->current_state}].");
+                    throw new ConflictHttpException("flow_graph missing transition [{$nextKey}] from [{$previousState}].");
                 }
 
                 $nextConfig = $graph['states'][$nextState];
                 $isTerminal = !empty($nextConfig['terminal']);
+                $newInstanceStatus = $isTerminal
+                    ? ($approve ? self::INSTANCE_COMPLETED : self::INSTANCE_TERMINATED)
+                    : self::INSTANCE_RUNNING;
 
                 $instance->update([
                     'current_state' => $nextState,
-                    'status'        => $isTerminal
-                        ? ($approve ? self::INSTANCE_COMPLETED : self::INSTANCE_TERMINATED)
-                        : self::INSTANCE_RUNNING,
+                    'status'        => $newInstanceStatus,
                     'updated_by'    => $userId,
                     'row_version'   => ((int) ($instance->row_version ?? 1)) + 1,
                 ]);
@@ -223,6 +228,27 @@ class WorkflowEngineService
                         $task->context_snapshots
                     );
                 }
+
+                $event = new WorkflowTaskCompletedV1(
+                    tenantId: $tenantId,
+                    taskId: $task->task_id,
+                    processInstanceId: $instance->process_instance_id,
+                    targetAggregateType: $instance->target_aggregate_type,
+                    targetAggregateId: $instance->target_aggregate_id,
+                    previousState: $previousState,
+                    currentState: $nextState,
+                    approved: $approve,
+                    instanceStatus: $newInstanceStatus,
+                    actionedBy: $userId,
+                );
+
+                OutboxPublisher::publish(
+                    $tenantId,
+                    'wf_tasks',
+                    $task->task_id,
+                    WorkflowTaskCompletedV1::EVENT_TYPE,
+                    $event->toPayload(),
+                );
 
                 return $instance->fresh(['tasks']);
             });
