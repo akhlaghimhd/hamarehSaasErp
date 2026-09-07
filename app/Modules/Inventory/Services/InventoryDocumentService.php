@@ -13,7 +13,6 @@ use App\Modules\Inventory\DTOs\UpdateInventoryDocumentDTO;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Context;
-use Illuminate\Support\Str;
 use Exception;
 use Illuminate\Database\Eloquent\Collection;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -28,6 +27,7 @@ class InventoryDocumentService
 
     public function __construct(
         private readonly InventoryAccountingService $accounting,
+        private readonly ValuationService $valuation,
     ) {
     }
 
@@ -192,6 +192,9 @@ class InventoryDocumentService
                     $this->validateLineForPost($line, $type);
                     $this->applyStockMovement($tenantId, $line, $type);
                 }
+
+                // L6-INV-18: cost layers + resolve issue unit_cost before accounting
+                $this->valuation->applyForDocument($document->fresh(['items']));
 
                 $document->update([
                     'status'      => self::STATUS_POSTED,
@@ -432,7 +435,6 @@ class InventoryDocumentService
             );
         }
 
-        // Cannot reduce on-hand below reserved quantity (L6-INV-13)
         $reserved = (float) $balance->quantity_reserved;
         if ($newOnHand + 1e-9 < $reserved) {
             throw new ConflictHttpException(
