@@ -5,8 +5,13 @@ namespace App\Modules\Manufacturing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Base\Traits\TenantScoped;
 
+/**
+ * mfg_boms — aligned to migration columns (version_code, title, status).
+ * status: 1 Draft, 2 Approved, 3 Obsolete
+ */
 class Bom extends Model
 {
     use HasUuids, SoftDeletes, TenantScoped;
@@ -20,10 +25,10 @@ class Bom extends Model
     protected $fillable = [
         'tenant_id',
         'item_id',
-        'bom_code',
-        'bom_version',
+        'version_code',
+        'title',
         'is_active',
-        'total_standard_cost',
+        'status',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -31,12 +36,12 @@ class Bom extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
-        'total_standard_cost' => 'decimal:4',
+        'is_active'   => 'boolean',
+        'status'      => 'integer',
         'row_version' => 'integer',
     ];
 
-    public function items()
+    public function items(): HasMany
     {
         return $this->hasMany(BomItem::class, 'bom_id', 'bom_id');
     }

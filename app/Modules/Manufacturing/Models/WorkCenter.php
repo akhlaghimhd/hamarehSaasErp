@@ -32,10 +32,10 @@ class WorkCenter extends Model
     ];
 
     protected $casts = [
-        'capacity_hours_per_day' => 'decimal:2',
-        'efficiency_percentage' => 'decimal:2',
-        'cost_per_hour' => 'decimal:4',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'capacity_hours_per_day' => 'decimal:4',
+        'efficiency_percentage'  => 'decimal:4',
+        'cost_per_hour'          => 'decimal:4',
+        'status'                 => 'integer',
+        'row_version'            => 'integer',
     ];
 }

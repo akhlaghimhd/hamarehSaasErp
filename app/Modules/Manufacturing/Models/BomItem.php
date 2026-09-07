@@ -5,8 +5,12 @@ namespace App\Modules\Manufacturing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Base\Traits\TenantScoped;
 
+/**
+ * mfg_bom_items — material_item_id is logical reference to inv_items.
+ */
 class BomItem extends Model
 {
     use HasUuids, SoftDeletes, TenantScoped;
@@ -20,10 +24,10 @@ class BomItem extends Model
     protected $fillable = [
         'tenant_id',
         'bom_id',
-        'raw_material_item_id',
+        'material_item_id',
         'quantity',
-        'unit_of_measure',
         'scrap_percentage',
+        'notes',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -31,12 +35,12 @@ class BomItem extends Model
     ];
 
     protected $casts = [
-        'quantity' => 'decimal:4',
-        'scrap_percentage' => 'decimal:2',
-        'row_version' => 'integer',
+        'quantity'         => 'decimal:4',
+        'scrap_percentage' => 'decimal:4',
+        'row_version'      => 'integer',
     ];
 
-    public function bom()
+    public function bom(): BelongsTo
     {
         return $this->belongsTo(Bom::class, 'bom_id', 'bom_id');
     }

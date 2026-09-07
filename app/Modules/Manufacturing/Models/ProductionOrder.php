@@ -5,9 +5,13 @@ namespace App\Modules\Manufacturing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Base\Traits\TenantScoped;
 
+/**
+ * mfg_production_orders — status: 1 Draft, 2 Released, 3 In Progress, 4 Completed, 0 Cancelled
+ * due_date matches migration (not end_date).
+ */
 class ProductionOrder extends Model
 {
     use HasUuids, SoftDeletes, TenantScoped;
@@ -26,7 +30,7 @@ class ProductionOrder extends Model
         'planned_quantity',
         'produced_quantity',
         'start_date',
-        'end_date',
+        'due_date',
         'status',
         'created_by',
         'updated_by',
@@ -35,12 +39,12 @@ class ProductionOrder extends Model
     ];
 
     protected $casts = [
-        'planned_quantity' => 'decimal:4',
+        'planned_quantity'  => 'decimal:4',
         'produced_quantity' => 'decimal:4',
-        'start_date' => 'datetime',
-        'end_date' => 'datetime',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'start_date'        => 'date',
+        'due_date'          => 'date',
+        'status'            => 'integer',
+        'row_version'       => 'integer',
     ];
 
     public function bom(): BelongsTo
