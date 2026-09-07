@@ -23,6 +23,9 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::get('worklist', [WorkflowController::class, 'worklist'])
         ->middleware('permission:workflow.task.view');
 
+    Route::get('my-worklist', [WorkflowController::class, 'myWorklist'])
+        ->middleware('permission:workflow.task.view');
+
     Route::post('tasks/{id}/complete', [WorkflowController::class, 'completeTask'])
         ->middleware('permission:workflow.task.complete');
 });
