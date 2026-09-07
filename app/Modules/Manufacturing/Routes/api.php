@@ -44,5 +44,11 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:manufacturing.production-order.view');
     Route::post('production-orders/{id}/release', [ProductionOrderController::class, 'release'])
         ->middleware('permission:manufacturing.production-order.release');
+    Route::post('production-orders/{id}/issue-materials', [ProductionOrderController::class, 'issueMaterials'])
+        ->middleware('permission:manufacturing.production-order.issue');
+    Route::post('production-orders/{id}/complete', [ProductionOrderController::class, 'complete'])
+        ->middleware('permission:manufacturing.production-order.complete');
+    Route::get('production-orders/{id}/consumptions', [ProductionOrderController::class, 'consumptions'])
+        ->middleware('permission:manufacturing.production-order.view');
 
 });

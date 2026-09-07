@@ -3,6 +3,7 @@
 namespace App\Modules\Manufacturing\Controllers;
 
 use App\Base\Controller;
+use App\Modules\Manufacturing\Services\MaterialConsumptionService;
 use App\Modules\Manufacturing\Services\ProductionOrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -10,7 +11,8 @@ use Illuminate\Http\Request;
 class ProductionOrderController extends Controller
 {
     public function __construct(
-        private readonly ProductionOrderService $service
+        private readonly ProductionOrderService $service,
+        private readonly MaterialConsumptionService $consumptionService,
     ) {
     }
 
@@ -56,6 +58,52 @@ class ProductionOrderController extends Controller
         return response()->json([
             'success' => true,
             'data'    => $order,
+        ]);
+    }
+
+    public function issueMaterials(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'from_location_id' => ['required', 'uuid'],
+            'actuals'          => ['nullable', 'array'],
+        ]);
+
+        $lines = $this->consumptionService->issueMaterials(
+            $id,
+            $data['from_location_id'],
+            $data['actuals'] ?? []
+        );
+
+        return response()->json([
+            'success' => true,
+            'data'    => $lines,
+        ]);
+    }
+
+    public function complete(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'to_location_id'    => ['required', 'uuid'],
+            'produced_quantity' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        $order = $this->consumptionService->completeProduction(
+            $id,
+            $data['to_location_id'],
+            isset($data['produced_quantity']) ? (float) $data['produced_quantity'] : null
+        );
+
+        return response()->json([
+            'success' => true,
+            'data'    => $order,
+        ]);
+    }
+
+    public function consumptions(string $id): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data'    => $this->consumptionService->listForOrder($id),
         ]);
     }
 }
