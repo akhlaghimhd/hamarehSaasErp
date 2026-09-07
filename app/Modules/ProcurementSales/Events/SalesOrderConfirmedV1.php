@@ -3,8 +3,8 @@
 namespace App\Modules\ProcurementSales\Events;
 
 /**
- * L6-PS-00 – Boundary event for stock reservation.
- * When Sales Order is Confirmed, Inventory may reserve stock.
+ * L6-PS-05 – Boundary event for stock reservation.
+ * When Sales Order is Confirmed, Inventory reserves stock (soft reservation).
  */
 final class SalesOrderConfirmedV1
 {

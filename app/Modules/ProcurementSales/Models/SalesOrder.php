@@ -31,6 +31,7 @@ class SalesOrder extends Model
         'total_amount',
         'status',
         'currency_id',
+        'warehouse_id',
         'created_by',
         'updated_by',
         'deleted_by',
