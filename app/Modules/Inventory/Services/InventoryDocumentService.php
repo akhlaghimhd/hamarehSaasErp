@@ -7,6 +7,7 @@ use App\Modules\Inventory\Models\InventoryDocumentItem;
 use App\Modules\Inventory\Models\Location;
 use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Services\StockBatchService;
+use App\Modules\Inventory\Services\Concerns\InventoryDocumentWorkflowSupport;
 use App\Modules\Inventory\DTOs\CreateInventoryDocumentDTO;
 use App\Modules\Inventory\DTOs\UpdateInventoryDocumentDTO;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,8 @@ use App\Modules\Inventory\Events\InventoryDocumentVoidedV1;
 
 class InventoryDocumentService
 {
+    use InventoryDocumentWorkflowSupport;
+
     public function __construct(
         private readonly InventoryAccountingService $accounting,
     ) {

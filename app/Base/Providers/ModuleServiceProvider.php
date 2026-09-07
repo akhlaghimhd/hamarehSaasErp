@@ -10,10 +10,11 @@ use Illuminate\Support\Facades\Event;
 use App\Modules\Inventory\Listeners\PurchaseReceiptPostedListener;
 use App\Modules\Inventory\Listeners\SalesOrderConfirmedListener;
 use App\Modules\Inventory\Listeners\SalesDeliveryPostedListener;
+use App\Modules\Inventory\Listeners\WorkflowTaskCompletedListener as InventoryWorkflowTaskCompletedListener;
 use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
 use App\Modules\ProcurementSales\Events\SalesOrderConfirmedV1;
 use App\Modules\ProcurementSales\Events\SalesDeliveryPostedV1;
-use App\Modules\ProcurementSales\Listeners\WorkflowTaskCompletedListener;
+use App\Modules\ProcurementSales\Listeners\WorkflowTaskCompletedListener as ProcurementSalesWorkflowTaskCompletedListener;
 use App\Modules\Workflow\Events\WorkflowTaskCompletedV1;
 
 class ModuleServiceProvider extends ServiceProvider
@@ -59,7 +60,11 @@ class ModuleServiceProvider extends ServiceProvider
         );
         Event::listen(
             WorkflowTaskCompletedV1::EVENT_TYPE,
-            [WorkflowTaskCompletedListener::class, 'handle']
+            [ProcurementSalesWorkflowTaskCompletedListener::class, 'handle']
+        );
+        Event::listen(
+            WorkflowTaskCompletedV1::EVENT_TYPE,
+            [InventoryWorkflowTaskCompletedListener::class, 'handle']
         );
     }
 
