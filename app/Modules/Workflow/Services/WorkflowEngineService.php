@@ -13,7 +13,7 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * L6-WF-00/01 – Minimal dynamic workflow engine (ADD-04).
+ * L6-WF-00/01/02 – Dynamic workflow engine (ADD-04).
  * flow_graph shape (v1):
  * {
  *   "initial_state": "pending_approval",
@@ -230,6 +230,40 @@ class WorkflowEngineService
             Log::error('Failed to complete workflow task: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, Task>
+     */
+    public function listPendingTasks(int $assignedType, string $assignedToId)
+    {
+        return Task::query()
+            ->where('assigned_type', $assignedType)
+            ->where('assigned_to_id', $assignedToId)
+            ->where('status', self::TASK_PENDING)
+            ->orderBy('created_at')
+            ->with('instance')
+            ->get();
+    }
+
+    public function getInstance(string $processInstanceId): ProcessInstance
+    {
+        $instance = ProcessInstance::with(['tasks', 'definition'])->find($processInstanceId);
+        if (!$instance) {
+            throw new NotFoundHttpException('Process instance not found.');
+        }
+
+        return $instance;
+    }
+
+    public function getTask(string $taskId): Task
+    {
+        $task = Task::with('instance')->find($taskId);
+        if (!$task) {
+            throw new NotFoundHttpException('Task not found.');
+        }
+
+        return $task;
     }
 
     /**
