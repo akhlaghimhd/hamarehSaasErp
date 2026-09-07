@@ -2,48 +2,85 @@
 
 namespace App\Modules\ProjectManagement\Services;
 
-use App\Modules\ProjectManagement\DTOs\ProjectMember\AddProjectMemberDTO;
+use App\Modules\ProjectManagement\Models\Project;
 use App\Modules\ProjectManagement\Models\ProjectMember;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Exception;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class ProjectMemberService
 {
-    public function addMember(AddProjectMemberDTO $dto): ProjectMember
+    public function listForProject(string $projectId): Collection
     {
-        return DB::transaction(function () use ($dto) {
-            $member = ProjectMember::create([
-                'project_id'   => $dto->project_id,
-                'employee_id'  => $dto->employee_id,
-                'project_role' => $dto->project_role,
-                'joined_at'    => $dto->joined_at,
-                'is_active'    => true,
-                'created_at'   => now()
-            ]);
-
-            $this->publishEventToOutbox($member);
-
-            return $member;
-        });
+        return ProjectMember::query()
+            ->where('project_id', $projectId)
+            ->where('is_active', true)
+            ->orderBy('joined_at')
+            ->get();
     }
 
-    private function publishEventToOutbox(ProjectMember $member): void
+    public function add(string $projectId, array $data): ProjectMember
     {
-        DB::table('event_outbox')->insert([
-            'event_id'       => Str::uuid()->toString(),
-            'tenant_id'      => $member->tenant_id,
-            'aggregate_type' => 'project_members',
-            'aggregate_id'   => $member->member_id,
-            'event_type'     => 'project_management.member.added',
-            'payload'        => json_encode([
-                'member_id'    => $member->member_id,
-                'project_id'   => $member->project_id,
-                'employee_id'  => $member->employee_id,
-                'project_role' => $member->project_role
-            ]),
-            'status'         => 1, // Pending
-            'retry_count'    => 0,
-            'created_at'     => now(),
+        try {
+            return DB::transaction(function () use ($projectId, $data) {
+                $tenantId = Context::get('tenant_id');
+                $userId = Context::get('user_id');
+                if (!$tenantId) {
+                    throw new Exception('Tenant Context is missing.');
+                }
+
+                $project = Project::query()->find($projectId);
+                if (!$project) {
+                    throw new NotFoundHttpException('Project not found.');
+                }
+
+                $active = ProjectMember::query()
+                    ->where('project_id', $projectId)
+                    ->where('employee_id', $data['employee_id'])
+                    ->where('is_active', true)
+                    ->first();
+                if ($active) {
+                    throw new ConflictHttpException('Employee is already an active member of this project.');
+                }
+
+                return ProjectMember::create([
+                    'tenant_id'    => $tenantId,
+                    'project_id'   => $projectId,
+                    'employee_id'  => $data['employee_id'],
+                    'project_role' => $data['project_role'],
+                    'joined_at'    => $data['joined_at'] ?? now()->toDateString(),
+                    'is_active'    => true,
+                    'created_by'   => $userId,
+                    'row_version'  => 1,
+                ]);
+            });
+        } catch (Exception $e) {
+            Log::error('Failed to add project member: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function remove(string $memberId): ProjectMember
+    {
+        $member = ProjectMember::query()->lockForUpdate()->find($memberId);
+        if (!$member) {
+            throw new NotFoundHttpException('Project member not found.');
+        }
+        if (!$member->is_active) {
+            throw new ConflictHttpException('Member is already inactive.');
+        }
+
+        $member->update([
+            'is_active'   => false,
+            'left_at'     => now()->toDateString(),
+            'updated_by'  => Context::get('user_id'),
+            'row_version' => ((int) ($member->row_version ?? 1)) + 1,
         ]);
+
+        return $member->fresh();
     }
 }

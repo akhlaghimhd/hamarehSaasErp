@@ -3,26 +3,34 @@
 namespace App\Modules\ProjectManagement\Controllers;
 
 use App\Base\Controller;
-use App\Modules\ProjectManagement\DTOs\ProjectMember\AddProjectMemberDTO;
-use App\Modules\ProjectManagement\Requests\ProjectMember\AddProjectMemberRequest;
 use App\Modules\ProjectManagement\Services\ProjectMemberService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class ProjectMemberController extends Controller
 {
-    public function __construct(private readonly ProjectMemberService $projectMemberService)
+    public function __construct(private readonly ProjectMemberService $service)
     {
     }
 
-    public function store(AddProjectMemberRequest $request): JsonResponse
+    public function index(string $projectId): JsonResponse
     {
-        $dto = AddProjectMemberDTO::fromRequest($request);
-        
-        $member = $this->projectMemberService->addMember($dto);
+        return response()->json(['success' => true, 'data' => $this->service->listForProject($projectId)]);
+    }
 
-        return response()->json([
-            'message' => 'Project member added successfully and event published.',
-            'data'    => $member
-        ], 201);
+    public function store(Request $request, string $projectId): JsonResponse
+    {
+        $data = $request->validate([
+            'employee_id'  => ['required', 'uuid'],
+            'project_role' => ['required', 'string', 'max:100'],
+            'joined_at'    => ['nullable', 'date'],
+        ]);
+
+        return response()->json(['success' => true, 'data' => $this->service->add($projectId, $data)], 201);
+    }
+
+    public function remove(string $memberId): JsonResponse
+    {
+        return response()->json(['success' => true, 'data' => $this->service->remove($memberId)]);
     }
 }

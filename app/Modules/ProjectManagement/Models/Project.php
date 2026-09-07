@@ -4,13 +4,13 @@ namespace App\Modules\ProjectManagement\Models;
 
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Project extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes, TenantScoped;
+    use HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'projects';
     protected $primaryKey = 'project_id';
@@ -27,6 +27,7 @@ class Project extends Model
         'end_date',
         'actual_end_date',
         'status',
+        'budget',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -34,11 +35,12 @@ class Project extends Model
     ];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date' => 'date',
+        'start_date'      => 'date',
+        'end_date'        => 'date',
         'actual_end_date' => 'date',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'status'          => 'integer',
+        'budget'          => 'decimal:4',
+        'row_version'     => 'integer',
     ];
 
     public const STATUS_CANCELLED = 0;
@@ -46,4 +48,14 @@ class Project extends Model
     public const STATUS_ACTIVE = 2;
     public const STATUS_ON_HOLD = 3;
     public const STATUS_COMPLETED = 4;
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(ProjectTask::class, 'project_id', 'project_id');
+    }
+
+    public function members(): HasMany
+    {
+        return $this->hasMany(ProjectMember::class, 'project_id', 'project_id');
+    }
 }
