@@ -13,18 +13,23 @@ class SalesDeliveryOrderItem extends Model
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'sales_delivery_order_items';
-    protected $primaryKey = 'delivery_item_id';
+    protected $primaryKey = 'sales_delivery_order_item_id';
 
     public $incrementing = false;
     protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'delivery_id',
+        'delivery_order_id',
+        'sales_order_item_id',
         'item_id',
+        'ordered_quantity',
         'delivered_quantity',
         'unit_price',
         'total_price',
+        'uom_code',
+        'line_number',
+        'notes',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -32,14 +37,16 @@ class SalesDeliveryOrderItem extends Model
     ];
 
     protected $casts = [
+        'ordered_quantity'   => 'decimal:4',
         'delivered_quantity' => 'decimal:4',
-        'unit_price' => 'decimal:4',
-        'total_price' => 'decimal:4',
-        'row_version' => 'integer',
+        'unit_price'         => 'decimal:4',
+        'total_price'        => 'decimal:4',
+        'line_number'        => 'integer',
+        'row_version'        => 'integer',
     ];
 
     public function deliveryOrder()
     {
-        return $this->belongsTo(SalesDeliveryOrder::class, 'delivery_id', 'delivery_id');
+        return $this->belongsTo(SalesDeliveryOrder::class, 'delivery_order_id', 'delivery_order_id');
     }
 }

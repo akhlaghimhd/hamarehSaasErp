@@ -13,20 +13,20 @@ class SalesDeliveryOrder extends Model
     use HasFactory, HasUuids, SoftDeletes, TenantScoped;
 
     protected $table = 'sales_delivery_orders';
-    protected $primaryKey = 'delivery_id';
+    protected $primaryKey = 'delivery_order_id';
 
     public $incrementing = false;
     protected $keyType = 'string';
 
     protected $fillable = [
         'tenant_id',
-        'sales_order_id',
+        'delivery_number',
+        'id_sales_order_source',
         'customer_id',
         'warehouse_id',
-        'delivery_number',
-        'delivery_date',
-        'total_amount',
+        'shipping_date',
         'status',
+        'shipping_address',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -34,14 +34,13 @@ class SalesDeliveryOrder extends Model
     ];
 
     protected $casts = [
-        'delivery_date' => 'date',
-        'total_amount' => 'decimal:4',
-        'status' => 'integer',
-        'row_version' => 'integer',
+        'shipping_date' => 'datetime',
+        'status'        => 'integer',
+        'row_version'   => 'integer',
     ];
 
     public function items()
     {
-        return $this->hasMany(SalesDeliveryOrderItem::class, 'delivery_id', 'delivery_id');
+        return $this->hasMany(SalesDeliveryOrderItem::class, 'delivery_order_id', 'delivery_order_id');
     }
 }
