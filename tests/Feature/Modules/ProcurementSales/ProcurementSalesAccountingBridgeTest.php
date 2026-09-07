@@ -74,12 +74,11 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
         // Ensure no leftover open periods for this tenant
         FiscalPeriod::withoutGlobalScopes()
             ->where('tenant_id', $this->tenantA->tenant_id)
-            ->delete();
+            ->forceDelete();
 
-        // Open fiscal period covering today for tenant A
-        $this->periodIdA = (string) Str::uuid();
-        FiscalPeriod::withoutGlobalScopes()->create([
-            'period_id'   => $this->periodIdA,
+        // period_id is NOT in FiscalPeriod::$fillable — HasUuids assigns the real PK.
+        // Capture the actual period_id after create so assertions match the DB row.
+        $period = FiscalPeriod::withoutGlobalScopes()->create([
             'tenant_id'   => $this->tenantA->tenant_id,
             'name'        => 'FY-2026-Q3-PSACC',
             'start_date'  => now()->subDays(7)->toDateString(),
@@ -88,6 +87,7 @@ class ProcurementSalesAccountingBridgeTest extends TestCase
             'created_by'  => $this->userA->user_id,
             'row_version' => 1,
         ]);
+        $this->periodIdA = $period->period_id;
 
         // COA for tenant A
         $this->accountAsset    = (string) Str::uuid();
