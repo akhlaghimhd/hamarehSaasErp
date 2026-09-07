@@ -15,8 +15,9 @@ use Exception;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
- * L6-PS-04 – Inventory side: create Goods Receipt document from PurchaseReceiptPostedV1.
+ * L6-PS-04 – Inventory side: create + post Goods Receipt from PurchaseReceiptPostedV1.
  * No physical FK to Procurement; linkage via source_document_type / source_document_id.
+ * Post applies stock (quantity_on_hand) so the purchase→inventory loop is complete.
  */
 class PurchaseReceiptGoodsReceiptService
 {
@@ -39,6 +40,10 @@ class PurchaseReceiptGoodsReceiptService
         }
         Context::add('tenant_id', $tenantId);
 
+        if (!Context::get('user_id') && !empty($payload['posted_by'])) {
+            Context::add('user_id', $payload['posted_by']);
+        }
+
         $purchaseReceiptId = $payload['purchase_receipt_id'] ?? null;
         $warehouseId = $payload['warehouse_id'] ?? null;
         $lines = $payload['lines'] ?? [];
@@ -60,17 +65,23 @@ class PurchaseReceiptGoodsReceiptService
             ->first();
 
         if ($existing) {
-            Log::info('Goods Receipt already exists for purchase receipt; skipping.', [
+            Log::info('Goods Receipt already exists for purchase receipt; skipping create.', [
                 'purchase_receipt_id' => $purchaseReceiptId,
                 'document_id'         => $existing->document_id,
+                'status'              => $existing->status,
             ]);
+
+            // If still draft (legacy path), complete post so stock is applied
+            if ((int) $existing->status === InventoryDocumentService::STATUS_DRAFT) {
+                return $this->documentService->postDocument($existing->document_id);
+            }
 
             return $existing->load('items');
         }
 
         $toLocationId = $this->resolveDefaultLocationId($warehouseId);
 
-        return DB::transaction(function () use ($payload, $purchaseReceiptId, $warehouseId, $lines, $toLocationId) {
+        $document = DB::transaction(function () use ($payload, $purchaseReceiptId, $warehouseId, $lines, $toLocationId) {
             $receiptNumber = $payload['receipt_number'] ?? Str::random(8);
             $documentNumber = 'GR-' . $receiptNumber;
             $postingDate = isset($payload['receipt_date'])
@@ -119,6 +130,9 @@ class PurchaseReceiptGoodsReceiptService
 
             return $document->fresh(['items']);
         });
+
+        // Close physical loop: post GR so quantity_on_hand increases
+        return $this->documentService->postDocument($document->document_id);
     }
 
     private function resolveDefaultLocationId(string $warehouseId): string

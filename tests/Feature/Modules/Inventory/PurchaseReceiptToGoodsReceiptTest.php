@@ -9,6 +9,7 @@ use App\Modules\Inventory\Models\Item;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Models\Location;
 use App\Modules\Inventory\Models\InventoryDocument;
+use App\Modules\Inventory\Models\StockBalance;
 use App\Modules\Inventory\Services\PurchaseReceiptGoodsReceiptService;
 use App\Modules\Inventory\Services\InventoryDocumentService;
 use App\Modules\Inventory\Listeners\PurchaseReceiptPostedListener;
@@ -21,7 +22,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * L6-PS-04 — Purchase Receipt posted → Inventory Goods Receipt (boundary, no FK)
+ * L6-PS-04 — Purchase Receipt posted → Inventory Goods Receipt posted + stock on hand
  */
 class PurchaseReceiptToGoodsReceiptTest extends TestCase
 {
@@ -103,6 +104,7 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
             'purchase_order_id'   => (string) Str::uuid(),
             'receipt_date'        => '2026-09-05',
             'warehouse_id'        => $this->warehouseId,
+            'posted_by'           => $this->userA->user_id,
             'lines'               => [
                 [
                     'item_id'     => $this->itemId,
@@ -115,7 +117,7 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
     }
 
     #[Test]
-    public function creates_draft_goods_receipt_document_from_posted_purchase_receipt_payload(): void
+    public function creates_and_posts_goods_receipt_and_increases_stock_on_hand(): void
     {
         $service = app(PurchaseReceiptGoodsReceiptService::class);
         $receiptId = (string) Str::uuid();
@@ -125,17 +127,27 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
 
         $this->assertNotEmpty($document->document_id);
         $this->assertSame(InventoryDocumentService::TYPE_RECEIPT, (int) $document->document_type);
-        $this->assertSame(InventoryDocumentService::STATUS_DRAFT, (int) $document->status);
+        $this->assertSame(InventoryDocumentService::STATUS_POSTED, (int) $document->status);
         $this->assertSame(PurchaseReceiptGoodsReceiptService::SOURCE_TYPE, $document->source_document_type);
         $this->assertSame($receiptId, $document->source_document_id);
         $this->assertCount(1, $document->items);
         $this->assertSame($this->itemId, $document->items->first()->item_id);
         $this->assertEquals(12.0, (float) $document->items->first()->quantity);
         $this->assertSame($this->locationId, $document->items->first()->to_location_id);
+
+        $balance = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId)
+            ->where('item_id', $this->itemId)
+            ->first();
+
+        $this->assertNotNull($balance);
+        $this->assertEquals(12.0, (float) $balance->quantity_on_hand);
+        $this->assertSame($this->warehouseId, $balance->warehouse_id);
+        $this->assertSame($this->tenantA->tenant_id, $balance->tenant_id);
     }
 
     #[Test]
-    public function is_idempotent_for_same_purchase_receipt(): void
+    public function is_idempotent_for_same_purchase_receipt_and_does_not_double_stock(): void
     {
         $service = app(PurchaseReceiptGoodsReceiptService::class);
         $receiptId = (string) Str::uuid();
@@ -145,6 +157,7 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
         $second = $service->createFromPostedReceipt($payload);
 
         $this->assertSame($first->document_id, $second->document_id);
+        $this->assertSame(InventoryDocumentService::STATUS_POSTED, (int) $second->status);
         $this->assertSame(
             1,
             InventoryDocument::query()
@@ -152,10 +165,18 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
                 ->where('source_document_id', $receiptId)
                 ->count()
         );
+
+        $balance = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId)
+            ->where('item_id', $this->itemId)
+            ->first();
+
+        $this->assertNotNull($balance);
+        $this->assertEquals(12.0, (float) $balance->quantity_on_hand);
     }
 
     #[Test]
-    public function listener_handles_string_event_from_outbox_pipeline(): void
+    public function listener_handles_string_event_from_outbox_pipeline_and_posts_stock(): void
     {
         $receiptId = (string) Str::uuid();
         $payload = $this->samplePayload($receiptId);
@@ -170,7 +191,16 @@ class PurchaseReceiptToGoodsReceiptTest extends TestCase
             ->first();
 
         $this->assertNotNull($doc);
+        $this->assertSame(InventoryDocumentService::STATUS_POSTED, (int) $doc->status);
         $this->assertCount(1, $doc->items);
         $this->assertSame($this->locationId, $doc->items->first()->to_location_id);
+
+        $balance = StockBalance::withoutGlobalScopes()
+            ->where('location_id', $this->locationId)
+            ->where('item_id', $this->itemId)
+            ->first();
+
+        $this->assertNotNull($balance);
+        $this->assertEquals(12.0, (float) $balance->quantity_on_hand);
     }
 }

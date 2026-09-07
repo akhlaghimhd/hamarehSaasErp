@@ -9,7 +9,8 @@ use Throwable;
 
 /**
  * L6-PS-04 – Consumes procurement.purchase-receipt.posted.v1 from ProcessOutboxMessageJob.
- * Creates Inventory Goods Receipt (draft) linked via source_document_* (no cross-module FK).
+ * Creates and posts Inventory Goods Receipt linked via source_document_* (no cross-module FK).
+ * Posting increases quantity_on_hand so the purchase→inventory loop is complete.
  */
 class PurchaseReceiptPostedListener
 {
@@ -26,13 +27,14 @@ class PurchaseReceiptPostedListener
         try {
             $document = $this->goodsReceiptService->createFromPostedReceipt($payload);
 
-            Log::info('Inventory Goods Receipt created from PurchaseReceiptPostedV1', [
+            Log::info('Inventory Goods Receipt created and posted from PurchaseReceiptPostedV1', [
                 'document_id'         => $document->document_id,
+                'status'              => $document->status,
                 'purchase_receipt_id' => $payload['purchase_receipt_id'] ?? null,
                 'lines'               => $document->items->count(),
             ]);
         } catch (Throwable $e) {
-            Log::error('Failed to create Goods Receipt from PurchaseReceiptPostedV1: ' . $e->getMessage(), [
+            Log::error('Failed to create/post Goods Receipt from PurchaseReceiptPostedV1: ' . $e->getMessage(), [
                 'purchase_receipt_id' => $payload['purchase_receipt_id'] ?? null,
             ]);
             throw $e;
