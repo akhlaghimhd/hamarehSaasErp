@@ -13,6 +13,8 @@ use App\Modules\Inventory\Listeners\SalesDeliveryPostedListener;
 use App\Modules\ProcurementSales\Events\PurchaseReceiptPostedV1;
 use App\Modules\ProcurementSales\Events\SalesOrderConfirmedV1;
 use App\Modules\ProcurementSales\Events\SalesDeliveryPostedV1;
+use App\Modules\ProcurementSales\Listeners\WorkflowTaskCompletedListener;
+use App\Modules\Workflow\Events\WorkflowTaskCompletedV1;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -54,6 +56,10 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(
             SalesDeliveryPostedV1::EVENT_TYPE,
             [SalesDeliveryPostedListener::class, 'handle']
+        );
+        Event::listen(
+            WorkflowTaskCompletedV1::EVENT_TYPE,
+            [WorkflowTaskCompletedListener::class, 'handle']
         );
     }
 

@@ -83,4 +83,16 @@ class WorkflowController extends Controller
             'data'    => $instance,
         ]);
     }
+
+    /**
+     * L6-WF-06 – Worklist for roles of the authenticated user.
+     */
+    public function myWorklist(): JsonResponse
+    {
+        $tasks = $this->engine->listPendingTasksForCurrentUser();
+
+        return response()->json([
+            'data' => $tasks,
+        ]);
+    }
 }
