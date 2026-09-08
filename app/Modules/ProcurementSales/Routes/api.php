@@ -7,6 +7,8 @@ use App\Modules\ProcurementSales\Controllers\SalesOrderController;
 use App\Modules\ProcurementSales\Controllers\SalesDeliveryOrderController;
 use App\Modules\ProcurementSales\Controllers\SalesQuotationController;
 use App\Modules\ProcurementSales\Controllers\ReturnOrderController;
+use App\Modules\ProcurementSales\Controllers\SalesInvoiceController;
+use App\Modules\ProcurementSales\Controllers\PurchaseInvoiceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,6 +50,22 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:procurement.sales-delivery.view');
     Route::post('sales-deliveries/{id}/post', [SalesDeliveryOrderController::class, 'post'])
         ->middleware('permission:procurement.sales-delivery.post');
+
+    // Sales Invoices (L6-PS-07)
+    Route::post('sales-invoices', [SalesInvoiceController::class, 'store'])
+        ->middleware('permission:procurement.sales-invoice.create');
+    Route::get('sales-invoices/{id}', [SalesInvoiceController::class, 'show'])
+        ->middleware('permission:procurement.sales-invoice.view');
+    Route::post('sales-invoices/{id}/post', [SalesInvoiceController::class, 'post'])
+        ->middleware('permission:procurement.sales-invoice.post');
+
+    // Purchase Invoices (L6-PS-07)
+    Route::post('purchase-invoices', [PurchaseInvoiceController::class, 'store'])
+        ->middleware('permission:procurement.purchase-invoice.create');
+    Route::get('purchase-invoices/{id}', [PurchaseInvoiceController::class, 'show'])
+        ->middleware('permission:procurement.purchase-invoice.view');
+    Route::post('purchase-invoices/{id}/post', [PurchaseInvoiceController::class, 'post'])
+        ->middleware('permission:procurement.purchase-invoice.post');
 
     // Returns
     Route::post('returns', [ReturnOrderController::class, 'store'])
