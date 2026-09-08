@@ -79,7 +79,7 @@ class InventoryAccountingIntegrationTest extends TestCase
                 'action_type'          => strtoupper(explode('.', $code)[2] ?? 'VIEW'),
                 'status'               => 1,
             ]);
-            TenantRolePermission::createcreate([
+            TenantRolePermission::create([
                 'tenant_role_permission_id' => (string) Str::uuid(),
                 'tenant_id'                 => $this->tenantA->tenant_id,
                 'tenant_role_id'            => $role->tenant_role_id,
@@ -91,7 +91,7 @@ class InventoryAccountingIntegrationTest extends TestCase
             'tenant_user_role_id' => (string) Str::uuid(),
             'tenant_id'           => $this->tenantA->tenant_id,
             'user_id'             => $this->userA->user_id,
-            'tenant 'tenant_role_id'      => $role->tenant_role_id,
+            'tenant_role_id'      => $role->tenant_role_id,
         ]);
 
         $this->tokenA = $this->userA->createToken(
@@ -322,7 +322,7 @@ class InventoryAccountingIntegrationTest extends TestCase
     }
 
     #[Test]
-    public function posting_without_gl_accounts_still_posts_stock(): void
+    public function posting_without_gl_accounts_still_posts_stock(): basvoid
     {
         DB::table('fin_accounts')->where('tenant_id', $this->tenantA->tenant_id)->delete();
 
