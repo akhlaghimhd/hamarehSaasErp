@@ -4,49 +4,82 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class PermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        $permissions = $this->permissions();
+        $demoTenantId = '3ab77cac-1343-4b13-8e14-0d887aad132a';
 
-        foreach ($permissions as $permission) {
-            $exists = DB::table('permissions')
-                ->where('code', $permission['code'])
-                ->exists();
+        $permissions = $this->getBasePermissions();
 
-            if (!$exists) {
-                DB::table('permissions')->insert([
-                    'permission_id' => (string) Str::uuid(),
-                    'code' => $permission['code'],
-                    'name' => $permission['name'],
-                    'module_name' => $permission['module_name'],
-                    'action_type' => $permission['action_type'],
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+        $permissionIds = [];
+
+        foreach ($permissions as $perm) {
+            $existing = DB::table('tenant_permissions')
+                ->where('tenant_id', $demoTenantId)
+                ->where('permission_code', $perm['code'])
+                ->first();
+
+            if ($existing) {
+                $permissionIds[] = $existing->tenant_permission_id;
+                continue;
             }
-        }
 
-        Log::info('PermissionSeeder completed', ['count' => count($permissions)]);
+            $id = (string) Str::uuid();
+            DB::table('tenant_permissions')->insert([
+                'tenant_permission_id' => $id,
+                'tenant_id' => $demoTenantId,
+                'permission_code' => $perm['code'],
+                'permission_name' => $perm['name'],
+                'module_name' => $perm['module_name'],
+                'action_type' => $perm['action_type'],
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $permissionIds[] = $id;
+        }
     }
 
-    private function permissions(): array
+    private function getBasePermissions(): array
     {
         return [
-            // NOTE: Full restored list is in artifacts/PermissionSeeder_L6PS09.php —
-            // This push is a safety minimal set for PS module if full push fails.
-            // User should replace with full seeder from local artifact if other modules missing.
-            ['code' => 'procurement.purchase-requisition.view', 'name' => 'View Purchase Requisitions', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
-            ['code' => 'procurement.purchase-requisition.create', 'name' => 'Create Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
-            ['code' => 'procurement.purchase-requisition.submit', 'name' => 'Submit Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
-            ['code' => 'procurement.purchase-requisition.approve', 'name' => 'Approve Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
-            ['code' => 'procurement.payment-schedule.view', 'name' => 'View Payment Schedules', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
-            ['code' => 'procurement.cash-transaction.create', 'name' => 'Create Cash Transactions', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
-            ['code' => 'procurement.cash-transaction.view', 'name' => 'View Cash Transactions', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'platform.tenant.view', 'name' => 'View Tenants', 'module_name' => 'SaasPlatform', 'action_type' => 'READ'],
+            ['code' => 'platform.tenant.manage', 'name' => 'Manage Tenants', 'module_name' => 'SaasPlatform', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.user.view', 'name' => 'View Users', 'module_name' => 'IdentityCore', 'action_type' => 'READ'],
+            ['code' => 'identity.user.manage', 'name' => 'Manage Users', 'module_name' => 'IdentityCore', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'IdentityCore', 'action_type' => 'READ'],
+            ['code' => 'identity.role.manage', 'name' => 'Manage Roles', 'module_name' => 'IdentityCore', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'masterdata.business-partner.view', 'name' => 'View Business Partners', 'module_name' => 'MasterData', 'action_type' => 'READ'],
+            ['code' => 'masterdata.business-partner.create', 'name' => 'Create Business Partner', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
+            ['code' => 'masterdata.business-partner.update', 'name' => 'Update Business Partner', 'module_name' => 'MasterData', 'action_type' => 'UPDATE'],
+
+            ['code' => 'inventory.item.view', 'name' => 'View Items', 'module_name' => 'Inventory', 'action_type' => 'READ'],
+            ['code' => 'inventory.item.create', 'name' => 'Create Item', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
+            ['code' => 'inventory.warehouse.view', 'name' => 'View Warehouses', 'module_name' => 'Inventory', 'action_type' => 'READ'],
+            ['code' => 'inventory.document.view', 'name' => 'View Inventory Documents', 'module_name' => 'Inventory', 'action_type' => 'READ'],
+            ['code' => 'inventory.document.create', 'name' => 'Create Inventory Document', 'module_name' => 'Inventory', 'action_type' => 'CREATE'],
+            ['code' => 'inventory.document.post', 'name' => 'Post Inventory Document', 'module_name' => 'Inventory', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'accounting.voucher.view', 'name' => 'View Vouchers', 'module_name' => 'Accounting', 'action_type' => 'READ'],
+            ['code' => 'accounting.voucher.post', 'name' => 'Post Voucher', 'module_name' => 'Accounting', 'action_type' => 'EXECUTE'],
+            ['code' => 'accounting.account.view', 'name' => 'View Accounts', 'module_name' => 'Accounting', 'action_type' => 'READ'],
+
+            ['code' => 'procurement.purchase-order.create', 'name' => 'Create Purchase Order', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.purchase-receipt.create', 'name' => 'Create Purchase Receipt', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.purchase-receipt.view', 'name' => 'View Purchase Receipt', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'procurement.purchase-receipt.post', 'name' => 'Post Purchase Receipt', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+            ['code' => 'procurement.sales-order.create', 'name' => 'Create Sales Order', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.sales-order.view', 'name' => 'View Sales Order', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'procurement.sales-order.confirm', 'name' => 'Confirm Sales Order', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+            ['code' => 'procurement.sales-delivery.create', 'name' => 'Create Sales Delivery', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.sales-delivery.view', 'name' => 'View Sales Delivery', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'procurement.sales-delivery.post', 'name' => 'Post Sales Delivery', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+            ['code' => 'procurement.sales-quotation.create', 'name' => 'Create Sales Quotation', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.return-order.create', 'name' => 'Create Return Order', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+
             ['code' => 'procurement.sales-invoice.view', 'name' => 'View Sales Invoices', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
             ['code' => 'procurement.sales-invoice.create', 'name' => 'Create Sales Invoice', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
             ['code' => 'procurement.sales-invoice.update', 'name' => 'Update Sales Invoice', 'module_name' => 'ProcurementSales', 'action_type' => 'UPDATE'],
@@ -54,6 +87,21 @@ class PermissionSeeder extends Seeder
             ['code' => 'procurement.purchase-invoice.view', 'name' => 'View Purchase Invoices', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
             ['code' => 'procurement.purchase-invoice.create', 'name' => 'Create Purchase Invoice', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
             ['code' => 'procurement.purchase-invoice.post', 'name' => 'Post Purchase Invoice', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'procurement.payment-schedule.view', 'name' => 'View Payment Schedules', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'procurement.cash-transaction.create', 'name' => 'Create Cash Transactions', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.cash-transaction.view', 'name' => 'View Cash Transactions', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+
+            ['code' => 'procurement.purchase-requisition.view', 'name' => 'View Purchase Requisitions', 'module_name' => 'ProcurementSales', 'action_type' => 'READ'],
+            ['code' => 'procurement.purchase-requisition.create', 'name' => 'Create Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'CREATE'],
+            ['code' => 'procurement.purchase-requisition.submit', 'name' => 'Submit Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+            ['code' => 'procurement.purchase-requisition.approve', 'name' => 'Approve Purchase Requisition', 'module_name' => 'ProcurementSales', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'workflow.definition.manage', 'name' => 'Manage Workflow Definitions', 'module_name' => 'Workflow', 'action_type' => 'EXECUTE'],
+            ['code' => 'workflow.instance.start', 'name' => 'Start Workflow Instance', 'module_name' => 'Workflow', 'action_type' => 'EXECUTE'],
+            ['code' => 'workflow.instance.view', 'name' => 'View Workflow Instance', 'module_name' => 'Workflow', 'action_type' => 'READ'],
+            ['code' => 'workflow.task.view', 'name' => 'View Workflow Worklist', 'module_name' => 'Workflow', 'action_type' => 'READ'],
+            ['code' => 'workflow.task.complete', 'name' => 'Complete Workflow Task', 'module_name' => 'Workflow', 'action_type' => 'EXECUTE'],
         ];
     }
 }
