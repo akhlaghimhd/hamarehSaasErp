@@ -92,6 +92,7 @@ class SalesDeliveryStockIssueService
                 }
                 try {
                     $this->reservationService->release(
+                        $fromLocationId,
                         $itemId,
                         $qty,
                         [
