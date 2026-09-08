@@ -45,27 +45,23 @@ class SalesInvoiceController extends Controller
         );
 
         $invoice = $this->salesInvoiceService->create($dto);
-
-        return response()->json([
-            'message' => 'Sales invoice created successfully.',
-            'data'    => $invoice,
-        ], 201);
+        return response()->json(['data' => $invoice], 201);
     }
 
     public function show(string $id): JsonResponse
     {
-        $invoice = $this->salesInvoiceService->getById($id);
-
-        return response()->json(['data' => $invoice]);
+        return response()->json(['data' => $this->salesInvoiceService->getById($id)]);
     }
 
     public function post(string $id): JsonResponse
     {
         $invoice = $this->salesInvoiceService->post($id);
+        return response()->json(['data' => $invoice]);
+    }
 
-        return response()->json([
-            'message' => 'Sales invoice posted; AR voucher created when accounts exist.',
-            'data'    => $invoice,
-        ]);
+    public function submitForApproval(string $id): JsonResponse
+    {
+        $invoice = $this->salesInvoiceService->submitForApproval($id);
+        return response()->json(['data' => $invoice]);
     }
 }
