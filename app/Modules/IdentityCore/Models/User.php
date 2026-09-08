@@ -2,21 +2,26 @@
 
 namespace App\Modules\IdentityCore\Models;
 
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Modules\IdentityCore\Models\TenantUser;
 
+/**
+ * users — Identity Core primary user entity (Owner: IdentityCore / Layer 4)
+ * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
+ */
 class User extends Authenticatable
 {
     use HasUuids, HasFactory, HasApiTokens, SoftDeletes;
 
     protected $table = 'users';
+
     protected $primaryKey = 'user_id';
 
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -29,6 +34,8 @@ class User extends Authenticatable
         'last_login_at',
         'created_by',
         'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected function casts(): array
@@ -37,6 +44,10 @@ class User extends Authenticatable
             'user_kind'     => 'integer',
             'status'        => 'integer',
             'last_login_at' => 'datetime',
+            'row_version'   => 'integer',
+            'created_at'    => 'datetime',
+            'updated_at'    => 'datetime',
+            'deleted_at'    => 'datetime',
         ];
     }
 

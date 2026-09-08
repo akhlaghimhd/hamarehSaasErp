@@ -3,19 +3,25 @@
 namespace App\Modules\IdentityCore\Models;
 
 use App\Base\Traits\TenantScoped;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * tenant_users — Tenant membership of a user (Owner: IdentityCore / Layer 4)
+ * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
+ */
 class TenantUser extends Model
 {
     use HasUuids, HasFactory, TenantScoped, SoftDeletes;
 
     protected $table = 'tenant_users';
+
     protected $primaryKey = 'tenant_user_id';
 
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -27,13 +33,18 @@ class TenantUser extends Model
         'created_by',
         'updated_by',
         'deleted_by',
+        'row_version',
     ];
 
     protected function casts(): array
     {
         return [
-            'status'   => 'integer',
-            'is_owner' => 'boolean',
+            'status'      => 'integer',
+            'is_owner'    => 'boolean',
+            'row_version' => 'integer',
+            'created_at'  => 'datetime',
+            'updated_at'  => 'datetime',
+            'deleted_at'  => 'datetime',
         ];
     }
 
