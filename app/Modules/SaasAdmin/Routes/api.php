@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\SaasAdmin\Controllers\AdminUserController;
 use App\Modules\SaasAdmin\Controllers\AdminRoleController;
 use App\Modules\SaasAdmin\Controllers\SystemSettingController;
+use App\Modules\SaasAdmin\Controllers\NotificationController;
+use App\Modules\SaasAdmin\Controllers\SupportTicketController;
 
 /*
 |--------------------------------------------------------------------------
@@ -80,4 +82,33 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/system-settings/{id}', [SystemSettingController::class, 'destroy'])
         ->middleware('permission:saas-admin.system_setting.delete')
         ->name('saas-admin.system-settings.destroy');
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index'])
+        ->name('saas-admin.notifications.index');
+
+    Route::post('/notifications', [NotificationController::class, 'store'])
+        ->name('saas-admin.notifications.store');
+
+    Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])
+        ->name('saas-admin.notifications.mark-read');
+
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])
+        ->name('saas-admin.notifications.destroy');
+
+    // Support Tickets
+    Route::get('/support-tickets', [SupportTicketController::class, 'index'])
+        ->name('saas-admin.support-tickets.index');
+
+    Route::get('/support-tickets/{id}', [SupportTicketController::class, 'show'])
+        ->name('saas-admin.support-tickets.show');
+
+    Route::post('/support-tickets', [SupportTicketController::class, 'store'])
+        ->name('saas-admin.support-tickets.store');
+
+    Route::put('/support-tickets/{id}', [SupportTicketController::class, 'update'])
+        ->name('saas-admin.support-tickets.update');
+
+    Route::delete('/support-tickets/{id}', [SupportTicketController::class, 'destroy'])
+        ->name('saas-admin.support-tickets.destroy');
 });
