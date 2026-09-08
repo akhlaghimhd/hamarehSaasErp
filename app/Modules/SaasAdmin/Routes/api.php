@@ -6,6 +6,7 @@ use App\Modules\SaasAdmin\Controllers\AdminRoleController;
 use App\Modules\SaasAdmin\Controllers\SystemSettingController;
 use App\Modules\SaasAdmin\Controllers\NotificationController;
 use App\Modules\SaasAdmin\Controllers\SupportTicketController;
+use App\Modules\SaasAdmin\Controllers\AuditLogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -82,6 +83,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/system-settings/{id}', [SystemSettingController::class, 'destroy'])
         ->middleware('permission:saas-admin.system_setting.delete')
         ->name('saas-admin.system-settings.destroy');
+
+    // Audit Logs (read-only)
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])
+        ->name('saas-admin.audit-logs.index');
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])
