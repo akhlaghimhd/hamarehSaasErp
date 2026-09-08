@@ -33,6 +33,32 @@ class SaasAdminPermissionSeeder extends Seeder
             ['code' => 'saas-admin.system_setting.view', 'name' => 'View System Settings', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
             ['code' => 'saas-admin.system_setting.update', 'name' => 'Update System Settings', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
             ['code' => 'saas-admin.system_setting.delete', 'name' => 'Delete System Setting', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
+
+            // Audit Log
+            ['code' => 'saas-admin.audit_log.view', 'name' => 'View Audit Logs', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
+
+            // Notification
+            ['code' => 'saas-admin.notification.view', 'name' => 'View Notifications', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
+            ['code' => 'saas-admin.notification.create', 'name' => 'Create Notification', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE'],
+            ['code' => 'saas-admin.notification.update', 'name' => 'Update Notification', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
+            ['code' => 'saas-admin.notification.delete', 'name' => 'Delete Notification', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
+
+            // Support Ticket
+            ['code' => 'saas-admin.support_ticket.view', 'name' => 'View Support Tickets', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
+            ['code' => 'saas-admin.support_ticket.create', 'name' => 'Create Support Ticket', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE'],
+            ['code' => 'saas-admin.support_ticket.update', 'name' => 'Update Support Ticket', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
+            ['code' => 'saas-admin.support_ticket.delete', 'name' => 'Delete Support Ticket', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
+
+            // API Key
+            ['code' => 'saas-admin.api_key.view', 'name' => 'View API Keys', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
+            ['code' => 'saas-admin.api_key.create', 'name' => 'Create API Key', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE'],
+            ['code' => 'saas-admin.api_key.delete', 'name' => 'Revoke API Key', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
+
+            // Webhook
+            ['code' => 'saas-admin.webhook.view', 'name' => 'View Webhooks', 'module_name' => 'SaasAdmin', 'action_type' => 'READ'],
+            ['code' => 'saas-admin.webhook.create', 'name' => 'Create Webhook', 'module_name' => 'SaasAdmin', 'action_type' => 'CREATE'],
+            ['code' => 'saas-admin.webhook.update', 'name' => 'Update Webhook', 'module_name' => 'SaasAdmin', 'action_type' => 'UPDATE'],
+            ['code' => 'saas-admin.webhook.delete', 'name' => 'Delete Webhook', 'module_name' => 'SaasAdmin', 'action_type' => 'DELETE'],
         ];
 
         $permissionIds = [];
@@ -71,7 +97,6 @@ class SaasAdminPermissionSeeder extends Seeder
             }
         }
 
-        // Attach to tenant-admin role if present
         $role = DB::table('tenant_roles')
             ->where('tenant_id', $demoTenantId)
             ->where('code', 'tenant-admin')
