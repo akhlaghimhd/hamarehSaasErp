@@ -8,7 +8,8 @@ readonly class UpdateBusinessPartnerDTO
         public ?string $display_name = null,
         public ?int $partner_type = null,
         public ?int $status = null,
-        public ?string $parent_business_partner_id = null
+        public ?string $parent_business_partner_id = null,
+        public ?float $credit_limit = null,
     ) {}
 
     public static function fromRequest(array $data): self
@@ -17,7 +18,8 @@ readonly class UpdateBusinessPartnerDTO
             display_name: $data['display_name'] ?? null,
             partner_type: isset($data['partner_type']) ? (int) $data['partner_type'] : null,
             status: isset($data['status']) ? (int) $data['status'] : null,
-            parent_business_partner_id: $data['parent_business_partner_id'] ?? null
+            parent_business_partner_id: $data['parent_business_partner_id'] ?? null,
+            credit_limit: array_key_exists('credit_limit', $data) ? (float) $data['credit_limit'] : null,
         );
     }
 }

@@ -38,6 +38,7 @@ class BusinessPartnerService
                     'partner_type' => $dto->partner_type,
                     'status' => $dto->status,
                     'parent_business_partner_id' => $dto->parent_business_partner_id,
+                    'credit_limit' => $dto->credit_limit,
                     'created_by' => Context::get('user_id'), // دریافت امن شناسه کاربر از کانتکست
                 ]);
 
@@ -64,6 +65,7 @@ class BusinessPartnerService
                     'partner_type' => $dto->partner_type,
                     'status' => $dto->status,
                     'parent_business_partner_id' => $dto->parent_business_partner_id,
+                    'credit_limit' => $dto->credit_limit,
                     'updated_by' => Context::get('user_id'),
                 ], fn($value) => !is_null($value));
 
@@ -86,7 +88,7 @@ class BusinessPartnerService
             DB::transaction(function () use ($id) {
                 $businessPartner = BusinessPartner::findOrFail($id);
                 $tenantId = Context::get('tenant_id');
-                
+
                 $businessPartner->update(['deleted_by' => Context::get('user_id')]);
                 $businessPartner->delete();
 

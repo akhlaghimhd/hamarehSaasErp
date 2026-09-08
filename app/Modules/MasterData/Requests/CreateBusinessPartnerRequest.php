@@ -30,6 +30,8 @@ class CreateBusinessPartnerRequest extends FormRequest
             'partner_type' => 'required|integer|in:1,2', // 1: Individual, 2: Organization
             'status' => 'sometimes|integer|in:1,2,3',
             'parent_business_partner_id' => 'nullable|uuid|exists:business_partners,business_partner_id',
+            // L6-PS-07: 0 = unlimited credit
+            'credit_limit' => 'sometimes|numeric|min:0',
         ];
     }
 }

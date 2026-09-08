@@ -19,6 +19,8 @@ class UpdateBusinessPartnerRequest extends FormRequest
             'partner_type' => 'sometimes|required|integer|in:1,2',
             'status' => 'sometimes|required|integer|in:1,2,3',
             'parent_business_partner_id' => 'nullable|uuid|exists:business_partners,business_partner_id',
+            // L6-PS-07: 0 = unlimited credit
+            'credit_limit' => 'sometimes|numeric|min:0',
         ];
     }
 }
