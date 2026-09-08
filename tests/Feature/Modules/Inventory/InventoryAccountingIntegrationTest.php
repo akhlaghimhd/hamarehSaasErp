@@ -322,7 +322,7 @@ class InventoryAccountingIntegrationTest extends TestCase
     }
 
     #[Test]
-    public function posting_without_gl_accounts_still_posts_stock(): basvoid
+    public function posting_without_gl_accounts_still_posts_stock(): void
     {
         DB::table('fin_accounts')->where('tenant_id', $this->tenantA->tenant_id)->delete();
 
