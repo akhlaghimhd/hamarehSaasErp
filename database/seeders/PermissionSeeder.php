@@ -19,38 +19,103 @@ class PermissionSeeder extends Seeder
         foreach ($permissions as $perm) {
             $existing = DB::table('tenant_permissions')
                 ->where('tenant_id', $demoTenantId)
-                ->where('permission_code', $perm['code'])
+                ->where('code', $perm['code'])
                 ->first();
 
             if ($existing) {
-                $permissionIds[] = $existing->tenant_permission_id;
-                continue;
-            }
+                DB::table('tenant_permissions')
+                    ->where('tenant_permission_id', $existing->tenant_permission_id)
+                    ->update([
+                        'name'        => $perm['name'],
+                        'module_name' => $perm['module_name'],
+                        'action_type' => $perm['action_type'] ?? null,
+                        'description' => $perm['description'] ?? null,
+                        'status'      => 1,
+                        'updated_at'  => now(),
+                    ]);
 
-            $id = (string) Str::uuid();
-            DB::table('tenant_permissions')->insert([
-                'tenant_permission_id' => $id,
-                'tenant_id' => $demoTenantId,
-                'permission_code' => $perm['code'],
-                'permission_name' => $perm['name'],
-                'module_name' => $perm['module_name'],
-                'action_type' => $perm['action_type'],
-                'created_at' => now(),
-                'updated_at' => now(),
+                $permissionIds[] = $existing->tenant_permission_id;
+            } else {
+                $permissionId = (string) Str::uuid();
+
+                DB::table('tenant_permissions')->insert([
+                    'tenant_permission_id' => $permissionId,
+                    'tenant_id'            => $demoTenantId,
+                    'code'                 => $perm['code'],
+                    'name'                 => $perm['name'],
+                    'module_name'          => $perm['module_name'],
+                    'action_type'          => $perm['action_type'] ?? null,
+                    'description'          => $perm['description'] ?? null,
+                    'status'               => 1,
+                    'created_at'           => now(),
+                    'updated_at'           => now(),
+                ]);
+
+                $permissionIds[] = $permissionId;
+            }
+        }
+
+        $existingRole = DB::table('tenant_roles')
+            ->where('tenant_id', $demoTenantId)
+            ->where('code', 'tenant-admin')
+            ->first();
+
+        if ($existingRole) {
+            $actualRoleId = $existingRole->tenant_role_id;
+
+            DB::table('tenant_roles')
+                ->where('tenant_role_id', $actualRoleId)
+                ->update([
+                    'name'        => 'Tenant Administrator',
+                    'description' => 'Full access role for tenant administrators',
+                    'status'      => 1,
+                    'updated_at'  => now(),
+                ]);
+        } else {
+            $actualRoleId = (string) Str::uuid();
+
+            DB::table('tenant_roles')->insert([
+                'tenant_role_id' => $actualRoleId,
+                'tenant_id'      => $demoTenantId,
+                'code'           => 'tenant-admin',
+                'name'           => 'Tenant Administrator',
+                'description'    => 'Full access role for tenant administrators',
+                'status'         => 1,
+                'created_at'     => now(),
+                'updated_at'     => now(),
             ]);
-            $permissionIds[] = $id;
+        }
+
+        $existingRolePerms = DB::table('tenant_role_permissions')
+            ->where('tenant_role_id', $actualRoleId)
+            ->pluck('tenant_permission_id')
+            ->all();
+
+        $toAttach = array_values(array_diff($permissionIds, $existingRolePerms));
+
+        if (!empty($toAttach)) {
+            $insertData = [];
+            foreach ($toAttach as $permissionId) {
+                $insertData[] = [
+                    'tenant_role_permission_id' => (string) Str::uuid(),
+                    'tenant_role_id'            => $actualRoleId,
+                    'tenant_permission_id'      => $permissionId,
+                    'created_at'                => now(),
+                    'updated_at'                => now(),
+                ];
+            }
+            DB::table('tenant_role_permissions')->insert($insertData);
         }
     }
 
     private function getBasePermissions(): array
     {
         return [
-            ['code' => 'platform.tenant.view', 'name' => 'View Tenants', 'module_name' => 'SaasPlatform', 'action_type' => 'READ'],
-            ['code' => 'platform.tenant.manage', 'name' => 'Manage Tenants', 'module_name' => 'SaasPlatform', 'action_type' => 'EXECUTE'],
-            ['code' => 'identity.user.view', 'name' => 'View Users', 'module_name' => 'IdentityCore', 'action_type' => 'READ'],
-            ['code' => 'identity.user.manage', 'name' => 'Manage Users', 'module_name' => 'IdentityCore', 'action_type' => 'EXECUTE'],
-            ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'IdentityCore', 'action_type' => 'READ'],
-            ['code' => 'identity.role.manage', 'name' => 'Manage Roles', 'module_name' => 'IdentityCore', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.user.view', 'name' => 'View Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.user.create', 'name' => 'Create Users', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.user.update', 'name' => 'Update Users', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.role.manage', 'name' => 'Manage Roles', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
 
             ['code' => 'masterdata.business-partner.view', 'name' => 'View Business Partners', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'masterdata.business-partner.create', 'name' => 'Create Business Partner', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
