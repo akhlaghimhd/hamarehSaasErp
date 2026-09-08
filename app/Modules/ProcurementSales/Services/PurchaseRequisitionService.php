@@ -8,19 +8,21 @@ use App\Modules\ProcurementSales\Models\PurchaseRequisitionItem;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * L6-PS-09 – Internal purchase requisitions (Draft → Pending → Approved/Rejected).
+ * L6-PS-09 – Internal purchase requisitions.
+ * Status: 1 Draft, 2 Pending, 3 Approved, 0 Rejected (matches 2026_01_01_000034 schema).
  */
 class PurchaseRequisitionService
 {
     public const STATUS_DRAFT = 1;
     public const STATUS_PENDING = 2;
     public const STATUS_APPROVED = 3;
-    public const STATUS_REJECTED = 4;
+    public const STATUS_REJECTED = 0;
 
     public const PRIORITY_HIGH = 1;
     public const PRIORITY_MEDIUM = 2;
@@ -34,24 +36,35 @@ class PurchaseRequisitionService
             if (!$tenantId) {
                 throw new \RuntimeException('Tenant Context is missing.');
             }
+            if (!$userId) {
+                throw new \RuntimeException('User Context is missing.');
+            }
             if (empty($dto->items)) {
                 throw new ConflictHttpException('Requisition must have at least one line.');
             }
 
             $number = 'PR-' . now()->format('Ymd') . '-' . strtoupper(Str::random(5));
 
-            $req = PurchaseRequisition::create([
+            $payload = [
                 'tenant_id' => $tenantId,
                 'department_id' => $dto->departmentId,
+                'requester_user_id' => $userId,
                 'requisition_number' => $number,
+                'requisition_date' => now()->toDateString(),
                 'required_date' => $dto->requiredDate,
-                'priority' => $dto->priority,
                 'status' => self::STATUS_DRAFT,
                 'description' => $dto->description,
                 'created_by' => $userId,
                 'updated_by' => $userId,
                 'row_version' => 1,
-            ]);
+            ];
+
+            // priority only if column exists (added by later repair migration)
+            if (Schema::hasColumn('purchase_requisitions', 'priority')) {
+                $payload['priority'] = $dto->priority;
+            }
+
+            $req = PurchaseRequisition::create($payload);
 
             $line = 1;
             foreach ($dto->items as $item) {

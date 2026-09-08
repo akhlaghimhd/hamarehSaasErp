@@ -18,12 +18,23 @@ class PurchaseRequisition extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'tenant_id', 'department_id', 'requisition_number', 'required_date',
-        'priority', 'status', 'description',
-        'created_by', 'updated_by', 'deleted_by', 'row_version',
+        'tenant_id',
+        'department_id',
+        'requester_user_id',
+        'requisition_number',
+        'requisition_date',
+        'required_date',
+        'priority',
+        'status',
+        'description',
+        'created_by',
+        'updated_by',
+        'deleted_by',
+        'row_version',
     ];
 
     protected $casts = [
+        'requisition_date' => 'date',
         'required_date' => 'date',
         'priority' => 'integer',
         'status' => 'integer',
