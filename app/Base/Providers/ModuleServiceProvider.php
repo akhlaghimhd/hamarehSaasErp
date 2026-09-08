@@ -41,6 +41,9 @@ class ModuleServiceProvider extends ServiceProvider
             Schedule::command('erp:process-outbox --limit=100')
                 ->everyMinute()
                 ->withoutOverlapping();
+            Schedule::command('erp:mark-payment-schedules-overdue')
+                ->dailyAt('01:00')
+                ->withoutOverlapping();
         }
     }
 
@@ -80,7 +83,12 @@ class ModuleServiceProvider extends ServiceProvider
                 $routesPath = $module . '/Routes/api.php';
 
                 if (File::exists($routesPath)) {
-                    $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
+                    $prefix = match ($moduleName) {
+                        'ProcurementSales' => 'procurement-sales',
+                        'IdentityCore' => 'identity',
+                        'SaasPlatform' => 'platform',
+                        default => strtolower($moduleName),
+                    };
 
                     Route::prefix('api/' . $prefix)
                         ->middleware('api')
@@ -92,11 +100,17 @@ class ModuleServiceProvider extends ServiceProvider
 
     protected function loadDynamicMigrations(): void
     {
-        $mainMigrationPath = database_path('migrations');
+        $modulesPath = app_path('Modules');
+        $paths = [];
 
-        if (File::exists($mainMigrationPath)) {
-            $directories = File::directories($mainMigrationPath);
-            $paths = array_merge([$mainMigrationPath], $directories);
+        if (File::exists(database_path('migrations'))) {
+            $paths[] = database_path('migrations');
+            foreach (File::directories(database_path('migrations')) as $dir) {
+                $paths[] = $dir;
+            }
+        }
+
+        if (!empty($paths)) {
             $this->loadMigrationsFrom($paths);
         }
     }

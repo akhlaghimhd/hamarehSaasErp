@@ -67,6 +67,8 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:procurement.purchase-requisition.approve');
     Route::post('purchase-requisitions/{id}/reject', [PurchaseRequisitionController::class, 'reject'])
         ->middleware('permission:procurement.purchase-requisition.approve');
+    Route::post('purchase-requisitions/{id}/convert-to-po', [PurchaseRequisitionController::class, 'convertToPurchaseOrder'])
+        ->middleware('permission:procurement.purchase-order.create');
 
     Route::get('payment-schedules/{paymentScheduleId}', [PaymentSettlementController::class, 'showSchedule'])
         ->middleware('permission:procurement.payment-schedule.view');
