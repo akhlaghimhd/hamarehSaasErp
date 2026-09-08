@@ -25,40 +25,43 @@ class AdminAuthService
         string $ipAddress,
         ?string $userAgent = null
     ): array {
-        return DB::transaction(function () use ($username, $password, $ipAddress, $userAgent) {
-            $user = AdminUser::query()
-                ->where('username', $username)
-                ->whereNull('deleted_at')
-                ->first();
+        // Failure paths must NOT run inside a rolled-back transaction,
+        // otherwise admin_login_attempts and failed_login_count would be lost.
 
-            if (!$user) {
-                $this->recordAttempt($username, $ipAddress, $userAgent, false, 'user_not_found');
-                throw new InvalidArgumentException('Invalid credentials.');
+        $user = AdminUser::query()
+            ->where('username', $username)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$user) {
+            $this->recordAttempt($username, $ipAddress, $userAgent, false, 'user_not_found');
+            throw new InvalidArgumentException('Invalid credentials.');
+        }
+
+        if ($user->locked_until && $user->locked_until->isFuture()) {
+            $this->recordAttempt($username, $ipAddress, $userAgent, false, 'account_locked');
+            throw new InvalidArgumentException('Account is temporarily locked.');
+        }
+
+        if ($user->status !== 1) {
+            $this->recordAttempt($username, $ipAddress, $userAgent, false, 'inactive');
+            throw new InvalidArgumentException('Account is inactive.');
+        }
+
+        if (!Hash::check($password, $user->password_hash)) {
+            $failed = ((int) $user->failed_login_count) + 1;
+            $user->failed_login_count = $failed;
+            if ($failed >= self::MAX_FAILED) {
+                $user->locked_until = now()->addMinutes(self::LOCK_MINUTES);
+                $user->failed_login_count = 0;
             }
+            $user->save();
 
-            if ($user->locked_until && $user->locked_until->isFuture()) {
-                $this->recordAttempt($username, $ipAddress, $userAgent, false, 'account_locked');
-                throw new InvalidArgumentException('Account is temporarily locked.');
-            }
+            $this->recordAttempt($username, $ipAddress, $userAgent, false, 'bad_password');
+            throw new InvalidArgumentException('Invalid credentials.');
+        }
 
-            if ($user->status !== 1) {
-                $this->recordAttempt($username, $ipAddress, $userAgent, false, 'inactive');
-                throw new InvalidArgumentException('Account is inactive.');
-            }
-
-            if (!Hash::check($password, $user->password_hash)) {
-                $failed = ((int) $user->failed_login_count) + 1;
-                $user->failed_login_count = $failed;
-                if ($failed >= self::MAX_FAILED) {
-                    $user->locked_until = now()->addMinutes(self::LOCK_MINUTES);
-                    $user->failed_login_count = 0;
-                }
-                $user->save();
-
-                $this->recordAttempt($username, $ipAddress, $userAgent, false, 'bad_password');
-                throw new InvalidArgumentException('Invalid credentials.');
-            }
-
+        return DB::transaction(function () use ($user, $username, $ipAddress, $userAgent) {
             $user->failed_login_count = 0;
             $user->locked_until = null;
             $user->last_login_at = now();
