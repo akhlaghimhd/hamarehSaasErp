@@ -29,6 +29,7 @@ class PaymentSchedule extends Model
         'tenant_id',
         'source_document_type',
         'source_document_id',
+        'currency_id',
         'due_date',
         'expected_amount',
         'paid_amount',
