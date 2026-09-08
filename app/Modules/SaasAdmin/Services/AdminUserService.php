@@ -11,6 +11,11 @@ use InvalidArgumentException;
 
 class AdminUserService
 {
+    public function __construct(
+        private readonly AuditLogService $auditLogService
+    ) {
+    }
+
     public function list(): Collection
     {
         return AdminUser::query()
@@ -56,6 +61,19 @@ class AdminUserService
                 'updated_by'     => $createdBy,
             ]);
 
+            $this->auditLogService->write(
+                entityName: 'admin_users',
+                actionType: 'CREATE',
+                entityId: $user->admin_user_id,
+                adminUserId: $createdBy,
+                newValues: [
+                    'username' => $user->username,
+                    'email'    => $user->email,
+                    'status'   => $user->status,
+                ],
+                createdBy: $createdBy
+            );
+
             $this->logEventOutbox(
                 'admin_users',
                 $user->admin_user_id,
@@ -82,6 +100,7 @@ class AdminUserService
     ): AdminUser {
         return DB::transaction(function () use ($adminUserId, $firstName, $lastName, $mobile, $status, $updatedBy) {
             $user = $this->get($adminUserId);
+            $old = $user->only(['first_name', 'last_name', 'mobile', 'status']);
 
             $changes = array_filter([
                 'first_name' => $firstName,
@@ -94,6 +113,16 @@ class AdminUserService
                 $changes['row_version'] = ((int) ($user->row_version ?? 1)) + 1;
                 $changes['updated_by']  = $updatedBy;
                 $user->update($changes);
+
+                $this->auditLogService->write(
+                    entityName: 'admin_users',
+                    actionType: 'UPDATE',
+                    entityId: $adminUserId,
+                    adminUserId: $updatedBy,
+                    oldValues: $old,
+                    newValues: $changes,
+                    createdBy: $updatedBy
+                );
             }
 
             $this->logEventOutbox(
@@ -117,6 +146,14 @@ class AdminUserService
             $user->deleted_by = $deletedBy;
             $user->save();
             $user->delete();
+
+            $this->auditLogService->write(
+                entityName: 'admin_users',
+                actionType: 'DELETE',
+                entityId: $adminUserId,
+                adminUserId: $deletedBy,
+                createdBy: $deletedBy
+            );
 
             $this->logEventOutbox(
                 'admin_users',
