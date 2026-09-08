@@ -19,7 +19,6 @@ class CreateSalesInvoiceRequest extends FormRequest
             'invoice_date'               => ['required', 'date'],
             'due_date'                   => ['nullable', 'date'],
             'sales_order_id'             => ['nullable', 'uuid'],
-            'sales_order_id'             => ['nullable', 'uuid'],
             'tax_invoice_number'         => ['nullable', 'string', 'max:100'],
             'description'                => ['nullable', 'string'],
             'items'                      => ['required', 'array', 'min:1'],
