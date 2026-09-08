@@ -10,22 +10,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * L6-PS-06 — Formal direct accounting bridge for Procurement & Sales.
+ * L6-PS-06 / L6-PS-07 / L6-PS-08 — Formal accounting bridge for Procurement & Sales.
  *
- * Owns commercial (AP/AR / clearing coordination) mapping to Accounting via
- * VoucherPostingService (in-process, no HTTP — Modular Monolith rule).
- *
- * Stock valuation vouchers remain owned by Inventory (InventoryAccountingService).
- * This service:
- *   - Resolves open fiscal periods for cross-module document creation.
- *   - Posts commercial-side vouchers when PS documents carry pure financial impact
- *     (prepared for future Purchase Invoice / Sales Invoice; current Receipt/Delivery
- *      value impact is already posted on the Inventory document).
- *   - Uses the same COA code conventions as Inventory for consistency.
- *
- * Account codes (tenant chart-of-accounts convention):
- *   1200 Inventory Asset | 2100 GR/IR Clearing | 2000 Accounts Payable
- *   1100 Accounts Receivable | 4000 Sales Revenue | 5100 COGS | 5200 Adjustment
+ * Account codes:
+ *   1200 Inventory | 2100 GR/IR | 2000 AP | 1100 AR | 4000 Revenue | 5100 COGS | 5200 Adj | 1000 Bank
  */
 class ProcurementSalesAccountingService
 {
@@ -36,6 +24,7 @@ class ProcurementSalesAccountingService
     public const CODE_SALES_REVENUE    = '4000';
     public const CODE_COGS             = '5100';
     public const CODE_ADJUSTMENT       = '5200';
+    public const CODE_BANK             = '1000';
 
     public function __construct(
         private readonly VoucherPostingService $voucherPosting,
@@ -43,56 +32,27 @@ class ProcurementSalesAccountingService
     ) {
     }
 
-    /**
-     * Resolve an open fiscal period ID for the given date (or today).
-     * Primary entry point used by Inventory Goods Receipt path (L6-PS-06 wiring).
-     */
     public function resolveFiscalPeriodId(?string $date = null): ?string
     {
         return $this->fiscalPeriodService->resolveOpenPeriodIdForDate($date);
     }
 
-    /**
-     * Formal post for a posted Purchase Receipt (commercial side).
-     *
-     * Current scope: value is already reflected on the Inventory Goods Receipt voucher
-     * (Dr Asset / Cr GR/IR). This method is the formal PS-owned hook for future AP
-     * Invoice matching and any additional commercial accrual. Returns null when no
-     * extra voucher is required (or accounts missing).
-     */
     public function postForPurchaseReceipt(PurchaseReceipt $receipt): ?string
     {
-        // Value impact is owned by Inventory document posting (L6-INV-11).
-        // Keep this method as the stable contract for future Purchase Invoice / accrual.
-        Log::info('ProcurementSalesAccountingService: postForPurchaseReceipt invoked (commercial value on Inventory path)', [
+        Log::info('ProcurementSalesAccountingService: postForPurchaseReceipt invoked', [
             'purchase_receipt_id' => $receipt->purchase_receipt_id,
-            'receipt_number'      => $receipt->receipt_number,
         ]);
-
         return null;
     }
 
-    /**
-     * Formal post for a posted Sales Delivery (commercial side).
-     * COGS is posted by Inventory Issue; revenue/AR reserved for Sales Invoice.
-     */
     public function postForSalesDelivery(SalesDeliveryOrder $delivery): ?string
     {
-        Log::info('ProcurementSalesAccountingService: postForSalesDelivery invoked (COGS on Inventory path)', [
+        Log::info('ProcurementSalesAccountingService: postForSalesDelivery invoked', [
             'delivery_order_id' => $delivery->delivery_order_id,
-            'delivery_number'   => $delivery->delivery_number,
         ]);
-
         return null;
     }
 
-    /**
-     * Post a balanced voucher for a future Purchase Invoice style document
-     * (Dr GR/IR Clearing, Cr Accounts Payable). Ready for when Invoice entities land.
-     *
-     * @param  array{reference_number?: string, voucher_date?: string, description?: string, source_document_id?: string}  $header
-     * @param  float  $amount  Positive total
-     */
     public function postPurchaseInvoiceClearing(array $header, float $amount, string $tenantId): ?string
     {
         $amount = round($amount, 4);
@@ -111,38 +71,22 @@ class ProcurementSalesAccountingService
 
         $ref = $header['reference_number'] ?? 'PS-PINV';
         $lines = [
-            [
-                'account_id'  => $accounts[self::CODE_GRIR_CLEARING],
-                'debit'       => $amount,
-                'credit'      => 0,
-                'description' => 'GR/IR clear ' . $ref,
-            ],
-            [
-                'account_id'  => $accounts[self::CODE_ACCOUNTS_PAYABLE],
-                'debit'       => 0,
-                'credit'      => $amount,
-                'description' => 'AP ' . $ref,
-            ],
+            ['account_id' => $accounts[self::CODE_GRIR_CLEARING], 'debit' => $amount, 'credit' => 0, 'description' => 'GR/IR clear ' . $ref],
+            ['account_id' => $accounts[self::CODE_ACCOUNTS_PAYABLE], 'debit' => 0, 'credit' => $amount, 'description' => 'AP ' . $ref],
         ];
 
         $payloadHeader = array_merge([
-            'description'        => $header['description'] ?? ('Purchase invoice clearing ' . $ref),
-            'reference_number'   => $ref,
-            'voucher_date'       => $header['voucher_date'] ?? now()->toDateString(),
-            'source_module'      => 'procurement_sales',
+            'description' => $header['description'] ?? ('Purchase invoice clearing ' . $ref),
+            'reference_number' => $ref,
+            'voucher_date' => $header['voucher_date'] ?? now()->toDateString(),
+            'source_module' => 'procurement_sales',
             'source_document_id' => $header['source_document_id'] ?? null,
-            'status'             => 1,
+            'status' => 1,
         ], $header);
 
         return $this->voucherPosting->postVoucher($payloadHeader, $lines);
     }
 
-    /**
-     * Post a balanced voucher for a future Sales Invoice style document
-     * (Dr AR, Cr Sales Revenue). Ready for when Invoice entities land.
-     *
-     * @param  array{reference_number?: string, voucher_date?: string, description?: string, source_document_id?: string}  $header
-     */
     public function postSalesInvoice(array $header, float $amount, string $tenantId): ?string
     {
         $amount = round($amount, 4);
@@ -161,36 +105,90 @@ class ProcurementSalesAccountingService
 
         $ref = $header['reference_number'] ?? 'PS-SINV';
         $lines = [
-            [
-                'account_id'  => $accounts[self::CODE_ACCOUNTS_RECEIVABLE],
-                'debit'       => $amount,
-                'credit'      => 0,
-                'description' => 'AR ' . $ref,
-            ],
-            [
-                'account_id'  => $accounts[self::CODE_SALES_REVENUE],
-                'debit'       => 0,
-                'credit'      => $amount,
-                'description' => 'Revenue ' . $ref,
-            ],
+            ['account_id' => $accounts[self::CODE_ACCOUNTS_RECEIVABLE], 'debit' => $amount, 'credit' => 0, 'description' => 'AR ' . $ref],
+            ['account_id' => $accounts[self::CODE_SALES_REVENUE], 'debit' => 0, 'credit' => $amount, 'description' => 'Revenue ' . $ref],
         ];
 
         $payloadHeader = array_merge([
-            'description'        => $header['description'] ?? ('Sales invoice ' . $ref),
-            'reference_number'   => $ref,
-            'voucher_date'       => $header['voucher_date'] ?? now()->toDateString(),
-            'source_module'      => 'procurement_sales',
+            'description' => $header['description'] ?? ('Sales invoice ' . $ref),
+            'reference_number' => $ref,
+            'voucher_date' => $header['voucher_date'] ?? now()->toDateString(),
+            'source_module' => 'procurement_sales',
             'source_document_id' => $header['source_document_id'] ?? null,
-            'status'             => 1,
+            'status' => 1,
         ], $header);
 
         return $this->voucherPosting->postVoucher($payloadHeader, $lines);
     }
 
     /**
-     * @param  list<string>  $requiredCodes
-     * @return array<string, string>|null  code => account_id
+ * AR receipt: Dr Bank, Cr AR.
      */
+    public function postArReceipt(array $header, float $amount, string $tenantId): ?string
+    {
+        $amount = round($amount, 4);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $accounts = $this->resolveAccounts($tenantId, [self::CODE_BANK, self::CODE_ACCOUNTS_RECEIVABLE]);
+        if ($accounts === null) {
+            Log::warning('ProcurementSalesAccountingService: Bank or AR accounts missing; skipping AR receipt voucher.');
+            return null;
+        }
+
+        $ref = $header['reference_number'] ?? 'PS-AR-RCPT';
+        $lines = [
+            ['account_id' => $accounts[self::CODE_BANK], 'debit' => $amount, 'credit' => 0, 'description' => 'Bank receipt ' . $ref],
+            ['account_id' => $accounts[self::CODE_ACCOUNTS_RECEIVABLE], 'debit' => 0, 'credit' => $amount, 'description' => 'AR collection ' . $ref],
+        ];
+
+        $payloadHeader = array_merge([
+            'description' => $header['description'] ?? ('AR receipt ' . $ref),
+            'reference_number' => $ref,
+            'voucher_date' => $header['voucher_date'] ?? now()->toDateString(),
+            'source_module' => 'procurement_sales',
+            'source_document_id' => $header['source_document_id'] ?? null,
+            'status' => 1,
+        ], $header);
+
+        return $this->voucherPosting->postVoucher($payloadHeader, $lines);
+    }
+
+    /**
+ * AP payment: Dr AP, Cr Bank.
+     */
+    public function postApPayment(array $header, float $amount, string $tenantId): ?string
+    {
+        $amount = round($amount, 4);
+        if ($amount <= 0) {
+            return null;
+        }
+
+        $accounts = $this->resolveAccounts($tenantId, [self::CODE_ACCOUNTS_PAYABLE, self::CODE_BANK]);
+        if ($accounts === null) {
+            Log::warning('ProcurementSalesAccountingService: AP or Bank accounts missing; skipping AP payment voucher.');
+            return null;
+        }
+
+        $ref = $header['reference_number'] ?? 'PS-AP-PAY';
+        $lines = [
+            ['account_id' => $accounts[self::CODE_ACCOUNTS_PAYABLE], 'debit' => $amount, 'credit' => 0, 'description' => 'AP settlement ' . $ref],
+            ['account_id' => $accounts[self::CODE_BANK], 'debit' => 0, 'credit' => $amount, 'description' => 'Bank payment ' . $ref],
+        ];
+
+        $payloadHeader = array_merge([
+            'description' => $header['description'] ?? ('AP payment ' . $ref),
+            'reference_number' => $ref,
+            'voucher_date' => $header['voucher_date'] ?? now()->toDateString(),
+            'source_module' => 'procurement_sales',
+            'source_document_id' => $header['source_document_id'] ?? null,
+            'status' => 1,
+        ], $header);
+
+        return $this->voucherPosting->postVoucher($payloadHeader, $lines);
+    }
+
     private function resolveAccounts(string $tenantId, array $requiredCodes): ?array
     {
         $rows = DB::table('fin_accounts')
