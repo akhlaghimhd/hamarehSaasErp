@@ -5,6 +5,7 @@ use App\Modules\SaasAdmin\Controllers\AdminUserController;
 use App\Modules\SaasAdmin\Controllers\AdminRoleController;
 use App\Modules\SaasAdmin\Controllers\SystemSettingController;
 use App\Modules\SaasAdmin\Controllers\NotificationController;
+use App\Modules\SaasAdmin\Controllers\NotificationTemplateController;
 use App\Modules\SaasAdmin\Controllers\SupportTicketController;
 use App\Modules\SaasAdmin\Controllers\SupportTicketMessageController;
 use App\Modules\SaasAdmin\Controllers\AuditLogController;
@@ -97,6 +98,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])
         ->middleware('permission:saas-admin.notification.delete')
         ->name('saas-admin.notifications.destroy');
+
+    // Notification Templates
+    Route::get('/notification-templates', [NotificationTemplateController::class, 'index'])
+        ->middleware('permission:saas-admin.notification.view')
+        ->name('saas-admin.notification-templates.index');
+    Route::post('/notification-templates', [NotificationTemplateController::class, 'upsert'])
+        ->middleware('permission:saas-admin.notification.create')
+        ->name('saas-admin.notification-templates.upsert');
+    Route::delete('/notification-templates/{id}', [NotificationTemplateController::class, 'destroy'])
+        ->middleware('permission:saas-admin.notification.delete')
+        ->name('saas-admin.notification-templates.destroy');
 
     // Support Tickets
     Route::get('/support-tickets', [SupportTicketController::class, 'index'])
