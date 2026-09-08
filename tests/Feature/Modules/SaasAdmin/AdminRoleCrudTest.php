@@ -6,7 +6,6 @@ use App\Modules\SaasAdmin\Models\AdminPermission;
 use App\Modules\SaasAdmin\Models\AdminRole;
 use App\Modules\SaasAdmin\Services\AdminRoleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -82,18 +81,20 @@ class AdminRoleCrudTest extends TestCase
     {
         $role = $this->service->create('perm-role', 'With Perms');
 
-        $permId = (string) Str::uuid();
-        AdminPermission::create([
-            'admin_permission_id' => $permId,
-            'code'                => 'saas-admin.test.view',
-            'name'                => 'Test View',
-            'module_name'         => 'SaasAdmin',
+        // admin_permission_id is not fillable; let HasUuids generate it
+        $permission = AdminPermission::create([
+            'code'        => 'saas-admin.test.view',
+            'name'        => 'Test View',
+            'module_name' => 'SaasAdmin',
         ]);
 
-        $updated = $this->service->assignPermissions($role->admin_role_id, [$permId]);
+        $updated = $this->service->assignPermissions(
+            $role->admin_role_id,
+            [$permission->admin_permission_id]
+        );
 
         $this->assertTrue(
-            $updated->permissions->contains('admin_permission_id', $permId)
+            $updated->permissions->contains('admin_permission_id', $permission->admin_permission_id)
         );
     }
 
