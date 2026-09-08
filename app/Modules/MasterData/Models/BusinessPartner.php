@@ -27,6 +27,7 @@ class BusinessPartner extends Model
         'partner_type', // 1: Individual, 2: Organization
         'status',       // 1: Active, 2: Suspended, 3: Blocked
         'parent_business_partner_id',
+        'credit_limit',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -36,6 +37,7 @@ class BusinessPartner extends Model
     protected $casts = [
         'partner_type' => 'integer',
         'status' => 'integer',
+        'credit_limit' => 'decimal:4',
     ];
 
     /**
