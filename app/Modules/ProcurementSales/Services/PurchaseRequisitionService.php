@@ -2,7 +2,10 @@
 
 namespace App\Modules\ProcurementSales\Services;
 
+use App\Modules\ProcurementSales\DTOs\CreatePurchaseOrderDTO;
 use App\Modules\ProcurementSales\DTOs\CreatePurchaseRequisitionDTO;
+use App\Modules\ProcurementSales\DTOs\PurchaseOrderItemDTO;
+use App\Modules\ProcurementSales\Models\PurchaseOrder;
 use App\Modules\ProcurementSales\Models\PurchaseRequisition;
 use App\Modules\ProcurementSales\Models\PurchaseRequisitionItem;
 use Illuminate\Support\Facades\Context;
@@ -15,7 +18,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * L6-PS-09 – Internal purchase requisitions.
- * Status: 1 Draft, 2 Pending, 3 Approved, 0 Rejected (matches 2026_01_01_000034 schema).
+ * Status: 1 Draft, 2 Pending, 3 Approved, 0 Rejected.
  */
 class PurchaseRequisitionService
 {
@@ -59,7 +62,6 @@ class PurchaseRequisitionService
                 'row_version' => 1,
             ];
 
-            // priority only if column exists (added by later repair migration)
             if (Schema::hasColumn('purchase_requisitions', 'priority')) {
                 $payload['priority'] = $dto->priority;
             }
@@ -115,7 +117,6 @@ class PurchaseRequisitionService
                 'updated_by' => Context::get('user_id'),
                 'row_version' => ((int) ($req->row_version ?? 1)) + 1,
             ]);
-            Log::info('PurchaseRequisition submitted', ['requisition_id' => $id]);
             return $req->fresh(['items']);
         });
     }
@@ -155,6 +156,68 @@ class PurchaseRequisitionService
                 'row_version' => ((int) ($req->row_version ?? 1)) + 1,
             ]);
             return $req->fresh(['items']);
+        });
+    }
+
+    public function convertToPurchaseOrder(
+        string $requisitionId,
+        string $supplierId,
+        string $currencyId,
+        ?string $deliveryDate = null,
+    ): PurchaseOrder {
+        return DB::transaction(function () use ($requisitionId, $supplierId, $currencyId, $deliveryDate) {
+            $req = PurchaseRequisition::query()->lockForUpdate()->with('items')->find($requisitionId);
+            if (!$req) {
+                throw new NotFoundHttpException('Purchase requisition not found.');
+            }
+            if ((int) $req->status !== self::STATUS_APPROVED) {
+                throw new ConflictHttpException('Only approved requisitions can be converted to a purchase order.');
+            }
+            if ($req->items->isEmpty()) {
+                throw new ConflictHttpException('Cannot convert a requisition with no lines.');
+            }
+
+            $existing = PurchaseOrder::query()
+                ->where('source_requisition_id', $requisitionId)
+                ->first();
+            if ($existing) {
+                throw new ConflictHttpException('This requisition was already converted to a purchase order.');
+            }
+
+            $items = [];
+            foreach ($req->items as $line) {
+                $items[] = new PurchaseOrderItemDTO(
+                    itemId: $line->item_id,
+                    quantity: (float) $line->quantity,
+                    unitPrice: (float) ($line->estimated_unit_price ?? 0),
+                    discountAmount: 0.0,
+                    taxAmount: 0.0,
+                    uomCode: $line->uom_code,
+                    lineNumber: (int) ($line->line_number ?? 1),
+                    description: $line->description,
+                );
+            }
+
+            $order = app(PurchaseOrderService::class)->createPurchaseOrder(new CreatePurchaseOrderDTO(
+                supplierId: $supplierId,
+                currencyId: $currencyId,
+                orderDate: now()->toDateString(),
+                deliveryDate: $deliveryDate ?? ($req->required_date?->toDateString()),
+                items: $items,
+            ));
+
+            $order->update([
+                'source_requisition_id' => $requisitionId,
+                'updated_by' => Context::get('user_id'),
+                'row_version' => ((int) ($order->row_version ?? 1)) + 1,
+            ]);
+
+            Log::info('Requisition converted to PO', [
+                'requisition_id' => $requisitionId,
+                'purchase_order_id' => $order->purchase_order_id,
+            ]);
+
+            return $order->fresh(['items']);
         });
     }
 }
