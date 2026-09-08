@@ -79,7 +79,7 @@ class InventoryAccountingIntegrationTest extends TestCase
                 'action_type'          => strtoupper(explode('.', $code)[2] ?? 'VIEW'),
                 'status'               => 1,
             ]);
-            TenantRolePermission::create([
+            TenantRolePermission::createcreate([
                 'tenant_role_permission_id' => (string) Str::uuid(),
                 'tenant_id'                 => $this->tenantA->tenant_id,
                 'tenant_role_id'            => $role->tenant_role_id,
@@ -91,7 +91,7 @@ class InventoryAccountingIntegrationTest extends TestCase
             'tenant_user_role_id' => (string) Str::uuid(),
             'tenant_id'           => $this->tenantA->tenant_id,
             'user_id'             => $this->userA->user_id,
-            'tenant_role_id'      => $role->tenant_role_id,
+            'tenant 'tenant_role_id'      => $role->tenant_role_id,
         ]);
 
         $this->tokenA = $this->userA->createToken(
@@ -225,6 +225,7 @@ class InventoryAccountingIntegrationTest extends TestCase
             'row_version' => 1,
         ]);
 
+        // FIFO cost layer: unit_cost 10 — ValuationService overwrites line unit_cost on post
         CostLayer::withoutGlobalScopes()->create([
             'cost_layer_id'           => (string) Str::uuid(),
             'tenant_id'               => $this->tenantA->tenant_id,
@@ -254,7 +255,7 @@ class InventoryAccountingIntegrationTest extends TestCase
             'item_id' => $this->itemId,
             'from_location_id' => $this->locationId,
             'quantity' => 4,
-            'unit_cost' => 12.25,
+            'unit_cost' => 12.25, // ignored on post; FIFO layer cost (10) is used
             'sort_order' => 1,
         ]);
 
@@ -265,7 +266,8 @@ class InventoryAccountingIntegrationTest extends TestCase
         $doc->refresh();
         $this->assertNotNull($doc->accounting_voucher_id);
 
-        $amount = 49.0;
+        // After L6-INV-18: COGS amount = qty * FIFO unit_cost from cost layer (4 * 10 = 40)
+        $amount = 40.0;
         $this->assertDatabaseHas('fin_voucher_items', [
             'voucher_id' => $doc->accounting_voucher_id,
             'account_id' => $this->accountCogs,
