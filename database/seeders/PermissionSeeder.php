@@ -86,24 +86,24 @@ class PermissionSeeder extends Seeder
             ]);
         }
 
-        $existingRolePerms = DB::table('tenant_role_permissions')
+        DB::table('tenant_role_permissions')
+            ->where('tenant_id', $demoTenantId)
             ->where('tenant_role_id', $actualRoleId)
-            ->pluck('tenant_permission_id')
-            ->all();
+            ->delete();
 
-        $toAttach = array_values(array_diff($permissionIds, $existingRolePerms));
+        $insertData = [];
+        foreach ($permissionIds as $permId) {
+            $insertData[] = [
+                'tenant_role_permission_id' => (string) Str::uuid(),
+                'tenant_id'                 => $demoTenantId,
+                'tenant_role_id'            => $actualRoleId,
+                'tenant_permission_id'      => $permId,
+                'created_at'                => now(),
+                'updated_at'                => now(),
+            ];
+        }
 
-        if (!empty($toAttach)) {
-            $insertData = [];
-            foreach ($toAttach as $permissionId) {
-                $insertData[] = [
-                    'tenant_role_permission_id' => (string) Str::uuid(),
-                    'tenant_role_id'            => $actualRoleId,
-                    'tenant_permission_id'      => $permissionId,
-                    'created_at'                => now(),
-                    'updated_at'                => now(),
-                ];
-            }
+        if (!empty($insertData)) {
             DB::table('tenant_role_permissions')->insert($insertData);
         }
     }
@@ -112,8 +112,8 @@ class PermissionSeeder extends Seeder
     {
         return [
             ['code' => 'identity.user.view', 'name' => 'View Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
-            ['code' => 'identity.user.create', 'name' => 'Create Users', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
-            ['code' => 'identity.user.update', 'name' => 'Update Users', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.user.create', 'name' => 'Create User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.user.update', 'name' => 'Update User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
             ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.role.manage', 'name' => 'Manage Roles', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
 
