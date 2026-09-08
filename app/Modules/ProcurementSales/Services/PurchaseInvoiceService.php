@@ -14,16 +14,19 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * L6-PS-07 – Purchase Invoice create (Draft) and post (→ AP / GR-IR clearing voucher).
+ * L6-PS-08 – on post creates payment schedule for AP settlement.
  */
 class PurchaseInvoiceService
 {
     public const STATUS_DRAFT = 1;
     public const STATUS_OPEN = 2;
-    public const STATUS_PAID = 3;
-    public const STATUS_VOIDED = 4;
+    public const STATUS_PARTIALLY_PAID = 3;
+    public const STATUS_FULLY_PAID = 4;
+    public const STATUS_VOIDED = 5;
 
     public function __construct(
         private readonly ProcurementSalesAccountingService $accountingService,
+        private readonly PaymentSettlementService $paymentSettlement,
     ) {
     }
 
@@ -159,13 +162,16 @@ class PurchaseInvoiceService
                 'row_version'           => ((int) ($invoice->row_version ?? 1)) + 1,
             ]);
 
+            $invoice = $invoice->fresh(['items']);
+            $this->paymentSettlement->ensureScheduleForPurchaseInvoice($invoice);
+
             Log::info('PurchaseInvoice posted', [
                 'purchase_invoice_id' => $invoice->purchase_invoice_id,
                 'voucher_id'          => $voucherId,
                 'amount'              => $amount,
             ]);
 
-            return $invoice->fresh(['items']);
+            return $invoice;
         });
     }
 }

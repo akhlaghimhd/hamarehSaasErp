@@ -15,6 +15,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * L6-PS-07 – Sales Invoice create (Draft) and post (→ AR voucher + credit check).
+ * L6-PS-08 – on post creates payment schedule for AR settlement.
  */
 class SalesInvoiceService
 {
@@ -27,6 +28,7 @@ class SalesInvoiceService
     public function __construct(
         private readonly CreditLimitService $creditLimitService,
         private readonly ProcurementSalesAccountingService $accountingService,
+        private readonly PaymentSettlementService $paymentSettlement,
     ) {
     }
 
@@ -174,13 +176,16 @@ class SalesInvoiceService
                 }
             }
 
+            $invoice = $invoice->fresh(['items']);
+            $this->paymentSettlement->ensureScheduleForSalesInvoice($invoice);
+
             Log::info('SalesInvoice posted', [
                 'sales_invoice_id' => $invoice->sales_invoice_id,
                 'voucher_id'       => $voucherId,
                 'amount'           => $amount,
             ]);
 
-            return $invoice->fresh(['items']);
+            return $invoice;
         });
     }
 }
