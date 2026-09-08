@@ -9,6 +9,7 @@ use App\Modules\Inventory\Models\Item;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Models\Location;
 use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\CostLayer;
 use App\Modules\Inventory\Models\InventoryDocument;
 use App\Modules\Inventory\Services\InventoryDocumentService;
 use App\Modules\Inventory\Services\SalesDeliveryStockIssueService;
@@ -67,10 +68,8 @@ class SalesDeliveryPostAndIssueTest extends TestCase
         $warehouse = Warehouse::withoutGlobalScopes()->create([
             'warehouse_id' => (string) Str::uuid(),
             'tenant_id'    => $this->tenantA->tenant_id,
-            'branch_id'    => (string) Str::uuid(),
             'code'         => 'WH-SDO',
             'name'         => 'SDO Warehouse',
-            'is_bonded'    => false,
             'status'       => 1,
         ]);
         $this->warehouseId = $warehouse->warehouse_id;
@@ -94,6 +93,20 @@ class SalesDeliveryPostAndIssueTest extends TestCase
             'quantity_reserved' => 10,
             'row_version'       => 1,
             'updated_at'        => now(),
+        ]);
+
+        // ValuationService requires cost layers for ISSUE (FIFO)
+        CostLayer::withoutGlobalScopes()->create([
+            'cost_layer_id'           => (string) Str::uuid(),
+            'tenant_id'               => $this->tenantA->tenant_id,
+            'item_id'                 => $this->itemId,
+            'location_id'             => $this->locationId,
+            'quantity_remaining'      => 50,
+            'unit_cost'               => 10,
+            'received_at'             => now()->subDay(),
+            'source_document_id'      => (string) Str::uuid(),
+            'source_document_item_id' => (string) Str::uuid(),
+            'row_version'             => 1,
         ]);
     }
 
