@@ -9,6 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasColumn('fin_payment_schedules', 'currency_id')) {
+            return;
+        }
         Schema::table('fin_payment_schedules', function (Blueprint $table) {
             $table->uuid('currency_id')->nullable()->after('source_document_id');
         });
@@ -16,6 +19,9 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (!Schema::hasColumn('fin_payment_schedules', 'currency_id')) {
+            return;
+        }
         Schema::table('fin_payment_schedules', function (Blueprint $table) {
             $table->dropColumn('currency_id');
         });

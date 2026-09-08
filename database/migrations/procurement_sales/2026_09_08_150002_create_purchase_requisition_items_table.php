@@ -10,6 +10,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('purchase_requisition_items')) {
+            return;
+        }
+
         Schema::create('purchase_requisition_items', function (Blueprint $table) {
             $table->uuid('requisition_item_id')->primary()->default(DB::raw('gen_random_uuid()'));
             $table->uuid('tenant_id')->index();
