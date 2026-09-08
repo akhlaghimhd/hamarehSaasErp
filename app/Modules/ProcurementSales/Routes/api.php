@@ -9,6 +9,7 @@ use App\Modules\ProcurementSales\Controllers\SalesQuotationController;
 use App\Modules\ProcurementSales\Controllers\ReturnOrderController;
 use App\Modules\ProcurementSales\Controllers\SalesInvoiceController;
 use App\Modules\ProcurementSales\Controllers\PurchaseInvoiceController;
+use App\Modules\ProcurementSales\Controllers\PaymentSettlementController;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +67,16 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
         ->middleware('permission:procurement.purchase-invoice.view');
     Route::post('purchase-invoices/{id}/post', [PurchaseInvoiceController::class, 'post'])
         ->middleware('permission:procurement.purchase-invoice.post');
+
+    // Payment settlement (L6-PS-08)
+    Route::get('payment-schedules/{paymentScheduleId}', [PaymentSettlementController::class, 'showSchedule'])
+        ->middleware('permission:procurement.payment-schedule.view');
+    Route::get('payment-schedules', [PaymentSettlementController::class, 'listForDocument'])
+        ->middleware('permission:procurement.payment-schedule.view');
+    Route::post('cash-transactions/receipts', [PaymentSettlementController::class, 'recordReceipt'])
+        ->middleware('permission:procurement.cash-transaction.create');
+    Route::post('cash-transactions/payments', [PaymentSettlementController::class, 'recordPayment'])
+        ->middleware('permission:procurement.cash-transaction.create');
 
     // Returns
     Route::post('returns', [ReturnOrderController::class, 'store'])
