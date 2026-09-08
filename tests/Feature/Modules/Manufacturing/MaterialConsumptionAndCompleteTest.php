@@ -9,6 +9,7 @@ use App\Modules\Inventory\Models\Item;
 use App\Modules\Inventory\Models\Warehouse;
 use App\Modules\Inventory\Models\Location;
 use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\CostLayer;
 use App\Modules\Manufacturing\Services\BomService;
 use App\Modules\Manufacturing\Services\MaterialConsumptionService;
 use App\Modules\Manufacturing\Services\ProductionOrderService;
@@ -102,6 +103,19 @@ class MaterialConsumptionAndCompleteTest extends TestCase
             'quantity_reserved' => 0,
             'row_version'       => 1,
             'updated_at'        => now(),
+        ]);
+
+        CostLayer::withoutGlobalScopes()->create([
+            'cost_layer_id'           => (string) Str::uuid(),
+            'tenant_id'               => $this->tenantA->tenant_id,
+            'item_id'                 => $this->materialItemId,
+            'location_id'             => $this->locationId,
+            'quantity_remaining'      => 1000,
+            'unit_cost'               => 5,
+            'received_at'             => now()->subDay(),
+            'source_document_id'      => (string) Str::uuid(),
+            'source_document_item_id' => (string) Str::uuid(),
+            'row_version'             => 1,
         ]);
     }
 
