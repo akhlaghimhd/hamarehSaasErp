@@ -16,6 +16,7 @@ use App\Modules\Inventory\Models\Location;
 use App\Modules\Inventory\Models\InventoryDocument;
 use App\Modules\Inventory\Models\InventoryDocumentItem;
 use App\Modules\Inventory\Models\StockBalance;
+use App\Modules\Inventory\Models\CostLayer;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -163,6 +164,34 @@ class InventoryDocumentPostTest extends TestCase
         ];
     }
 
+    protected function seedStockWithCostLayer(float $qtyOnHand, float $unitCost = 10.0): void
+    {
+        StockBalance::withoutGlobalScopes()->create([
+            'stock_balance_id'  => (string) Str::uuid(),
+            'tenant_id'         => $this->tenantA->tenant_id,
+            'warehouse_id'      => $this->warehouseId,
+            'location_id'       => $this->locationId,
+            'item_id'           => $this->itemId,
+            'quantity_on_hand'  => $qtyOnHand,
+            'quantity_reserved' => 0,
+            'row_version'       => 1,
+            'updated_at'        => now(),
+        ]);
+
+        CostLayer::withoutGlobalScopes()->create([
+            'cost_layer_id'           => (string) Str::uuid(),
+            'tenant_id'               => $this->tenantA->tenant_id,
+            'item_id'                 => $this->itemId,
+            'location_id'             => $this->locationId,
+            'quantity_remaining'      => $qtyOnHand,
+            'unit_cost'               => $unitCost,
+            'received_at'             => now()->subDay(),
+            'source_document_id'      => (string) Str::uuid(),
+            'source_document_item_id' => (string) Str::uuid(),
+            'row_version'             => 1,
+        ]);
+    }
+
     #[Test]
     public function posting_receipt_increases_stock_balance(): void
     {
@@ -206,17 +235,7 @@ class InventoryDocumentPostTest extends TestCase
     #[Test]
     public function posting_issue_decreases_stock_and_rejects_insufficient(): void
     {
-        StockBalance::withoutGlobalScopes()->create([
-            'stock_balance_id'  => (string) Str::uuid(),
-            'tenant_id'         => $this->tenantA->tenant_id,
-            'warehouse_id'      => $this->warehouseId,
-            'location_id'       => $this->locationId,
-            'item_id'           => $this->itemId,
-            'quantity_on_hand'  => 10,
-            'quantity_reserved' => 0,
-            'row_version'       => 1,
-            'updated_at'        => now(),
-        ]);
+        $this->seedStockWithCostLayer(10);
 
         $doc = InventoryDocument::withoutGlobalScopes()->create([
             'document_id'      => (string) Str::uuid(),
@@ -319,17 +338,7 @@ class InventoryDocumentPostTest extends TestCase
     #[Test]
     public function posting_transfer_moves_stock_between_locations(): void
     {
-        StockBalance::withoutGlobalScopes()->create([
-            'stock_balance_id'  => (string) Str::uuid(),
-            'tenant_id'         => $this->tenantA->tenant_id,
-            'warehouse_id'      => $this->warehouseId,
-            'location_id'       => $this->locationId,
-            'item_id'           => $this->itemId,
-            'quantity_on_hand'  => 20,
-            'quantity_reserved' => 0,
-            'row_version'       => 1,
-            'updated_at'        => now(),
-        ]);
+        $this->seedStockWithCostLayer(20);
 
         $doc = InventoryDocument::withoutGlobalScopes()->create([
             'document_id'      => (string) Str::uuid(),
