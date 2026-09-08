@@ -8,11 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-/*
-|--------------------------------------------------------------------------
-| Task Scheduler
-|--------------------------------------------------------------------------
-*/
-
-// صحیح: زمان‌بندی کامندِ پایشگر (Poller) به جای فراخوانی مستقیم Job
 Schedule::command('erp:process-outbox --limit=100')->everyMinute()->withoutOverlapping();
+
+Schedule::command('erp:mark-payment-schedules-overdue')->dailyAt('01:00')->withoutOverlapping();

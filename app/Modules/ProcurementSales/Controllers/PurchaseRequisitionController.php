@@ -8,6 +8,7 @@ use App\Modules\ProcurementSales\DTOs\PurchaseRequisitionItemDTO;
 use App\Modules\ProcurementSales\Requests\CreatePurchaseRequisitionRequest;
 use App\Modules\ProcurementSales\Services\PurchaseRequisitionService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PurchaseRequisitionController extends Controller
 {
@@ -54,5 +55,21 @@ class PurchaseRequisitionController extends Controller
     public function reject(string $id): JsonResponse
     {
         return response()->json(['data' => $this->service->reject($id)]);
+    }
+
+    public function convertToPurchaseOrder(string $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'supplier_id' => 'required|uuid',
+            'currency_id' => 'required|uuid',
+            'delivery_date' => 'nullable|date',
+        ]);
+        $order = $this->service->convertToPurchaseOrder(
+            $id,
+            $validated['supplier_id'],
+            $validated['currency_id'],
+            $validated['delivery_date'] ?? null,
+        );
+        return response()->json(['data' => $order], 201);
     }
 }
