@@ -68,8 +68,10 @@ class SalesDeliveryPostAndIssueTest extends TestCase
         $warehouse = Warehouse::withoutGlobalScopes()->create([
             'warehouse_id' => (string) Str::uuid(),
             'tenant_id'    => $this->tenantA->tenant_id,
+            'branch_id'    => (string) Str::uuid(),
             'code'         => 'WH-SDO',
             'name'         => 'SDO Warehouse',
+            'is_bonded'    => false,
             'status'       => 1,
         ]);
         $this->warehouseId = $warehouse->warehouse_id;
