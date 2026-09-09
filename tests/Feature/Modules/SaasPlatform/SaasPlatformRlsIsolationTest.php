@@ -12,43 +12,95 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * L1-10 – Smoke isolation checks for Layer 1 tables that carry tenant_id.
- * Requires RLS policies from 2026_09_09_080001_enable_rls_on_saas_platform_tables
- * and app.current_tenant_id set via TenantContext (FORCE RLS).
+ * L1-10 – PostgreSQL RLS isolation for Layer 1 tables with tenant_id.
+ *
+ * Pattern follows AccountingRlsIsolationTest / IdentityCore RlsMultiTableIsolationTest:
+ * seed as migration role, then SET ROLE app_user so FORCE RLS is actually enforced
+ * (superuser / table owner bypasses RLS even with FORCE).
  */
 class SaasPlatformRlsIsolationTest extends TestCase
 {
     use RefreshDatabase;
 
-    #[Test]
-    public function tenant_wallets_belong_to_correct_tenant(): void
+    protected Tenant $tenantA;
+    protected Tenant $tenantB;
+    protected string $walletAId;
+    protected string $walletBId;
+
+    protected function setUp(): void
     {
-        $tenantA = Tenant::factory()->create(['tenant_code' => 'RLS_A']);
-        $tenantB = Tenant::factory()->create(['tenant_code' => 'RLS_B']);
+        parent::setUp();
 
-        TenantContext::getInstance()->setTenantId($tenantA->tenant_id);
-        $walletA = TenantWallet::create([
-            'wallet_id'  => (string) Str::uuid(),
-            'tenant_id'  => $tenantA->tenant_id,
-            'balance'    => 100,
-            'status'     => 1,
+        $this->ensureRlsInfrastructure(['tenant_wallets']);
+
+        $this->tenantA = Tenant::factory()->create(['tenant_code' => 'SAAS_RLS_A', 'status' => 1]);
+        $this->tenantB = Tenant::factory()->create(['tenant_code' => 'SAAS_RLS_B', 'status' => 1]);
+
+        $this->walletAId = (string) Str::uuid();
+        $this->walletBId = (string) Str::uuid();
+
+        // Seed as current (owner) role so inserts are not blocked by RLS
+        DB::table('tenant_wallets')->insert([
+            [
+                'wallet_id'   => $this->walletAId,
+                'tenant_id'   => $this->tenantA->tenant_id,
+                'balance'     => 100,
+                'status'      => 1,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+                'row_version' => 1,
+            ],
+            [
+                'wallet_id'   => $this->walletBId,
+                'tenant_id'   => $this->tenantB->tenant_id,
+                'balance'     => 200,
+                'status'      => 1,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+                'row_version' => 1,
+            ],
         ]);
+    }
 
-        TenantContext::getInstance()->setTenantId($tenantB->tenant_id);
-        $walletB = TenantWallet::create([
-            'wallet_id'  => (string) Str::uuid(),
-            'tenant_id'  => $tenantB->tenant_id,
-            'balance'    => 200,
-            'status'     => 1,
-        ]);
+    protected function tearDown(): void
+    {
+        try {
+            DB::statement('RESET ROLE');
+            DB::statement("SELECT set_config('app.current_tenant_id', '', true)");
+        } catch (\Throwable $e) {
+            // ignore cleanup errors
+        }
 
-        TenantContext::getInstance()->setTenantId($tenantA->tenant_id);
-        $this->assertSame($tenantA->tenant_id, $walletA->fresh()->tenant_id);
+        TenantContext::resetInstance();
+        parent::tearDown();
+    }
 
-        TenantContext::getInstance()->setTenantId($tenantB->tenant_id);
-        $this->assertSame($tenantB->tenant_id, $walletB->fresh()->tenant_id);
+    protected function ensureRlsInfrastructure(array $tables): void
+    {
+        DB::statement('GRANT USAGE ON SCHEMA public TO app_user');
+        DB::statement('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO app_user');
+        DB::statement('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user');
 
-        $this->assertNotEquals($walletA->tenant_id, $walletB->tenant_id);
+        foreach ($tables as $table) {
+            DB::statement("ALTER TABLE {$table} ENABLE ROW LEVEL SECURITY");
+            DB::statement("ALTER TABLE {$table} FORCE ROW LEVEL SECURITY");
+            DB::statement("DROP POLICY IF EXISTS tenant_isolation_policy ON {$table}");
+            DB::statement("
+                CREATE POLICY tenant_isolation_policy ON {$table}
+                FOR ALL
+                USING (
+                    tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
+                )
+                WITH CHECK (
+                    tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
+                )
+            ");
+        }
+    }
+
+    protected function actAsAppUser(): void
+    {
+        DB::statement('SET ROLE app_user');
     }
 
     #[Test]
@@ -71,35 +123,42 @@ class SaasPlatformRlsIsolationTest extends TestCase
     }
 
     #[Test]
-    public function rls_hides_other_tenant_wallet_rows(): void
+    public function rls_isolates_tenant_wallets_for_app_user(): void
     {
-        $tenantA = Tenant::factory()->create(['tenant_code' => 'RLS_HIDE_A']);
-        $tenantB = Tenant::factory()->create(['tenant_code' => 'RLS_HIDE_B']);
+        $this->actAsAppUser();
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenantA->tenant_id]);
 
-        TenantContext::getInstance()->setTenantId($tenantA->tenant_id);
-        TenantWallet::create([
-            'wallet_id' => (string) Str::uuid(),
-            'tenant_id' => $tenantA->tenant_id,
-            'balance'   => 10,
-            'status'    => 1,
-        ]);
+        $rows = TenantWallet::query()->get();
+        $this->assertCount(1, $rows);
+        $this->assertSame($this->walletAId, $rows->first()->wallet_id);
+        $this->assertSame($this->tenantA->tenant_id, $rows->first()->tenant_id);
+    }
 
-        TenantContext::getInstance()->setTenantId($tenantB->tenant_id);
-        TenantWallet::create([
-            'wallet_id' => (string) Str::uuid(),
-            'tenant_id' => $tenantB->tenant_id,
-            'balance'   => 20,
-            'status'    => 1,
-        ]);
-
-        TenantContext::getInstance()->setTenantId($tenantA->tenant_id);
-        $visible = TenantWallet::query()->get();
-        $this->assertCount(1, $visible);
-        $this->assertSame($tenantA->tenant_id, $visible->first()->tenant_id);
-
-        // Clear session – policy should yield zero rows when tenant setting is empty
+    #[Test]
+    public function rls_returns_empty_when_tenant_context_cleared(): void
+    {
+        $this->actAsAppUser();
         DB::statement("SELECT set_config('app.current_tenant_id', '', false)");
-        TenantContext::resetInstance();
+
         $this->assertCount(0, TenantWallet::query()->get());
+    }
+
+    #[Test]
+    public function rls_blocks_cross_tenant_insert_on_tenant_wallets(): void
+    {
+        $this->actAsAppUser();
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenantA->tenant_id]);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        DB::table('tenant_wallets')->insert([
+            'wallet_id'   => (string) Str::uuid(),
+            'tenant_id'   => $this->tenantB->tenant_id,
+            'balance'     => 1,
+            'status'      => 1,
+            'created_at'  => now(),
+            'updated_at'  => now(),
+            'row_version' => 1,
+        ]);
     }
 }
