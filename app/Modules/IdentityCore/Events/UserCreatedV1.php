@@ -11,15 +11,15 @@ class UserCreatedV1
 {
     public const EVENT_TYPE = 'identity.user.created.v1';
 
+    public readonly string $occurredAt;
+
     public function __construct(
         public readonly string $userId,
         public readonly ?string $email = null,
         public readonly ?string $createdBy = null,
-        public readonly ?string $occurredAt = null,
+        ?string $occurredAt = null,
     ) {
-        if ($this->occurredAt === null) {
-            $this->occurredAt = now()->toIso8601String();
-        }
+        $this->occurredAt = $occurredAt ?? now()->toIso8601String();
     }
 
     public function toPayload(): array
