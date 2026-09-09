@@ -11,14 +11,14 @@ class UserLoggedInV1
 {
     public const EVENT_TYPE = 'identity.user.logged_in.v1';
 
+    public readonly string $occurredAt;
+
     public function __construct(
         public readonly string $userId,
         public readonly string $tenantId,
-        public readonly ?string $occurredAt = null,
+        ?string $occurredAt = null,
     ) {
-        if ($this->occurredAt === null) {
-            $this->occurredAt = now()->toIso8601String();
-        }
+        $this->occurredAt = $occurredAt ?? now()->toIso8601String();
     }
 
     public function toPayload(): array
