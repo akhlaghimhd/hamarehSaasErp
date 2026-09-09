@@ -110,7 +110,7 @@ class PartnerTenantAssignmentCrudTest extends TestCase
         $targetTenantId = (string) Str::uuid();
 
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/partner-layer/partner-tenant-assignments', [
+            ->postJson('/api/v1/partner-layer/partner-tenant-assignments', [
                 'partner_id'      => $this->partner->partner_id,
                 'tenant_id'       => $targetTenantId,
                 'assignment_type' => 1,
@@ -141,7 +141,7 @@ class PartnerTenantAssignmentCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/partner-layer/partner-tenant-assignments', [
+            ->postJson('/api/v1/partner-layer/partner-tenant-assignments', [
                 'partner_id' => $this->partner->partner_id,
                 'tenant_id'  => $targetTenantId,
             ]);
@@ -161,7 +161,7 @@ class PartnerTenantAssignmentCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/partner-layer/partner-tenant-assignments?partner_id=' . $this->partner->partner_id);
+            ->getJson('/api/v1/partner-layer/partner-tenant-assignments?partner_id=' . $this->partner->partner_id);
 
         $response->assertStatus(200);
         $this->assertNotEmpty($response->json('data'));
@@ -179,7 +179,7 @@ class PartnerTenantAssignmentCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->deleteJson('/api/partner-layer/partner-tenant-assignments/' . $assignment->assignment_id);
+            ->deleteJson('/api/v1/partner-layer/partner-tenant-assignments/' . $assignment->assignment_id);
 
         $response->assertStatus(200);
 
