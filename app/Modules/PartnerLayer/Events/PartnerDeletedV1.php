@@ -10,16 +10,16 @@ class PartnerDeletedV1
 {
     public const EVENT_TYPE = 'PartnerLayer.PartnerDeleted.v1';
 
+    public readonly string $occurredAt;
+
     public function __construct(
         public readonly string $partnerId,
         public readonly ?string $tenantId,
         public readonly string $code,
         public readonly ?string $deletedBy = null,
-        public readonly string $occurredAt = '',
+        ?string $occurredAt = null,
     ) {
-        if ($this->occurredAt === '') {
-            $this->occurredAt = now()->toIso8601String();
-        }
+        $this->occurredAt = $occurredAt ?? now()->toIso8601String();
     }
 
     public function toPayload(): array

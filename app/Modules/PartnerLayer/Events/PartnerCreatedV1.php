@@ -10,6 +10,8 @@ class PartnerCreatedV1
 {
     public const EVENT_TYPE = 'PartnerLayer.PartnerCreated.v1';
 
+    public readonly string $occurredAt;
+
     public function __construct(
         public readonly string $partnerId,
         public readonly ?string $tenantId,
@@ -18,11 +20,9 @@ class PartnerCreatedV1
         public readonly int $partnerType,
         public readonly int $status,
         public readonly ?string $createdBy = null,
-        public readonly string $occurredAt = '',
+        ?string $occurredAt = null,
     ) {
-        if ($this->occurredAt === '') {
-            $this->occurredAt = now()->toIso8601String();
-        }
+        $this->occurredAt = $occurredAt ?? now()->toIso8601String();
     }
 
     public function toPayload(): array
