@@ -155,7 +155,6 @@ class PartnerLayerIsolationTest extends TestCase
         $response = $this->withHeaders($this->authHeadersA())
             ->getJson('/api/partner-layer/partner-agreements?partner_id=' . $this->partnerB->partner_id);
 
-        // Access denied: partner of another tenant is not accessible
         $response->assertStatus(422)
             ->assertJsonPath('status', 'error');
     }
@@ -221,5 +220,79 @@ class PartnerLayerIsolationTest extends TestCase
 
         $ids = collect($response->json('data'))->pluck('partner_id')->all();
         $this->assertNotContains($deleted->partner_id, $ids);
+    }
+
+    #[Test]
+    public function tenant_a_can_view_platform_partner_with_null_tenant_id(): void
+    {
+        $platform = Partner::create([
+            'partner_id' => (string) Str::uuid(),
+            'tenant_id'  => null,
+            'code'       => 'PLATFORM-ROOT',
+            'name'       => 'Platform Partner',
+            'status'     => 1,
+        ]);
+
+        $response = $this->withHeaders($this->authHeadersA())
+            ->getJson('/api/partner-layer/partners/' . $platform->partner_id);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('status', 'success')
+            ->assertJsonPath('data.partner_id', $platform->partner_id);
+    }
+
+    #[Test]
+    public function platform_partner_appears_in_tenant_a_partner_list(): void
+    {
+        Partner::create([
+            'partner_id' => (string) Str::uuid(),
+            'tenant_id'  => null,
+            'code'       => 'PLATFORM-LIST',
+            'name'       => 'Platform Listed',
+            'status'     => 1,
+        ]);
+
+        $response = $this->withHeaders($this->authHeadersA())
+            ->getJson('/api/partner-layer/partners');
+
+        $response->assertStatus(200);
+        $codes = collect($response->json('data'))->pluck('code')->all();
+        $this->assertContains('PLATFORM-LIST', $codes);
+    }
+
+    #[Test]
+    public function multi_tier_parent_path_is_built_for_child_partner(): void
+    {
+        $root = Partner::create([
+            'partner_id' => (string) Str::uuid(),
+            'tenant_id'  => $this->tenantA->tenant_id,
+            'code'       => 'TIER-ROOT',
+            'name'       => 'Tier Root',
+            'status'     => 1,
+        ]);
+
+        $mid = Partner::create([
+            'partner_id'        => (string) Str::uuid(),
+            'tenant_id'         => $this->tenantA->tenant_id,
+            'parent_partner_id' => $root->partner_id,
+            'parent_path'       => $root->partner_id,
+            'code'              => 'TIER-MID',
+            'name'              => 'Tier Mid',
+            'status'            => 1,
+        ]);
+
+        $response = $this->withHeaders($this->authHeadersA())
+            ->postJson('/api/partner-layer/partners', [
+                'code'              => 'TIER-LEAF',
+                'name'              => 'Tier Leaf',
+                'partner_type'      => 1,
+                'ownership_type'    => 1,
+                'parent_partner_id' => $mid->partner_id,
+                'status'            => 1,
+            ]);
+
+        $response->assertStatus(201)->assertJsonPath('status', 'success');
+        $expectedPath = $root->partner_id . '/' . $mid->partner_id;
+        $this->assertEquals($expectedPath, $response->json('data.parent_path'));
     }
 }
