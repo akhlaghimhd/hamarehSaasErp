@@ -5,6 +5,7 @@ namespace App\Modules\PartnerLayer\Controllers;
 use App\Base\Controller;
 use App\Modules\PartnerLayer\Requests\CreatePartnerCommissionRequest;
 use App\Modules\PartnerLayer\Requests\UpdatePartnerCommissionRequest;
+use App\Modules\PartnerLayer\Requests\CalculatePartnerCommissionRequest;
 use App\Modules\PartnerLayer\DTOs\CreatePartnerCommissionDTO;
 use App\Modules\PartnerLayer\DTOs\UpdatePartnerCommissionDTO;
 use App\Modules\PartnerLayer\Services\PartnerCommissionService;
@@ -49,6 +50,38 @@ class PartnerCommissionController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Partner commission created successfully.',
+                'data'    => $item,
+            ], 201);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Calculate commission from an active rule and persist the result.
+     */
+    public function calculate(CalculatePartnerCommissionRequest $request): JsonResponse
+    {
+        try {
+            $data = $request->validated();
+            $item = $this->commissionService->calculateFromRule(
+                partnerId: $data['partner_id'],
+                tenantId: $data['tenant_id'],
+                commissionRuleId: $data['commission_rule_id'],
+                baseAmount: (string) $data['base_amount'],
+                currencyId: $data['currency_id'],
+                invoiceId: $data['invoice_id'] ?? null,
+                exchangeRate: isset($data['exchange_rate'])
+                    ? (string) $data['exchange_rate']
+                    : '1.00000000'
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Partner commission calculated successfully.',
                 'data'    => $item,
             ], 201);
         } catch (Exception $e) {
