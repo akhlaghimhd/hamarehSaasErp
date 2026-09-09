@@ -4,6 +4,7 @@ namespace App\Modules\PartnerLayer\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class PartnerDocument extends Model
 {
-    use HasUuids;
+    use HasUuids, SoftDeletes;
 
     protected $table = 'partner_documents';
     protected $primaryKey = 'partner_document_id';
@@ -27,6 +28,9 @@ class PartnerDocument extends Model
         'status',
         'verified_at',
         'verified_by',
+        'created_by',
+        'updated_by',
+        'deleted_by',
         'row_version',
     ];
 

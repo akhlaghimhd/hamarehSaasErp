@@ -4,11 +4,12 @@ namespace App\Modules\PartnerLayer\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PartnerContact extends Model
 {
-    use HasUuids;
+    use HasUuids, SoftDeletes;
 
     protected $table = 'partner_contacts';
     protected $primaryKey = 'partner_contact_id';
@@ -29,6 +30,9 @@ class PartnerContact extends Model
         'email',
         'phone_number',
         'is_primary',
+        'created_by',
+        'updated_by',
+        'deleted_by',
         'row_version',
     ];
 

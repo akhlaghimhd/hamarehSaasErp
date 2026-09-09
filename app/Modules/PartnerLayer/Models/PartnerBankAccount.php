@@ -4,12 +4,13 @@ namespace App\Modules\PartnerLayer\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PartnerBankAccount extends Model
 {
-    use HasUuids;
+    use HasUuids, SoftDeletes;
 
     protected $table = 'partner_bank_accounts';
     protected $primaryKey = 'partner_bank_account_id';
@@ -24,6 +25,9 @@ class PartnerBankAccount extends Model
         'shaba_number',
         'card_number',
         'is_active',
+        'created_by',
+        'updated_by',
+        'deleted_by',
         'row_version',
     ];
 
