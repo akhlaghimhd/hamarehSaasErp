@@ -16,6 +16,9 @@ use Illuminate\Support\Collection;
  *
  * tenant_id / invoice_id / currency_id: logical references only (Law 2.2 / 2.3).
  * commission_rule_id: physical FK within PartnerLayer bounded context.
+ *
+ * commission_type: 1 = percentage of base, 2 = fixed amount.
+ * Applies min/max from rule when present.
  */
 class PartnerCommissionService
 {
@@ -74,6 +77,82 @@ class PartnerCommissionService
             'status'                     => $dto->status,
             'calculated_at'              => $dto->calculatedAt ?? now(),
             'paid_at'                    => $dto->paidAt,
+        ]);
+    }
+
+    /**
+     * Apply an active commission rule to a base amount and persist the result.
+     *
+     * commission_type 1 = percentage (value is percent, e.g. 10.5 = 10.5%)
+     * commission_type 2 = fixed amount
+     */
+    public function calculateFromRule(
+        string $partnerId,
+        string $tenantId,
+        string $commissionRuleId,
+        string $baseAmount,
+        string $currencyId,
+        ?string $invoiceId = null,
+        string $exchangeRate = '1.00000000'
+    ): PartnerCommission {
+        $this->assertPartnerAccessible($partnerId);
+        $this->assertRuleAccessible($commissionRuleId, $partnerId);
+
+        $rule = PartnerCommissionRule::query()
+            ->where('commission_rule_id', $commissionRuleId)
+            ->firstOrFail();
+
+        if ((int) $rule->status !== 1) {
+            throw new Exception('Commission rule is not active.');
+        }
+
+        $now = now();
+        if ($rule->effective_from && $now->lt($rule->effective_from)) {
+            throw new Exception('Commission rule is not yet effective.');
+        }
+        if ($rule->effective_to && $now->gt($rule->effective_to)) {
+            throw new Exception('Commission rule has expired.');
+        }
+
+        $base = (float) $baseAmount;
+        if ($base < 0) {
+            throw new Exception('base_amount must be non-negative.');
+        }
+
+        $type = (int) $rule->commission_type;
+        $value = (float) $rule->commission_value;
+
+        if ($type === 1) {
+            $amount = $base * ($value / 100.0);
+        } elseif ($type === 2) {
+            $amount = $value;
+        } else {
+            throw new Exception('Unsupported commission_type on rule (expected 1=percentage or 2=fixed).');
+        }
+
+        if ($rule->minimum_amount !== null && $amount < (float) $rule->minimum_amount) {
+            $amount = (float) $rule->minimum_amount;
+        }
+        if ($rule->maximum_amount !== null && $amount > (float) $rule->maximum_amount) {
+            $amount = (float) $rule->maximum_amount;
+        }
+
+        $amount = round($amount, 4);
+
+        return PartnerCommission::create([
+            'partner_id'                => $partnerId,
+            'tenant_id'                 => $tenantId,
+            'invoice_id'                => $invoiceId,
+            'commission_rule_id'        => $commissionRuleId,
+            'base_amount'               => number_format($base, 4, '.', ''),
+            'commission_type_snapshot'  => $type,
+            'commission_value_snapshot' => number_format($value, 4, '.', ''),
+            'commission_amount'         => number_format($amount, 4, '.', ''),
+            'currency_id'               => $currencyId,
+            'exchange_rate'             => $exchangeRate,
+            'status'                    => 1,
+            'calculated_at'             => $now,
+            'paid_at'                   => null,
         ]);
     }
 
