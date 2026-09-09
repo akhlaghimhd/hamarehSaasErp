@@ -5,6 +5,9 @@ namespace App\Modules\PartnerLayer\Services;
 use App\Modules\PartnerLayer\Models\Partner;
 use App\Modules\PartnerLayer\DTOs\CreatePartnerDTO;
 use App\Modules\PartnerLayer\DTOs\UpdatePartnerDTO;
+use App\Modules\PartnerLayer\Events\PartnerCreatedV1;
+use App\Modules\PartnerLayer\Events\PartnerUpdatedV1;
+use App\Modules\PartnerLayer\Events\PartnerDeletedV1;
 use App\Base\Context\TenantContext;
 use App\Base\Support\TenantCache;
 use Exception;
@@ -14,7 +17,7 @@ use Illuminate\Support\Str;
 
 /**
  * P3-S1 — Core Partner CRUD within PartnerLayer.
- * P3-X1 — Versioned outbox events on create/delete.
+ * P3-X1 — Versioned outbox events on create/update/delete (formal Domain Events V1).
  * P3-X2 — TenantCache for partner list (prefix tenant:{id}:partnerlayer:...).
  *
  * Platform partners (tenant_id = NULL) are visible alongside tenant partners
@@ -97,19 +100,21 @@ class PartnerService
             ]);
 
             if ($tenantId) {
+                $event = new PartnerCreatedV1(
+                    partnerId: $partner->partner_id,
+                    tenantId: $tenantId,
+                    code: $partner->code,
+                    name: $partner->name,
+                    partnerType: (int) $partner->partner_type,
+                    status: (int) $partner->status,
+                );
+
                 $this->logEventOutbox(
                     $tenantId,
                     'partners',
                     $partner->partner_id,
-                    'PartnerLayer.PartnerCreated.v1',
-                    [
-                        'partner_id'   => $partner->partner_id,
-                        'tenant_id'    => $tenantId,
-                        'code'         => $partner->code,
-                        'name'         => $partner->name,
-                        'partner_type' => $partner->partner_type,
-                        'status'       => $partner->status,
-                    ]
+                    PartnerCreatedV1::EVENT_TYPE,
+                    $event->toPayload()
                 );
 
                 $this->forgetPartnerListCache($tenantId);
@@ -151,11 +156,30 @@ class PartnerService
             'status'             => $dto->status,
         ]);
 
+        $partner = $partner->fresh();
+
         if ($tenantId) {
+            $event = new PartnerUpdatedV1(
+                partnerId: $partner->partner_id,
+                tenantId: $tenantId,
+                code: $partner->code,
+                name: $partner->name,
+                partnerType: (int) $partner->partner_type,
+                status: (int) $partner->status,
+            );
+
+            $this->logEventOutbox(
+                $tenantId,
+                'partners',
+                $partner->partner_id,
+                PartnerUpdatedV1::EVENT_TYPE,
+                $event->toPayload()
+            );
+
             $this->forgetPartnerListCache($tenantId);
         }
 
-        return $partner->fresh();
+        return $partner;
     }
 
     public function deletePartner(string $partnerId): void
@@ -176,16 +200,18 @@ class PartnerService
             $partner->delete();
 
             if ($tenantId) {
+                $event = new PartnerDeletedV1(
+                    partnerId: $partner->partner_id,
+                    tenantId: $tenantId,
+                    code: $partner->code,
+                );
+
                 $this->logEventOutbox(
                     $tenantId,
                     'partners',
                     $partner->partner_id,
-                    'PartnerLayer.PartnerDeleted.v1',
-                    [
-                        'partner_id' => $partner->partner_id,
-                        'tenant_id'  => $tenantId,
-                        'code'       => $partner->code,
-                    ]
+                    PartnerDeletedV1::EVENT_TYPE,
+                    $event->toPayload()
                 );
 
                 $this->forgetPartnerListCache($tenantId);
