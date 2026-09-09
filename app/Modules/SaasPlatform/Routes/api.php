@@ -10,15 +10,16 @@ use App\Modules\SaasPlatform\Controllers\CouponController;
 
 /*
 |--------------------------------------------------------------------------
-| SaaS Platform API Routes (Layer 1 - SaaS Business)
+| SaaS Platform API Routes (Layer 1 - SaaS Platform Business)
 |--------------------------------------------------------------------------
 | Loaded by ModuleServiceProvider with prefix: /api/saas-platform
-| Middleware 'api' is already applied by the provider.
+| (Versioned surface: treat as /api/v1/saas-platform when gateway/version
+| middleware is applied at the application level – L1-08)
 |
-| Temporary dual-permission strategy:
+| L1-07 status (2026-09-09):
 | - Permission codes still use saas-admin.* so existing roles/tests keep working
-| - Route names use saas-platform.*
-| - Final cleanup of permission codes comes in a later controlled step
+| - Route names already use saas-platform.*
+| - Full permission-code rename is a controlled follow-up (requires seeder + test updates)
 */
 
 Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {
