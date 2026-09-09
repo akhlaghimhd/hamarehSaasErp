@@ -2,6 +2,7 @@
 
 namespace App\Modules\SaasAdmin\Services;
 
+use App\Modules\SaasAdmin\Contracts\AdminUserServiceContract;
 use App\Modules\SaasAdmin\Models\AdminUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -9,7 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection;
 use InvalidArgumentException;
 
-class AdminUserService
+class AdminUserService implements AdminUserServiceContract
 {
     public function __construct(
         private readonly AuditLogService $auditLogService

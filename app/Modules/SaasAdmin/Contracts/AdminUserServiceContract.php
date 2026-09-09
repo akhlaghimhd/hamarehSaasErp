@@ -3,7 +3,7 @@
 namespace App\Modules\SaasAdmin\Contracts;
 
 use App\Modules\SaasAdmin\Models\AdminUser;
-use Illuminate\Support\Collection;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * L2-M08 – Service Contract for AdminUser operations.
@@ -11,6 +11,10 @@ use Illuminate\Support\Collection;
  */
 interface AdminUserServiceContract
 {
+    public function list(): Collection;
+
+    public function get(string $adminUserId): AdminUser;
+
     public function create(
         string $username,
         string $email,
@@ -18,7 +22,7 @@ interface AdminUserServiceContract
         ?string $firstName = null,
         ?string $lastName = null,
         ?string $mobile = null,
-        int $status = 1
+        ?string $createdBy = null
     ): AdminUser;
 
     public function update(
@@ -26,12 +30,9 @@ interface AdminUserServiceContract
         ?string $firstName = null,
         ?string $lastName = null,
         ?string $mobile = null,
-        ?int $status = null
+        ?int $status = null,
+        ?string $updatedBy = null
     ): AdminUser;
 
-    public function softDelete(string $adminUserId): void;
-
-    public function list(): Collection;
-
-    public function find(string $adminUserId): ?AdminUser;
+    public function softDelete(string $adminUserId, ?string $deletedBy = null): void;
 }
