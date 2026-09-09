@@ -93,7 +93,7 @@ class PartnerCrudTest extends TestCase
     public function authorized_user_can_create_partner(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/partner-layer/partners', [
+            ->postJson('/api/v1/partner-layer/partners', [
                 'code' => 'AFF-001',
                 'name' => 'Affiliate One',
                 'partner_type' => 1,
@@ -122,7 +122,7 @@ class PartnerCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/partner-layer/partners', [
+            ->postJson('/api/v1/partner-layer/partners', [
                 'code' => 'DUP-01',
                 'name' => 'Another',
             ]);
@@ -152,7 +152,7 @@ class PartnerCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/partner-layer/partners');
+            ->getJson('/api/v1/partner-layer/partners');
 
         $response->assertStatus(200);
         $codes = collect($response->json('data'))->pluck('code')->all();
@@ -173,7 +173,7 @@ class PartnerCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->putJson('/api/partner-layer/partners/' . $partner->partner_id, [
+            ->putJson('/api/v1/partner-layer/partners/' . $partner->partner_id, [
                 'code' => 'UPD-01',
                 'name' => 'After',
             ]);
@@ -194,7 +194,7 @@ class PartnerCrudTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->deleteJson('/api/partner-layer/partners/' . $partner->partner_id);
+            ->deleteJson('/api/v1/partner-layer/partners/' . $partner->partner_id);
 
         $response->assertStatus(200);
 
