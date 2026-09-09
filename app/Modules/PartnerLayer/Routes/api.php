@@ -57,6 +57,7 @@ Route::middleware([
 
     Route::get('/partner-commissions', [PartnerCommissionController::class, 'index'])->middleware('permission:partner.commission.view')->name('partner-layer.commissions.index');
     Route::post('/partner-commissions', [PartnerCommissionController::class, 'store'])->middleware('permission:partner.commission.create')->name('partner-layer.commissions.store');
+    Route::post('/partner-commissions/calculate', [PartnerCommissionController::class, 'calculate'])->middleware('permission:partner.commission.create')->name('partner-layer.commissions.calculate');
     Route::get('/partner-commissions/{commission}', [PartnerCommissionController::class, 'show'])->middleware('permission:partner.commission.view')->name('partner-layer.commissions.show');
     Route::put('/partner-commissions/{commission}', [PartnerCommissionController::class, 'update'])->middleware('permission:partner.commission.update')->name('partner-layer.commissions.update');
     Route::delete('/partner-commissions/{commission}', [PartnerCommissionController::class, 'destroy'])->middleware('permission:partner.commission.delete')->name('partner-layer.commissions.delete');
