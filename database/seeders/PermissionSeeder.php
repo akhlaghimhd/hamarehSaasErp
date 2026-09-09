@@ -111,11 +111,37 @@ class PermissionSeeder extends Seeder
     private function getBasePermissions(): array
     {
         return [
+            // Identity Core — full surface matching IdentityCore Routes/api.php (L4-V02)
             ['code' => 'identity.user.view', 'name' => 'View Users', 'module_name' => 'Identity', 'action_type' => 'READ'],
             ['code' => 'identity.user.create', 'name' => 'Create User', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
             ['code' => 'identity.user.update', 'name' => 'Update User', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.user.delete', 'name' => 'Delete User', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+
             ['code' => 'identity.role.view', 'name' => 'View Roles', 'module_name' => 'Identity', 'action_type' => 'READ'],
-            ['code' => 'identity.role.manage', 'name' => 'Manage Roles', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.role.create', 'name' => 'Create Role', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.role.update', 'name' => 'Update Role', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.role.delete', 'name' => 'Delete Role', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+            ['code' => 'identity.role.assign', 'name' => 'Assign Role to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.role.assign-permissions', 'name' => 'Assign Permissions to Role', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+            // legacy alias kept for backward compatibility with older seeds/tests
+            ['code' => 'identity.role.manage', 'name' => 'Manage Roles (legacy)', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'identity.permission.view', 'name' => 'View Permissions', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.permission.create', 'name' => 'Create Permission', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.permission.update', 'name' => 'Update Permission', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.permission.delete', 'name' => 'Delete Permission', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+
+            ['code' => 'identity.scope.view', 'name' => 'View Scopes', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.scope.create', 'name' => 'Create Scope', 'module_name' => 'Identity', 'action_type' => 'CREATE'],
+            ['code' => 'identity.scope.update', 'name' => 'Update Scope', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.scope.delete', 'name' => 'Delete Scope', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+            ['code' => 'identity.scope.assign', 'name' => 'Assign Scope to User', 'module_name' => 'Identity', 'action_type' => 'EXECUTE'],
+
+            ['code' => 'identity.profile.view', 'name' => 'View User Profile', 'module_name' => 'Identity', 'action_type' => 'READ'],
+            ['code' => 'identity.profile.update', 'name' => 'Update User Profile', 'module_name' => 'Identity', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.profile.delete', 'name' => 'Delete User Profile', 'module_name' => 'Identity', 'action_type' => 'DELETE'],
+
+            ['code' => 'identity.membership_history.view', 'name' => 'View Membership History', 'module_name' => 'Identity', 'action_type' => 'READ'],
 
             ['code' => 'masterdata.business-partner.view', 'name' => 'View Business Partners', 'module_name' => 'MasterData', 'action_type' => 'READ'],
             ['code' => 'masterdata.business-partner.create', 'name' => 'Create Business Partner', 'module_name' => 'MasterData', 'action_type' => 'CREATE'],
