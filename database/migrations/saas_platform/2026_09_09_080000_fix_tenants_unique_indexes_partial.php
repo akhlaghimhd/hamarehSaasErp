@@ -10,14 +10,19 @@ use Illuminate\Support\Facades\DB;
  *   CREATE UNIQUE INDEX uq_tenants_code ON tenants(tenant_code) WHERE deleted_at IS NULL;
  *   CREATE UNIQUE INDEX uq_tenants_slug ON tenants(slug) WHERE deleted_at IS NULL;
  *
- * Previous migration used non-partial unique constraints which block soft-deleted rows
- * from being re-created with the same code/slug.
+ * Original create_tenants migration used $table->unique(...) which on PostgreSQL
+ * creates a UNIQUE CONSTRAINT (not a plain index). DROP INDEX alone does not remove
+ * that constraint and causes CREATE UNIQUE INDEX to fail during RefreshDatabase.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        // Drop existing non-partial unique indexes/constraints
+        // Drop UNIQUE CONSTRAINT form (Laravel $table->unique on pgsql)
+        DB::statement('ALTER TABLE tenants DROP CONSTRAINT IF EXISTS uq_tenants_code');
+        DB::statement('ALTER TABLE tenants DROP CONSTRAINT IF EXISTS uq_tenants_slug');
+
+        // Drop INDEX form if it already exists (idempotent / re-run safe)
         DB::statement('DROP INDEX IF EXISTS uq_tenants_code');
         DB::statement('DROP INDEX IF EXISTS uq_tenants_slug');
 
@@ -31,8 +36,8 @@ return new class extends Migration
         DB::statement('DROP INDEX IF EXISTS uq_tenants_code');
         DB::statement('DROP INDEX IF EXISTS uq_tenants_slug');
 
-        // Restore original non-partial unique indexes
-        DB::statement('CREATE UNIQUE INDEX uq_tenants_code ON tenants(tenant_code)');
-        DB::statement('CREATE UNIQUE INDEX uq_tenants_slug ON tenants(slug)');
+        // Restore original non-partial unique constraints
+        DB::statement('ALTER TABLE tenants ADD CONSTRAINT uq_tenants_code UNIQUE (tenant_code)');
+        DB::statement('ALTER TABLE tenants ADD CONSTRAINT uq_tenants_slug UNIQUE (slug)');
     }
 };
