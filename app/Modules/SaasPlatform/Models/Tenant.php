@@ -40,6 +40,10 @@ class Tenant extends Model
             'primary_domain_enabled' => 'boolean',
             'domain_status' => 'integer',
             'status' => 'integer',
+            'row_version' => 'integer',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 

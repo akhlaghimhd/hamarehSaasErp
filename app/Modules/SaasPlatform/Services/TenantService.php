@@ -3,6 +3,7 @@
 namespace App\Modules\SaasPlatform\Services;
 
 use App\Modules\SaasPlatform\DTOs\CreateTenantDTO;
+use App\Modules\SaasPlatform\Events\TenantCreatedV1;
 use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\IdentityCore\Models\TenantUser;
 use Illuminate\Support\Facades\DB;
@@ -40,9 +41,34 @@ class TenantService
                 'created_by'     => $userId,
             ]);
 
-            // TODO: Publish TenantCreated.v1 event to Outbox for base data seeding
+            $this->logEventOutbox(
+                $tenant->tenant_id,
+                TenantCreatedV1::AGGREGATE_TYPE,
+                $tenant->tenant_id,
+                TenantCreatedV1::EVENT_TYPE,
+                TenantCreatedV1::payload($tenant)
+            );
 
             return $tenant;
         });
+    }
+
+    private function logEventOutbox(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => Str::uuid()->toString(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 }
