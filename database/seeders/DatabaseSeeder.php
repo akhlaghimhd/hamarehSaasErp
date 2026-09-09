@@ -12,6 +12,7 @@ class DatabaseSeeder extends Seeder
             CurrencySeeder::class,
             TenantSeeder::class,
             PermissionSeeder::class,
+            PartnerPermissionSeeder::class,
             WorkflowDefinitionSeeder::class,
             PlatformSettingSeeder::class,
             AdminUserSeeder::class,
