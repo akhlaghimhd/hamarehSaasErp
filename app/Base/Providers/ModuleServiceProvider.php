@@ -85,8 +85,16 @@ class ModuleServiceProvider extends ServiceProvider
                 if (File::exists($routesPath)) {
                     $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
 
-                    // L2-M05 – Explicit API versioning: /api/v1/{module}
+                    // Canonical versioned API: /api/v1/{module}
                     Route::prefix('api/v1/' . $prefix)
+                        ->middleware('api')
+                        ->group($routesPath);
+
+                    // Legacy unversioned alias: /api/{module}
+                    // Kept so existing Feature tests and clients that still call
+                    // /api/master-data/... continue to resolve (avoids mass 404).
+                    // Prefer /api/v1/{module} for all new work.
+                    Route::prefix('api/' . $prefix)
                         ->middleware('api')
                         ->group($routesPath);
                 }
