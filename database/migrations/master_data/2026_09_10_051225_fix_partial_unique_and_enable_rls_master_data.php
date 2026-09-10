@@ -50,7 +50,7 @@ return new class extends Migration
             CREATE POLICY tenant_isolation_policy ON cost_centers
             FOR ALL
             USING (
-                tenant_id = nullif(current_tenant_id', true), '')::uuid
+                tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
             )
             WITH CHECK (
                 tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
@@ -105,7 +105,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Revert partial uniques to non-partial constraints (best-effort)
+        // Revert partial uniques to non-partial (best-effort)
         DB::statement('DROP INDEX IF EXISTS uq_business_partners_tenant_code');
         DB::statement('ALTER TABLE business_partners DROP CONSTRAINT IF EXISTS uq_business_partners_tenant_code');
         DB::statement('CREATE UNIQUE INDEX uq_business_partners_tenant_code ON business_partners (tenant_id, code)');
