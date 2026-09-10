@@ -5,20 +5,25 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Layer 5 MasterData compliance fix:
- * 1. Convert unique indexes to partial (WHERE deleted_at IS NULL) for SoftDeletes safety.
+ * 1. Convert unique constraints/indexes to partial (WHERE deleted_at IS NULL) for SoftDeletes safety.
  * 2. Enable RLS + FORCE + tenant_isolation_policy on core tenant-scoped tables.
  *
  * Pattern taken from Organization (erp_companies) and Tenant Isolation Architecture Standard.
+ *
+ * Note: Original create migrations used $table->unique(..., 'uq_...'), which creates a
+ * UNIQUE CONSTRAINT in PostgreSQL. Therefore we must DROP CONSTRAINT, not DROP INDEX.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        // --- 1. business_partners: drop non-partial unique, add partial ---
+        // --- 1. business_partners: drop unique CONSTRAINT, add partial unique index ---
+        DB::statement('ALTER TABLE business_partners DROP CONSTRAINT IF EXISTS uq_business_partners_tenant_code');
         DB::statement('DROP INDEX IF EXISTS uq_business_partners_tenant_code');
         DB::statement('CREATE UNIQUE INDEX uq_business_partners_tenant_code ON business_partners (tenant_id, code) WHERE deleted_at IS NULL');
 
         // --- 2. cost_centers: same fix ---
+        DB::statement('ALTER TABLE cost_centers DROP CONSTRAINT IF EXISTS uq_cost_centers_tenant_code');
         DB::statement('DROP INDEX IF EXISTS uq_cost_centers_tenant_code');
         DB::statement('CREATE UNIQUE INDEX uq_cost_centers_tenant_code ON cost_centers (tenant_id, code) WHERE deleted_at IS NULL');
 
@@ -45,7 +50,7 @@ return new class extends Migration
             CREATE POLICY tenant_isolation_policy ON cost_centers
             FOR ALL
             USING (
-                tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
+                tenant_id = nullif(current_tenant_id', true), '')::uuid
             )
             WITH CHECK (
                 tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid
@@ -82,7 +87,7 @@ return new class extends Migration
             )
         ");
 
-        // --- 7. RLS on bank_accounts (if table exists with tenant_id) ---
+        // --- 7. RLS on bank_accounts ---
         DB::statement('ALTER TABLE bank_accounts ENABLE ROW LEVEL SECURITY');
         DB::statement('ALTER TABLE bank_accounts FORCE ROW LEVEL SECURITY');
         DB::statement('DROP POLICY IF EXISTS tenant_isolation_policy ON bank_accounts');
@@ -100,11 +105,13 @@ return new class extends Migration
 
     public function down(): void
     {
-        // Revert partial uniques to non-partial (best-effort)
+        // Revert partial uniques to non-partial constraints (best-effort)
         DB::statement('DROP INDEX IF EXISTS uq_business_partners_tenant_code');
+        DB::statement('ALTER TABLE business_partners DROP CONSTRAINT IF EXISTS uq_business_partners_tenant_code');
         DB::statement('CREATE UNIQUE INDEX uq_business_partners_tenant_code ON business_partners (tenant_id, code)');
 
         DB::statement('DROP INDEX IF EXISTS uq_cost_centers_tenant_code');
+        DB::statement('ALTER TABLE cost_centers DROP CONSTRAINT IF EXISTS uq_cost_centers_tenant_code');
         DB::statement('CREATE UNIQUE INDEX uq_cost_centers_tenant_code ON cost_centers (tenant_id, code)');
 
         foreach (['business_partners', 'cost_centers', 'entity_addresses', 'entity_contact_points', 'bank_accounts'] as $table) {
