@@ -5,6 +5,9 @@ namespace App\Modules\MasterData\Services;
 use App\Modules\MasterData\Models\BusinessPartner;
 use App\Modules\MasterData\DTOs\CreateBusinessPartnerDTO;
 use App\Modules\MasterData\DTOs\UpdateBusinessPartnerDTO;
+use App\Modules\MasterData\Events\BusinessPartnerCreatedV1;
+use App\Modules\MasterData\Events\BusinessPartnerUpdatedV1;
+use App\Modules\MasterData\Events\BusinessPartnerDeletedV1;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Context;
@@ -32,18 +35,26 @@ class BusinessPartnerService
                 $tenantId = Context::get('tenant_id');
 
                 $businessPartner = BusinessPartner::create([
-                    'tenant_id' => $tenantId, // تزریق امن کانتکست
+                    'tenant_id' => $tenantId,
                     'code' => $dto->code,
                     'display_name' => $dto->display_name,
                     'partner_type' => $dto->partner_type,
                     'status' => $dto->status,
                     'parent_business_partner_id' => $dto->parent_business_partner_id,
                     'credit_limit' => $dto->credit_limit,
-                    'created_by' => Context::get('user_id'), // دریافت امن شناسه کاربر از کانتکست
+                    'created_by' => Context::get('user_id'),
                 ]);
 
-                // ⚡ ثبت تضمینی رویداد در Outbox در همان تراکنش
-                $this->dispatchOutboxEvent('master_data.business_partner.created', $businessPartner, $tenantId);
+                $event = new BusinessPartnerCreatedV1(
+                    businessPartnerId: $businessPartner->business_partner_id,
+                    tenantId: $tenantId,
+                    code: $businessPartner->code,
+                    displayName: $businessPartner->display_name,
+                    partnerType: (int) $businessPartner->partner_type,
+                    createdBy: Context::get('user_id'),
+                );
+
+                $this->dispatchOutboxEvent($event::EVENT_TYPE, $event->toPayload(), $businessPartner, $tenantId);
 
                 return $businessPartner;
             });
@@ -67,12 +78,21 @@ class BusinessPartnerService
                     'parent_business_partner_id' => $dto->parent_business_partner_id,
                     'credit_limit' => $dto->credit_limit,
                     'updated_by' => Context::get('user_id'),
-                ], fn($value) => !is_null($value));
+                ], fn ($value) => ! is_null($value));
 
                 $businessPartner->update($updateData);
 
-                // ⚡ ثبت تضمینی رویداد ویرایش در Outbox
-                $this->dispatchOutboxEvent('master_data.business_partner.updated', $businessPartner, $tenantId);
+                $event = new BusinessPartnerUpdatedV1(
+                    businessPartnerId: $businessPartner->business_partner_id,
+                    tenantId: $tenantId,
+                    code: $businessPartner->code,
+                    displayName: $businessPartner->display_name,
+                    partnerType: (int) $businessPartner->partner_type,
+                    status: (int) $businessPartner->status,
+                    updatedBy: Context::get('user_id'),
+                );
+
+                $this->dispatchOutboxEvent($event::EVENT_TYPE, $event->toPayload(), $businessPartner, $tenantId);
 
                 return $businessPartner;
             });
@@ -92,8 +112,14 @@ class BusinessPartnerService
                 $businessPartner->update(['deleted_by' => Context::get('user_id')]);
                 $businessPartner->delete();
 
-                // ⚡ ثبت رویداد حذف در Outbox
-                $this->dispatchOutboxEvent('master_data.business_partner.deleted', $businessPartner, $tenantId);
+                $event = new BusinessPartnerDeletedV1(
+                    businessPartnerId: $businessPartner->business_partner_id,
+                    tenantId: $tenantId,
+                    code: $businessPartner->code,
+                    deletedBy: Context::get('user_id'),
+                );
+
+                $this->dispatchOutboxEvent($event::EVENT_TYPE, $event->toPayload(), $businessPartner, $tenantId);
             });
         } catch (Exception $e) {
             Log::error('Failed to delete Business Partner: ' . $e->getMessage());
@@ -102,9 +128,9 @@ class BusinessPartnerService
     }
 
     /**
-     * متد کمکی برای ثبت رویداد در جدول Outbox جهت ارتباط ناهمگام با سایر ماژول‌ها
+     * ثبت رویداد نسخه‌دار در جدول Outbox جهت ارتباط ناهمگام با سایر ماژول‌ها
      */
-    private function dispatchOutboxEvent(string $eventType, BusinessPartner $partner, string $tenantId): void
+    private function dispatchOutboxEvent(string $eventType, array $payload, BusinessPartner $partner, string $tenantId): void
     {
         DB::table('event_outbox')->insert([
             'event_id' => Str::uuid()->toString(),
@@ -112,7 +138,7 @@ class BusinessPartnerService
             'aggregate_type' => 'business_partners',
             'aggregate_id' => $partner->business_partner_id,
             'event_type' => $eventType,
-            'payload' => json_encode($partner->toArray()),
+            'payload' => json_encode($payload),
             'status' => 1, // Pending
             'created_at' => now(),
         ]);
