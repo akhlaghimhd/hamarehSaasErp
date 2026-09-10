@@ -7,7 +7,9 @@ use App\Modules\Workflow\Controllers\WorkflowController;
 |--------------------------------------------------------------------------
 | Workflow Module API Routes
 |--------------------------------------------------------------------------
-| Prefix applied by ModuleServiceProvider: /api/workflow
+| Registered by ModuleServiceProvider as both:
+|   - Canonical : /api/v1/workflow
+|   - Legacy    : /api/workflow
 */
 
 Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(function () {

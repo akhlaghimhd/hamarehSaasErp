@@ -35,11 +35,11 @@ class Task extends Model
     ];
 
     protected $casts = [
-        'assigned_type'      => 'integer',
-        'status'             => 'integer',
-        'context_snapshots'  => 'array',
-        'actioned_at'        => 'datetime',
-        'row_version'        => 'integer',
+        'assigned_type'     => 'integer',
+        'status'            => 'integer',
+        'context_snapshots' => 'array',
+        'actioned_at'       => 'datetime',
+        'row_version'       => 'integer',
     ];
 
     public function instance(): BelongsTo
