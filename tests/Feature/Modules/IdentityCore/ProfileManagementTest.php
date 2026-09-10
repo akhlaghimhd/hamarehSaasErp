@@ -113,7 +113,7 @@ class ProfileManagementTest extends TestCase
     public function authenticated_user_can_upsert_own_profile(): void
     {
         $response = $this->withHeaders($this->headers($this->token))
-            ->putJson('/api/identity-core/identity/profiles/me', [
+            ->putJson('/api/v1/identity-core/identity/profiles/me', [
                 'phone'       => '+989121234567',
                 'gender'      => 1,
                 'description' => 'Self profile',
@@ -146,7 +146,7 @@ class ProfileManagementTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->headers($this->token))
-            ->getJson('/api/identity-core/identity/profiles/me');
+            ->getJson('/api/v1/identity-core/identity/profiles/me');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success')
@@ -163,13 +163,13 @@ class ProfileManagementTest extends TestCase
         ]);
 
         $show = $this->withHeaders($this->headers($this->adminToken))
-            ->getJson('/api/identity-core/identity/profiles/' . $this->otherMember->user_id);
+            ->getJson('/api/v1/identity-core/identity/profiles/' . $this->otherMember->user_id);
 
         $show->assertStatus(200)
             ->assertJsonPath('data.user_id', $this->otherMember->user_id);
 
         $update = $this->withHeaders($this->headers($this->adminToken))
-            ->putJson('/api/identity-core/identity/profiles/' . $this->otherMember->user_id, [
+            ->putJson('/api/v1/identity-core/identity/profiles/' . $this->otherMember->user_id, [
                 'description' => 'Updated by admin',
                 'gender'      => 2,
             ]);
@@ -194,7 +194,7 @@ class ProfileManagementTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->headers($this->adminToken))
-            ->deleteJson('/api/identity-core/identity/profiles/' . $this->otherMember->user_id);
+            ->deleteJson('/api/v1/identity-core/identity/profiles/' . $this->otherMember->user_id);
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
@@ -221,13 +221,13 @@ class ProfileManagementTest extends TestCase
         ]);
 
         $this->withHeaders($this->headers($this->token))
-            ->putJson('/api/identity-core/identity/profiles/' . $this->user->user_id, [
+            ->putJson('/api/v1/identity-core/identity/profiles/' . $this->user->user_id, [
                 'description' => 'Hacked',
             ])
             ->assertStatus(403);
 
         $this->withHeaders($this->headers($this->token))
-            ->deleteJson('/api/identity-core/identity/profiles/' . $this->user->user_id)
+            ->deleteJson('/api/v1/identity-core/identity/profiles/' . $this->user->user_id)
             ->assertStatus(403);
     }
 
@@ -243,7 +243,7 @@ class ProfileManagementTest extends TestCase
         ]);
 
         $this->withHeaders($this->headers($this->adminToken))
-            ->getJson('/api/identity-core/identity/profiles/' . $outsider->user_id)
+            ->getJson('/api/v1/identity-core/identity/profiles/' . $outsider->user_id)
             ->assertStatus(404);
     }
 }

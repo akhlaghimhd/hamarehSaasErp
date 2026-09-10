@@ -127,7 +127,7 @@ class MembershipHistoryTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->headers($this->adminToken))
-            ->getJson('/api/identity-core/identity/membership-histories');
+            ->getJson('/api/v1/identity-core/identity/membership-histories');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
@@ -152,7 +152,7 @@ class MembershipHistoryTest extends TestCase
 
         $response = $this->withHeaders($this->headers($this->adminToken))
             ->getJson(
-                '/api/identity-core/identity/membership-histories/user/'
+                '/api/v1/identity-core/identity/membership-histories/user/'
                 . $this->memberMembership->tenant_user_id
             );
 
@@ -165,10 +165,9 @@ class MembershipHistoryTest extends TestCase
     #[Test]
     public function updating_membership_status_records_history(): void
     {
-        // status only allows 0|1 per UpdateTenantUserRequest
         $response = $this->withHeaders($this->headers($this->adminToken))
             ->putJson(
-                '/api/identity-core/identity/users/' . $this->memberMembership->tenant_user_id,
+                '/api/v1/identity-core/identity/users/' . $this->memberMembership->tenant_user_id,
                 ['status' => 0]
             );
 
@@ -194,7 +193,7 @@ class MembershipHistoryTest extends TestCase
     {
         $response = $this->withHeaders($this->headers($this->adminToken))
             ->deleteJson(
-                '/api/identity-core/identity/users/' . $this->memberMembership->tenant_user_id
+                '/api/v1/identity-core/identity/users/' . $this->memberMembership->tenant_user_id
             );
 
         $response->assertStatus(200);
@@ -211,7 +210,7 @@ class MembershipHistoryTest extends TestCase
     public function unauthorized_member_cannot_list_membership_history(): void
     {
         $this->withHeaders($this->headers($this->memberToken))
-            ->getJson('/api/identity-core/identity/membership-histories')
+            ->getJson('/api/v1/identity-core/identity/membership-histories')
             ->assertStatus(403);
     }
 
@@ -232,7 +231,7 @@ class MembershipHistoryTest extends TestCase
 
         $this->withHeaders($this->headers($this->adminToken))
             ->getJson(
-                '/api/identity-core/identity/membership-histories/user/'
+                '/api/v1/identity-core/identity/membership-histories/user/'
                 . $foreignMembership->tenant_user_id
             )
             ->assertStatus(404);
