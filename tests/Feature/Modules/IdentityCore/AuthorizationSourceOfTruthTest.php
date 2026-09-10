@@ -97,7 +97,7 @@ class AuthorizationSourceOfTruthTest extends TestCase
         $login = $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
-        ])->postJson('/api/identity-core/identity/auth/login', [
+        ])->postJson('/api/v1/identity-core/identity/auth/login', [
             'email'     => $this->userEmail,
             'password'  => $this->plainPassword,
             'tenant_id' => $this->tenant->tenant_id,
@@ -116,7 +116,7 @@ class AuthorizationSourceOfTruthTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->getJson('/api/identity-core/identity/roles');
+        ])->getJson('/api/v1/identity-core/identity/roles');
 
         $response->assertStatus(200);
     }
@@ -152,7 +152,7 @@ class AuthorizationSourceOfTruthTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->getJson('/api/identity-core/identity/roles');
+        ])->getJson('/api/v1/identity-core/identity/roles');
 
         $response->assertStatus(403);
     }
