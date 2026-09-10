@@ -83,7 +83,8 @@ class LoginLockoutTest extends TestCase
 
         $credential = UserCredential::where('user_id', $this->user->user_id)->first();
         $this->assertNotNull($credential->locked_until);
-        $this->assertSame(5, (int) $credential->failed_login_count);
+        // P4-S1: on lock, counter is reset to 0 so attempts restart cleanly after unlock window
+        $this->assertSame(0, (int) $credential->failed_login_count);
     }
 
     #[Test]
