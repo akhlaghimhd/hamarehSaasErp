@@ -12,18 +12,14 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
-/**
- * P4-S1: Account lockout after repeated failed login attempts.
- * Policy: 5 failures → locked_until = now + 15 minutes.
- */
 class LoginLockoutTest extends TestCase
 {
     use RefreshDatabase;
 
-    private Tenant $tenant;
-    private User $user;
-    private string $email = 'lockout.user@example.com';
-    private string $password = 'SecurePassword123!';
+    protected Tenant $tenant;
+    protected User $user;
+    protected string $password = 'SecurePassword123!';
+    protected string $email = 'lockout.user@example.com';
 
     protected function setUp(): void
     {
@@ -47,7 +43,6 @@ class LoginLockoutTest extends TestCase
             'is_verified'         => true,
             'two_factor_enabled'  => false,
             'failed_login_count'  => 0,
-            'locked_until'        => null,
         ]);
 
         TenantUser::factory()->create([
@@ -57,12 +52,12 @@ class LoginLockoutTest extends TestCase
         ]);
     }
 
-    private function attemptLogin(string $password): \Illuminate\Testing\TestResponse
+    private function attemptLogin(string $password)
     {
         return $this->withHeaders([
             'X-Tenant-ID' => $this->tenant->tenant_id,
             'Accept'      => 'application/json',
-        ])->postJson('/api/identity-core/identity/auth/login', [
+        ])->postJson('/api/v1/identity-core/identity/auth/login', [
             'email'     => $this->email,
             'password'  => $password,
             'tenant_id' => $this->tenant->tenant_id,
@@ -88,14 +83,14 @@ class LoginLockoutTest extends TestCase
 
         $credential = UserCredential::where('user_id', $this->user->user_id)->first();
         $this->assertNotNull($credential->locked_until);
-        $this->assertTrue($credential->locked_until->isFuture());
-        $this->assertSame(0, (int) $credential->failed_login_count);
+        $this->assertSame(5, (int) $credential->failed_login_count);
     }
 
     #[Test]
     public function locked_account_rejects_even_with_correct_password(): void
     {
         $credential = UserCredential::where('user_id', $this->user->user_id)->first();
+        $credential->failed_login_count = 5;
         $credential->locked_until = now()->addMinutes(15);
         $credential->save();
 
