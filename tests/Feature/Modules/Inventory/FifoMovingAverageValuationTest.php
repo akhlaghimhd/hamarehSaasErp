@@ -102,6 +102,9 @@ class FifoMovingAverageValuationTest extends TestCase
             to_location_id: $this->locationId,
         ));
         $docs->postDocument($doc->document_id);
+
+        // Ensure distinct received_at between successive receipts for stable FIFO ordering
+        usleep(50000);
     }
 
     private function postIssue(string $itemId, float $qty, string $docNo): float
@@ -135,7 +138,21 @@ class FifoMovingAverageValuationTest extends TestCase
         $this->postReceipt($item->item_id, 100, 10.0, 'R-FIFO-1');
         $this->postReceipt($item->item_id, 50, 12.0, 'R-FIFO-2');
 
-        // Issue 120 → 100@10 + 20@12 = avg 10.3333
+        // Sanity: two open layers before issue
+        $before = CostLayer::query()
+            ->where('item_id', $item->item_id)
+            ->where('quantity_remaining', '>', 0)
+            ->orderBy('received_at')
+            ->orderBy('created_at')
+            ->orderBy('cost_layer_id')
+            ->get();
+        $this->assertCount(2, $before);
+        $this->assertEquals(100.0, (float) $before[0]->quantity_remaining);
+        $this->assertEquals(10.0, (float) $before[0]->unit_cost);
+        $this->assertEquals(50.0, (float) $before[1]->quantity_remaining);
+        $this->assertEquals(12.0, (float) $before[1]->unit_cost);
+
+        // Issue 120 → 100@10 + 20@12 = 1240 / 120 = 10.3333
         $unitCost = $this->postIssue($item->item_id, 120, 'I-FIFO-1');
         $this->assertEqualsWithDelta(10.3333, $unitCost, 0.001);
 

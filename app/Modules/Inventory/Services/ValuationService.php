@@ -228,12 +228,14 @@ class ValuationService
         $remaining = $qty;
         $chunks = [];
 
+        // Deterministic FIFO order: oldest received first, then created_at, then PK
         $layers = CostLayer::query()
             ->where('item_id', $itemId)
             ->where('location_id', $locationId)
             ->where('quantity_remaining', '>', 0)
             ->orderBy('received_at')
             ->orderBy('created_at')
+            ->orderBy('cost_layer_id')
             ->lockForUpdate()
             ->get();
 
