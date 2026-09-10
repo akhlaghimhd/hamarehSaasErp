@@ -77,14 +77,20 @@ class WorkflowEngineService
         ]);
     }
 
+    /**
+     * Start a process instance.
+     *
+     * @param  string|null  $owningTenantId  Optional owning tenant for inter-company flows (defaults to current tenant).
+     */
     public function startInstance(
         string $definitionCode,
         string $targetAggregateType,
         string $targetAggregateId,
-        ?array $contextSnapshot = null
+        ?array $contextSnapshot = null,
+        ?string $owningTenantId = null
     ): ProcessInstance {
         try {
-            return DB::transaction(function () use ($definitionCode, $targetAggregateType, $targetAggregateId, $contextSnapshot) {
+            return DB::transaction(function () use ($definitionCode, $targetAggregateType, $targetAggregateId, $contextSnapshot, $owningTenantId) {
                 $tenantId = Context::get('tenant_id');
                 $userId = Context::get('user_id');
                 if (!$tenantId) {
@@ -112,13 +118,15 @@ class WorkflowEngineService
                     throw new ConflictHttpException('Invalid flow_graph: missing initial_state.');
                 }
 
+                $owner = $owningTenantId ?: $tenantId;
+
                 $instance = ProcessInstance::create([
                     'tenant_id' => $tenantId,
                     'process_definition_id' => $definition->process_definition_id,
                     'target_aggregate_id' => $targetAggregateId,
                     'target_aggregate_type' => $targetAggregateType,
                     'current_state' => $initial,
-                    'owning_tenant_id' => $tenantId,
+                    'owning_tenant_id' => $owner,
                     'status' => self::INSTANCE_RUNNING,
                     'created_by' => $userId,
                     'updated_by' => $userId,

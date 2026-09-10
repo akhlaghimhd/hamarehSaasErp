@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * L6-WF-00/01 — Start process instance and approve first task
+ * L6-WF-00/01 — Start process instance and approve first task + isolation
  */
 class WorkflowEngineStartAndCompleteTest extends TestCase
 {
@@ -97,6 +97,7 @@ class WorkflowEngineStartAndCompleteTest extends TestCase
         $this->assertSame(WorkflowEngineService::INSTANCE_RUNNING, (int) $instance->status);
         $this->assertSame('pending_approval', $instance->current_state);
         $this->assertSame($aggregateId, $instance->target_aggregate_id);
+        $this->assertSame($this->tenantA->tenant_id, $instance->owning_tenant_id);
         $this->assertCount(1, $instance->tasks);
 
         $task = $instance->tasks->first();
@@ -160,5 +161,62 @@ class WorkflowEngineStartAndCompleteTest extends TestCase
 
         $count = ProcessDefinition::query()->where('code', 'ISO_FLOW')->count();
         $this->assertSame(0, $count);
+    }
+
+    #[Test]
+    public function tenant_isolation_on_instances_and_tasks(): void
+    {
+        $engine = app(WorkflowEngineService::class);
+
+        $engine->upsertDefinition(
+            code: 'ISO_INST',
+            name: 'Iso Inst',
+            targetAggregateType: 'sales_orders',
+            flowGraph: $this->sampleGraph(),
+        );
+
+        $aggregateId = (string) Str::uuid();
+        $instance = $engine->startInstance(
+            definitionCode: 'ISO_INST',
+            targetAggregateType: 'sales_orders',
+            targetAggregateId: $aggregateId,
+        );
+
+        $this->assertSame(1, ProcessInstance::query()->where('process_instance_id', $instance->process_instance_id)->count());
+        $this->assertSame(1, Task::query()->where('process_instance_id', $instance->process_instance_id)->count());
+
+        // Switch to another tenant – must see zero rows (RLS + TenantScoped)
+        $tenantB = Tenant::factory()->create(['tenant_code' => 'WF_B2', 'status' => 1]);
+        Context::add('tenant_id', $tenantB->tenant_id);
+        TenantContext::getInstance()->setTenantId($tenantB->tenant_id);
+        app()->instance('current_tenant_id', $tenantB->tenant_id);
+
+        $this->assertSame(0, ProcessInstance::query()->where('process_instance_id', $instance->process_instance_id)->count());
+        $this->assertSame(0, Task::query()->where('process_instance_id', $instance->process_instance_id)->count());
+    }
+
+    #[Test]
+    public function start_instance_accepts_optional_owning_tenant_id(): void
+    {
+        $engine = app(WorkflowEngineService::class);
+
+        $engine->upsertDefinition(
+            code: 'OWN_TEST',
+            name: 'Owning Test',
+            targetAggregateType: 'sales_orders',
+            flowGraph: $this->sampleGraph(),
+        );
+
+        $otherOwner = (string) Str::uuid();
+        $instance = $engine->startInstance(
+            definitionCode: 'OWN_TEST',
+            targetAggregateType: 'sales_orders',
+            targetAggregateId: (string) Str::uuid(),
+            contextSnapshot: null,
+            owningTenantId: $otherOwner,
+        );
+
+        $this->assertSame($otherOwner, $instance->owning_tenant_id);
+        $this->assertSame($this->tenantA->tenant_id, $instance->tenant_id);
     }
 }
