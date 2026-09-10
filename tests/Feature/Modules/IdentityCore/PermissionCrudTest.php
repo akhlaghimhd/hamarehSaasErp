@@ -111,7 +111,7 @@ class PermissionCrudTest extends TestCase
     public function authorized_user_can_show_permission(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id);
+            ->getJson('/api/v1/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id);
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success')
@@ -123,7 +123,7 @@ class PermissionCrudTest extends TestCase
     public function authorized_user_can_update_permission(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->putJson('/api/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id, [
+            ->putJson('/api/v1/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id, [
                 'name'        => 'Target Action Updated',
                 'description' => 'Updated description',
                 'status'      => 1,
@@ -151,7 +151,7 @@ class PermissionCrudTest extends TestCase
     public function authorized_user_can_soft_delete_permission(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->deleteJson('/api/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id);
+            ->deleteJson('/api/v1/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id);
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
@@ -190,13 +190,13 @@ class PermissionCrudTest extends TestCase
         ];
 
         $this->withHeaders($headers)
-            ->putJson('/api/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id, [
+            ->putJson('/api/v1/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id, [
                 'name' => 'Hacked',
             ])
             ->assertStatus(403);
 
         $this->withHeaders($headers)
-            ->deleteJson('/api/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id)
+            ->deleteJson('/api/v1/identity-core/identity/permissions/' . $this->targetPermission->tenant_permission_id)
             ->assertStatus(403);
     }
 }

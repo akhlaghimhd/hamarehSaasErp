@@ -113,7 +113,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/permissions', $payload);
+        ])->postJson('/api/v1/identity-core/identity/permissions', $payload);
 
         $response->assertStatus(201)
             ->assertJsonPath('status', 'success')
@@ -156,7 +156,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/permissions', [
+        ])->postJson('/api/v1/identity-core/identity/permissions', [
             'code'        => 'identity.forbidden.action',
             'name'        => 'Forbidden Action',
             'module_name' => 'Identity',
@@ -173,7 +173,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/permissions', [
+        ])->postJson('/api/v1/identity-core/identity/permissions', [
             'code'        => 'InvalidCodeFormat',
             'name'        => 'Invalid',
             'module_name' => 'Identity',
@@ -189,7 +189,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/permissions', [
+        ])->postJson('/api/v1/identity-core/identity/permissions', [
             'code'        => 'identity.duplicate.test',
             'name'        => 'Duplicate Test',
             'module_name' => 'Identity',
@@ -199,7 +199,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/permissions', [
+        ])->postJson('/api/v1/identity-core/identity/permissions', [
             'code'        => 'identity.duplicate.test',
             'name'        => 'Duplicate Test Again',
             'module_name' => 'Identity',
@@ -215,7 +215,7 @@ class PermissionManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $this->token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->getJson('/api/identity-core/identity/permissions');
+        ])->getJson('/api/v1/identity-core/identity/permissions');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
