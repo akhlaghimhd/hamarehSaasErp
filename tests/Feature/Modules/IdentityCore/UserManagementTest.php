@@ -103,7 +103,7 @@ class UserManagementTest extends TestCase
     public function authorized_user_can_list_tenant_users(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/identity-core/identity/users');
+            ->getJson('/api/v1/identity-core/identity/users');
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
@@ -126,7 +126,7 @@ class UserManagementTest extends TestCase
         ];
 
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/identity-core/identity/users', $payload);
+            ->postJson('/api/v1/identity-core/identity/users', $payload);
 
         $response->assertStatus(201)
             ->assertJsonPath('status', 'success')
@@ -171,7 +171,7 @@ class UserManagementTest extends TestCase
             'Authorization' => 'Bearer ' . $token,
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
-        ])->postJson('/api/identity-core/identity/users', [
+        ])->postJson('/api/v1/identity-core/identity/users', [
             'email'      => 'forbidden@example.com',
             'password'   => 'SecurePass123!',
             'first_name' => 'Forbidden',
@@ -186,7 +186,7 @@ class UserManagementTest extends TestCase
     public function create_tenant_user_validates_required_fields(): void
     {
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/identity-core/identity/users', [
+            ->postJson('/api/v1/identity-core/identity/users', [
                 'email' => 'incomplete@example.com',
             ]);
 
@@ -204,11 +204,11 @@ class UserManagementTest extends TestCase
         ];
 
         $this->withHeaders($this->authHeaders())
-            ->postJson('/api/identity-core/identity/users', $payload)
+            ->postJson('/api/v1/identity-core/identity/users', $payload)
             ->assertStatus(201);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->postJson('/api/identity-core/identity/users', $payload);
+            ->postJson('/api/v1/identity-core/identity/users', $payload);
 
         $response->assertStatus(400)
             ->assertJsonPath('status', 'error');
@@ -222,7 +222,7 @@ class UserManagementTest extends TestCase
             ->first();
 
         $response = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/identity-core/identity/users/' . $membership->tenant_user_id);
+            ->getJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id);
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success')
@@ -237,7 +237,7 @@ class UserManagementTest extends TestCase
             ->first();
 
         $response = $this->withHeaders($this->authHeaders())
-            ->putJson('/api/identity-core/identity/users/' . $membership->tenant_user_id, [
+            ->putJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id, [
                 'first_name' => 'Updated',
                 'last_name'  => 'Admin',
                 'status'     => 1,
@@ -278,7 +278,7 @@ class UserManagementTest extends TestCase
         ]);
 
         $response = $this->withHeaders($this->authHeaders())
-            ->deleteJson('/api/identity-core/identity/users/' . $membership->tenant_user_id);
+            ->deleteJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id);
 
         $response->assertStatus(200)
             ->assertJsonPath('status', 'success');
@@ -287,13 +287,12 @@ class UserManagementTest extends TestCase
             'tenant_user_id' => $membership->tenant_user_id,
         ]);
 
-        // Physical row remains (soft delete only)
         $this->assertDatabaseHas('tenant_users', [
             'tenant_user_id' => $membership->tenant_user_id,
         ]);
 
         $show = $this->withHeaders($this->authHeaders())
-            ->getJson('/api/identity-core/identity/users/' . $membership->tenant_user_id);
+            ->getJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id);
 
         $show->assertStatus(404);
 
@@ -332,13 +331,13 @@ class UserManagementTest extends TestCase
         ];
 
         $this->withHeaders($headers)
-            ->putJson('/api/identity-core/identity/users/' . $membership->tenant_user_id, [
+            ->putJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id, [
                 'first_name' => 'Hacked',
             ])
             ->assertStatus(403);
 
         $this->withHeaders($headers)
-            ->deleteJson('/api/identity-core/identity/users/' . $membership->tenant_user_id)
+            ->deleteJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id)
             ->assertStatus(403);
     }
 }

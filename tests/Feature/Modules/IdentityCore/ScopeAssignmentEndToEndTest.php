@@ -175,7 +175,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
     {
         $this->switchToBearer($this->adminToken);
 
-        $create = $this->postJson('/api/identity-core/identity/scopes', [
+        $create = $this->postJson('/api/v1/identity-core/identity/scopes', [
             'scope_name'   => 'Allowed Branch Scope',
             'scope_type'   => 'BRANCH',
             'reference_id' => $this->branchAllowed->branch_id,
@@ -186,7 +186,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
         $scopeId = $create->json('data.scope_id');
         $this->assertNotEmpty($scopeId);
 
-        $bad = $this->postJson('/api/identity-core/identity/scopes', [
+        $bad = $this->postJson('/api/v1/identity-core/identity/scopes', [
             'scope_name'   => 'Bad',
             'scope_type'   => 'BRANCH',
             'reference_id' => (string) Str::uuid(),
@@ -194,7 +194,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
 
         $bad->assertStatus(400);
 
-        $assign = $this->postJson('/api/identity-core/identity/scopes/assign', [
+        $assign = $this->postJson('/api/v1/identity-core/identity/scopes/assign', [
             'tenant_user_id' => $this->scopedTenantUser->tenant_user_id,
             'scope_ids'      => [$scopeId],
         ]);
@@ -217,7 +217,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
         );
 
         $userScopes = $this->getJson(
-            '/api/identity-core/identity/scopes/user/' . $this->scopedTenantUser->tenant_user_id
+            '/api/v1/identity-core/identity/scopes/user/' . $this->scopedTenantUser->tenant_user_id
         );
 
         $userScopes->assertStatus(200);
@@ -226,7 +226,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
 
         $this->switchToBearer(null);
 
-        $login = $this->postJson('/api/identity-core/identity/auth/login', [
+        $login = $this->postJson('/api/v1/identity-core/identity/auth/login', [
             'email'     => 'scope.user@example.com',
             'password'  => $this->plainPassword,
             'tenant_id' => $this->tenant->tenant_id,
@@ -251,7 +251,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
         $this->switchToBearer($userToken);
 
         $list = $this->getJson(
-            '/api/organization/companies/' . $this->company->company_id . '/branches'
+            '/api/v1/organization/companies/' . $this->company->company_id . '/branches'
         );
 
         $list->assertStatus(200);
@@ -267,7 +267,7 @@ class ScopeAssignmentEndToEndTest extends TestCase
 
         $this->switchToBearer($this->adminToken);
 
-        $unassign = $this->postJson('/api/identity-core/identity/scopes/unassign', [
+        $unassign = $this->postJson('/api/v1/identity-core/identity/scopes/unassign', [
             'tenant_user_id' => $this->scopedTenantUser->tenant_user_id,
             'scope_ids'      => [$scopeId],
         ]);
