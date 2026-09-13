@@ -16,6 +16,8 @@ use App\Modules\ProcurementSales\Events\SalesOrderConfirmedV1;
 use App\Modules\ProcurementSales\Events\SalesDeliveryPostedV1;
 use App\Modules\ProcurementSales\Listeners\WorkflowTaskCompletedListener as ProcurementSalesWorkflowTaskCompletedListener;
 use App\Modules\Workflow\Events\WorkflowTaskCompletedV1;
+use App\Modules\IdentityCore\Contracts\SmsSenderInterface;
+use App\Modules\IdentityCore\Infrastructure\LogSmsSender;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -29,6 +31,9 @@ class ModuleServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Base\Context\TenantContext::class, function ($app) {
             return new \App\Base\Context\TenantContext();
         });
+
+        // Local SMS driver until real provider is configured
+        $this->app->bind(SmsSenderInterface::class, LogSmsSender::class);
     }
 
     public function boot(): void
@@ -85,15 +90,10 @@ class ModuleServiceProvider extends ServiceProvider
                 if (File::exists($routesPath)) {
                     $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
 
-                    // Canonical versioned API: /api/v1/{module}
                     Route::prefix('api/v1/' . $prefix)
                         ->middleware('api')
                         ->group($routesPath);
 
-                    // Legacy unversioned alias: /api/{module}
-                    // Kept so existing Feature tests and clients that still call
-                    // /api/master-data/... continue to resolve (avoids mass 404).
-                    // Prefer /api/v1/{module} for all new work.
                     Route::prefix('api/' . $prefix)
                         ->middleware('api')
                         ->group($routesPath);

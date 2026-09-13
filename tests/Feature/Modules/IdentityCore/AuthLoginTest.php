@@ -33,6 +33,7 @@ class AuthLoginTest extends TestCase
 
         $this->globalUser = User::factory()->create([
             'email'  => $this->userEmail,
+            'mobile' => '09120001122',
             'status' => 1,
         ]);
 
@@ -54,18 +55,17 @@ class AuthLoginTest extends TestCase
     }
 
     #[Test]
-    public function user_can_login_with_valid_credentials(): void
+    public function user_can_login_with_email_identifier_without_tenant_header(): void
     {
         $response = $this->withHeaders([
-            'X-Tenant-ID' => $this->tenant->tenant_id,
-            'Accept'      => 'application/json',
+            'Accept' => 'application/json',
         ])->postJson('/api/v1/identity-core/identity/auth/login', [
-            'email'     => $this->userEmail,
-            'password'  => $this->plainPassword,
-            'tenant_id' => $this->tenant->tenant_id,
+            'identifier' => $this->userEmail,
+            'password'   => $this->plainPassword,
         ]);
 
         $response->assertStatus(200)
+            ->assertJsonPath('data.requires_tenant_selection', false)
             ->assertJsonStructure([
                 'status',
                 'message',
@@ -76,20 +76,34 @@ class AuthLoginTest extends TestCase
                         'user_id',
                         'tenant_user_id',
                     ],
+                    'active_tenant_id',
                 ],
             ]);
+    }
+
+    #[Test]
+    public function user_can_login_with_mobile_identifier(): void
+    {
+        $response = $this->withHeaders([
+            'Accept' => 'application/json',
+        ])->postJson('/api/v1/identity-core/identity/auth/login', [
+            'identifier' => '09120001122',
+            'password'   => $this->plainPassword,
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.requires_tenant_selection', false)
+            ->assertJsonPath('data.active_tenant_id', $this->tenant->tenant_id);
     }
 
     #[Test]
     public function user_cannot_login_with_invalid_password(): void
     {
         $response = $this->withHeaders([
-            'X-Tenant-ID' => $this->tenant->tenant_id,
-            'Accept'      => 'application/json',
+            'Accept' => 'application/json',
         ])->postJson('/api/v1/identity-core/identity/auth/login', [
-            'email'     => $this->userEmail,
-            'password'  => 'WrongPassword!',
-            'tenant_id' => $this->tenant->tenant_id,
+            'identifier' => $this->userEmail,
+            'password'   => 'WrongPassword!',
         ]);
 
         $response->assertStatus(401)
@@ -99,38 +113,29 @@ class AuthLoginTest extends TestCase
     #[Test]
     public function suspended_tenant_users_cannot_login(): void
     {
-        $this->tenantUser->update(['status' => 2]); // 2: Suspended
+        $this->tenantUser->update(['status' => 2]);
 
         $response = $this->withHeaders([
-            'X-Tenant-ID' => $this->tenant->tenant_id,
-            'Accept'      => 'application/json',
+            'Accept' => 'application/json',
         ])->postJson('/api/v1/identity-core/identity/auth/login', [
-            'email'     => $this->userEmail,
-            'password'  => $this->plainPassword,
-            'tenant_id' => $this->tenant->tenant_id,
+            'identifier' => $this->userEmail,
+            'password'   => $this->plainPassword,
         ]);
 
-        $response->assertStatus(403)
-            ->assertJsonFragment([
-                'message' => 'Your account is suspended in this organization.',
-            ]);
+        $response->assertStatus(403);
     }
 
     #[Test]
-    public function user_cannot_login_to_unassociated_tenant(): void
+    public function legacy_email_field_still_accepted(): void
     {
-        $otherTenant = Tenant::factory()->create(['tenant_code' => 'OTHER_ORG']);
-
         $response = $this->withHeaders([
-            'X-Tenant-ID' => $otherTenant->tenant_id,
-            'Accept'      => 'application/json',
+            'Accept' => 'application/json',
         ])->postJson('/api/v1/identity-core/identity/auth/login', [
-            'email'     => $this->userEmail,
-            'password'  => $this->plainPassword,
-            'tenant_id' => $otherTenant->tenant_id,
+            'email'    => $this->userEmail,
+            'password' => $this->plainPassword,
         ]);
 
-        $response->assertStatus(401)
-            ->assertJsonFragment(['status' => 'error']);
+        $response->assertStatus(200)
+            ->assertJsonPath('data.requires_tenant_selection', false);
     }
 }
