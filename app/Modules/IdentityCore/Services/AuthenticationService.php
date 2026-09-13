@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantScope;
+use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -24,34 +25,20 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class AuthenticationService
 {
     /**
-     * Login and return full security context according to Architecture Law 4.4
-     * Required context fields: user_id, tenant_id, roles, scopes (+ permissions)
-     *
-     * F4 — Token vs Request Context:
-     * - Sanctum token proves identity (and may carry tenant ability). It is NOT the
-     *   source of truth for roles / permissions / scopes.
-     * - security_context in this response is a DB snapshot for the client only and may stale.
-     * - Each subsequent request reloads roles/scopes/permissions from DB via LoadUserScopesMiddleware.
-     *
-     * F5 — Successful login with tenant writes identity.user.logged_in.v1 to event_outbox.
-     *
-     * @throws ValidationException
-     * @throws HttpException
-     * @throws Exception
+     * Password login with identifier (email or mobile).
+     * Tenant is resolved by the system — never required as user-typed input.
+     * Optional tenant_id only after organization picker (system-driven).
      */
     public function login(LoginDTO $dto): array
     {
-        $user = User::where('email', $dto->email)
-            ->whereNull('deleted_at')
-            ->first();
+        $user = $this->findUserByIdentifier($dto->identifier);
 
         if (!$user) {
-            throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
+            throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
         $credential = $user->credential;
 
-        // Lockout check (P4-S1): 5 failures → 15 min lock
         if ($credential && $credential->locked_until && $credential->locked_until->isFuture()) {
             throw new HttpException(403, 'حساب کاربری موقتاً قفل شده است. لطفاً بعداً تلاش کنید.');
         }
@@ -60,7 +47,7 @@ class AuthenticationService
             if ($credential) {
                 $this->registerFailedLoginAttempt($credential);
             }
-            throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
+            throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
         if ((int) $user->status !== 1) {
@@ -69,115 +56,180 @@ class AuthenticationService
 
         $this->clearFailedLoginAttempts($credential);
 
-        $tenantIdToLogin = $dto->tenantId;
-        $tenantUser = null;
+        return $this->completeLoginForUser($user, $dto->tenantId);
+    }
+
+    /**
+     * Shared completion for password and OTP login.
+     *
+     * @return array login payload OR requires_tenant_selection payload
+     */
+    public function completeLoginForUser(User $user, ?string $requestedTenantId = null): array
+    {
+        $memberships = TenantUser::withoutGlobalScopes()
+            ->where('user_id', $user->user_id)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->get();
+
+        if ($memberships->isEmpty()) {
+            throw new HttpException(403, 'عضویت فعالی در هیچ سازمانی برای این کاربر یافت نشد.');
+        }
+
+        $tenantIdToLogin = $requestedTenantId;
+
+        if ($tenantIdToLogin) {
+            $allowed = $memberships->firstWhere('tenant_id', $tenantIdToLogin);
+            if (!$allowed) {
+                throw new HttpException(401, 'اطلاعات ورود نادرست است.');
+            }
+        } elseif ($memberships->count() === 1) {
+            $tenantIdToLogin = $memberships->first()->tenant_id;
+        } else {
+            // Multiple orgs: UI shows names only; system keeps tenant_id internal
+            $tenantIds = $memberships->pluck('tenant_id')->all();
+            $tenants = Tenant::query()
+                ->whereIn('tenant_id', $tenantIds)
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->get(['tenant_id', 'tenant_code', 'tenant_name', 'slug']);
+
+            $preAuth = $user->createToken('pre_auth_select_tenant', ['pre_auth'])->plainTextToken;
+
+            return [
+                'requires_tenant_selection' => true,
+                'pre_auth_token'            => $preAuth,
+                'token_type'                => 'Bearer',
+                'user' => [
+                    'user_id'    => $user->user_id,
+                    'first_name' => $user->first_name,
+                    'last_name'  => $user->last_name,
+                    'email'      => $user->email,
+                    'mobile'     => $user->mobile,
+                ],
+                'organizations' => $tenants->map(fn ($t) => [
+                    'tenant_id'   => $t->tenant_id,
+                    'tenant_code' => $t->tenant_code,
+                    'tenant_name' => $t->tenant_name,
+                    'slug'        => $t->slug,
+                ])->values()->all(),
+            ];
+        }
+
+        return $this->issueTenantSession($user, $tenantIdToLogin);
+    }
+
+    /**
+     * After multi-org selection (authenticated with pre_auth token).
+     */
+    public function selectTenant(User $user, string $tenantId): array
+    {
+        return $this->completeLoginForUser($user, $tenantId);
+    }
+
+    private function issueTenantSession(User $user, string $tenantIdToLogin): array
+    {
+        $tenantUser = TenantUser::withoutGlobalScopes()
+            ->where('tenant_id', $tenantIdToLogin)
+            ->where('user_id', $user->user_id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$tenantUser) {
+            throw new HttpException(401, 'اطلاعات ورود نادرست است.');
+        }
+
+        if ((int) $tenantUser->status === 2) {
+            throw new HttpException(403, 'Your account is suspended in this organization.');
+        }
+
+        if ((int) $tenantUser->status !== 1) {
+            throw new HttpException(403, 'Your account is not active in this organization.');
+        }
+
         $roles = [];
         $permissions = [];
         $scopes = [];
 
-        if ($tenantIdToLogin) {
-            $tenantUser = TenantUser::withoutGlobalScopes()
+        $roleIds = TenantUserRole::withoutGlobalScopes()
+            ->where('tenant_id', $tenantIdToLogin)
+            ->where('user_id', $user->user_id)
+            ->whereNull('deleted_at')
+            ->pluck('tenant_role_id')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        if (!empty($roleIds)) {
+            $roleModels = TenantRole::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
-                ->where('user_id', $user->user_id)
+                ->whereIn('tenant_role_id', $roleIds)
+                ->where('status', 1)
                 ->whereNull('deleted_at')
-                ->first();
+                ->get(['tenant_role_id', 'code', 'name', 'is_system_default']);
 
-            if (!$tenantUser) {
-                throw new HttpException(401, 'ایمیل یا رمز عبور اشتباه است.');
-            }
+            $roles = $roleModels->map(function ($role) {
+                return [
+                    'role_id'           => $role->tenant_role_id,
+                    'code'              => $role->code,
+                    'name'              => $role->name,
+                    'is_system_default' => (bool) $role->is_system_default,
+                ];
+            })->values()->toArray();
 
-            if ((int) $tenantUser->status === 2) {
-                throw new HttpException(403, 'Your account is suspended in this organization.');
-            }
-
-            if ((int) $tenantUser->status !== 1) {
-                throw new HttpException(403, 'Your account is not active in this organization.');
-            }
-
-            $roleIds = TenantUserRole::withoutGlobalScopes()
+            $permissionIds = TenantRolePermission::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
-                ->where('user_id', $user->user_id)
+                ->whereIn('tenant_role_id', $roleIds)
                 ->whereNull('deleted_at')
-                ->pluck('tenant_role_id')
+                ->pluck('tenant_permission_id')
                 ->unique()
                 ->values()
                 ->toArray();
 
-            if (!empty($roleIds)) {
-                $roleModels = TenantRole::withoutGlobalScopes()
+            if (!empty($permissionIds)) {
+                $permissions = TenantPermission::withoutGlobalScopes()
                     ->where('tenant_id', $tenantIdToLogin)
-                    ->whereIn('tenant_role_id', $roleIds)
+                    ->whereIn('tenant_permission_id', $permissionIds)
                     ->where('status', 1)
                     ->whereNull('deleted_at')
-                    ->get(['tenant_role_id', 'code', 'name', 'is_system_default']);
-
-                $roles = $roleModels->map(function ($role) {
-                    return [
-                        'role_id'           => $role->tenant_role_id,
-                        'code'              => $role->code,
-                        'name'              => $role->name,
-                        'is_system_default' => (bool) $role->is_system_default,
-                    ];
-                })->values()->toArray();
-
-                $permissionIds = TenantRolePermission::withoutGlobalScopes()
-                    ->where('tenant_id', $tenantIdToLogin)
-                    ->whereIn('tenant_role_id', $roleIds)
-                    ->whereNull('deleted_at')
-                    ->pluck('tenant_permission_id')
+                    ->pluck('code')
                     ->unique()
                     ->values()
                     ->toArray();
-
-                if (!empty($permissionIds)) {
-                    $permissions = TenantPermission::withoutGlobalScopes()
-                        ->where('tenant_id', $tenantIdToLogin)
-                        ->whereIn('tenant_permission_id', $permissionIds)
-                        ->where('status', 1)
-                        ->whereNull('deleted_at')
-                        ->pluck('code')
-                        ->unique()
-                        ->values()
-                        ->toArray();
-                }
             }
+        }
 
-            $scopeAssignments = TenantUserScope::withoutGlobalScopes()
+        $scopeAssignments = TenantUserScope::withoutGlobalScopes()
+            ->where('tenant_id', $tenantIdToLogin)
+            ->where('tenant_user_id', $tenantUser->tenant_user_id)
+            ->whereNull('deleted_at')
+            ->get(['scope_id']);
+
+        $scopeIds = $scopeAssignments->pluck('scope_id')->unique()->values()->toArray();
+
+        if (!empty($scopeIds)) {
+            $scopeModels = TenantScope::withoutGlobalScopes()
                 ->where('tenant_id', $tenantIdToLogin)
-                ->where('tenant_user_id', $tenantUser->tenant_user_id)
+                ->whereIn('scope_id', $scopeIds)
+                ->where('is_active', true)
                 ->whereNull('deleted_at')
-                ->get(['scope_id']);
+                ->get(['scope_id', 'scope_name', 'scope_type', 'reference_id']);
 
-            $scopeIds = $scopeAssignments->pluck('scope_id')->unique()->values()->toArray();
-
-            if (!empty($scopeIds)) {
-                $scopeModels = TenantScope::withoutGlobalScopes()
-                    ->where('tenant_id', $tenantIdToLogin)
-                    ->whereIn('scope_id', $scopeIds)
-                    ->where('is_active', true)
-                    ->whereNull('deleted_at')
-                    ->get(['scope_id', 'scope_name', 'scope_type', 'reference_id']);
-
-                $scopes = $scopeModels->map(function ($scope) {
-                    return [
-                        'scope_id'     => $scope->scope_id,
-                        'scope_name'   => $scope->scope_name,
-                        'scope_type'   => $scope->scope_type,
-                        'reference_id' => $scope->reference_id,
-                    ];
-                })->values()->toArray();
-            }
+            $scopes = $scopeModels->map(function ($scope) {
+                return [
+                    'scope_id'     => $scope->scope_id,
+                    'scope_name'   => $scope->scope_name,
+                    'scope_type'   => $scope->scope_type,
+                    'reference_id' => $scope->reference_id,
+                ];
+            })->values()->toArray();
         }
 
-        $tokenAbilities = ['*'];
-        $tokenName = 'auth_token';
+        // Revoke previous pre_auth tokens for this user
+        $user->tokens()->where('name', 'pre_auth_select_tenant')->delete();
 
-        if ($tenantIdToLogin) {
-            $tokenName .= '_tenant_' . $tenantIdToLogin;
-            $tokenAbilities[] = 'tenant:' . $tenantIdToLogin;
-        }
-
-        $tokenResult = $user->createToken($tokenName, $tokenAbilities);
+        $tokenName = 'auth_token_tenant_'.$tenantIdToLogin;
+        $tokenResult = $user->createToken($tokenName, ['*', 'tenant:'.$tenantIdToLogin]);
 
         $user->last_login_at = now();
         $user->save();
@@ -185,42 +237,68 @@ class AuthenticationService
         $securityContext = [
             'user_id'        => $user->user_id,
             'tenant_id'      => $tenantIdToLogin,
-            'tenant_user_id' => $tenantUser?->tenant_user_id,
+            'tenant_user_id' => $tenantUser->tenant_user_id,
             'roles'          => $roles,
             'permissions'    => $permissions,
             'scopes'         => $scopes,
-            'is_owner'       => $tenantUser ? (bool) $tenantUser->is_owner : false,
+            'is_owner'       => (bool) $tenantUser->is_owner,
         ];
 
-        if ($tenantIdToLogin) {
-            $this->writeOutboxEvent(
-                tenantId: $tenantIdToLogin,
-                aggregateId: $user->user_id,
-                eventType: 'identity.user.logged_in.v1',
-                payload: [
-                    'user_id'        => $user->user_id,
-                    'tenant_id'      => $tenantIdToLogin,
-                    'tenant_user_id' => $tenantUser?->tenant_user_id,
-                    'token_name'     => $tokenName,
-                    'occurred_at'    => now()->toIso8601String(),
-                ]
-            );
-        }
+        $this->writeOutboxEvent(
+            tenantId: $tenantIdToLogin,
+            aggregateId: $user->user_id,
+            eventType: 'identity.user.logged_in.v1',
+            payload: [
+                'user_id'        => $user->user_id,
+                'tenant_id'      => $tenantIdToLogin,
+                'tenant_user_id' => $tenantUser->tenant_user_id,
+                'token_name'     => $tokenName,
+                'occurred_at'    => now()->toIso8601String(),
+            ]
+        );
 
         return [
-            'access_token'     => $tokenResult->plainTextToken,
-            'token_type'       => 'Bearer',
-            'expires_in'       => null,
+            'requires_tenant_selection' => false,
+            'access_token'              => $tokenResult->plainTextToken,
+            'token_type'                => 'Bearer',
+            'expires_in'                => null,
             'user' => [
                 'user_id'        => $user->user_id,
-                'tenant_user_id' => $tenantUser?->tenant_user_id,
+                'tenant_user_id' => $tenantUser->tenant_user_id,
                 'first_name'     => $user->first_name,
                 'last_name'      => $user->last_name,
                 'email'          => $user->email,
+                'mobile'         => $user->mobile,
             ],
             'active_tenant_id' => $tenantIdToLogin,
+            'organization' => [
+                'tenant_id'   => $tenantIdToLogin,
+                'tenant_name' => Tenant::query()->where('tenant_id', $tenantIdToLogin)->value('tenant_name'),
+                'tenant_code' => Tenant::query()->where('tenant_id', $tenantIdToLogin)->value('tenant_code'),
+            ],
             'security_context' => $securityContext,
         ];
+    }
+
+    public function findUserByIdentifier(string $identifier): ?User
+    {
+        $identifier = trim($identifier);
+
+        $query = User::query()->whereNull('deleted_at');
+
+        if (str_contains($identifier, '@')) {
+            return $query->where('email', $identifier)->first();
+        }
+
+        $mobile = preg_replace('/\D+/', '', $identifier) ?? $identifier;
+        if (str_starts_with($mobile, '98') && strlen($mobile) === 12) {
+            $mobile = '0'.substr($mobile, 2);
+        }
+        if (str_starts_with($mobile, '9') && strlen($mobile) === 10) {
+            $mobile = '0'.$mobile;
+        }
+
+        return $query->where('mobile', $mobile)->first();
     }
 
     public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
@@ -274,9 +352,6 @@ class AuthenticationService
         });
     }
 
-    /**
-     * P4-S1: after 5 failed attempts lock account for 15 minutes.
-     */
     private function registerFailedLoginAttempt(UserCredential $credential): void
     {
         $maxAttempts = 5;

@@ -12,9 +12,22 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
 
+    /*
+     |--------------------------------------------------------------------------
+     | Public auth (no X-Tenant-ID required — tenant resolved by system)
+     |--------------------------------------------------------------------------
+     */
+    Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
+    Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
+
+    // Pre-auth token after multi-org password/OTP — still no tenant header
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('/auth/select-tenant', [AuthController::class, 'selectTenant']);
+    });
+
     Route::middleware([TenantContextMiddleware::class])->group(function () {
         Route::post('/register', [AuthController::class, 'register']);
-        Route::post('/auth/login', [AuthController::class, 'login']);
     });
 
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
@@ -32,7 +45,6 @@ Route::prefix('identity')->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy'])
             ->middleware('permission:identity.user.delete');
 
-        // Profiles — /me before /{userId}; self-service does not require profile permission
         Route::prefix('profiles')->group(function () {
             Route::get('/me', [ProfileController::class, 'me']);
             Route::put('/me', [ProfileController::class, 'upsertMe']);
@@ -45,7 +57,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.profile.delete');
         });
 
-        // Membership history (read-only audit)
         Route::prefix('membership-histories')->group(function () {
             Route::get('/', [MembershipHistoryController::class, 'index'])
                 ->middleware('permission:identity.membership_history.view');

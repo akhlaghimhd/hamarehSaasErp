@@ -7,6 +7,7 @@ use App\Base\Context\TenantContext;
 use App\Modules\IdentityCore\DTOs\LoginDTO;
 use App\Modules\IdentityCore\DTOs\UserRegistrationDTO;
 use App\Modules\IdentityCore\Services\AuthenticationService;
+use App\Modules\IdentityCore\Services\OtpLoginService;
 use App\Modules\IdentityCore\Models\TenantUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,11 +16,10 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthController extends Controller
 {
-    private AuthenticationService $authService;
-
-    public function __construct(AuthenticationService $authService)
-    {
-        $this->authService = $authService;
+    public function __construct(
+        private readonly AuthenticationService $authService,
+        private readonly OtpLoginService $otpLoginService,
+    ) {
     }
 
     public function login(Request $request): JsonResponse
@@ -30,10 +30,11 @@ class AuthController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'ورود با موفقیت انجام شد.',
+                'message' => ($result['requires_tenant_selection'] ?? false)
+                    ? 'انتخاب سازمان الزامی است.'
+                    : 'ورود با موفقیت انجام شد.',
                 'data'    => $result,
             ], 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'status'  => 'error',
@@ -53,9 +54,118 @@ class AuthController extends Controller
         }
     }
 
-    /**
-     * Invalidate current access token and emit logout outbox event (F5).
-     */
+    public function selectTenant(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'tenant_id' => 'required|string',
+            ]);
+
+            $user = $request->user();
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Unauthorized',
+                ], 401);
+            }
+
+            $result = $this->authService->selectTenant($user, $request->input('tenant_id'));
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'ورود با موفقیت انجام شد.',
+                'data'    => $result,
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    public function requestOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile' => 'required|string|max:20',
+            ]);
+
+            $result = $this->otpLoginService->requestOtp(
+                $request->input('mobile'),
+                $request->ip()
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'در صورت صحت شماره، کد تأیید ارسال شد.',
+                'data'    => $result,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'خطای اعتبارسنجی',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile'    => 'required|string|max:20',
+                'code'      => 'required|string|min:4|max:10',
+                'tenant_id' => 'nullable|string',
+            ]);
+
+            $result = $this->otpLoginService->verifyOtp(
+                $request->input('mobile'),
+                $request->input('code'),
+                $request->input('tenant_id')
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => ($result['requires_tenant_selection'] ?? false)
+                    ? 'انتخاب سازمان الزامی است.'
+                    : 'ورود با موفقیت انجام شد.',
+                'data'    => $result,
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'خطای اعتبارسنجی',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
     public function logout(Request $request): JsonResponse
     {
         try {
@@ -77,7 +187,6 @@ class AuthController extends Controller
                 'status'  => 'success',
                 'message' => 'خروج با موفقیت انجام شد.',
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'status'  => 'error',
@@ -119,7 +228,6 @@ class AuthController extends Controller
                     'user_id'    => $user->user_id,
                 ],
             ], 201);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
