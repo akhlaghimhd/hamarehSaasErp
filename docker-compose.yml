@@ -9,10 +9,14 @@ services:
     restart: unless-stopped
     working_dir: /var/www/html
     volumes:
+      # Source code from host
       - .:/var/www/html
+      # CRITICAL on Docker Desktop (Win/Mac): keep vendor INSIDE the Linux VM.
+      # Reading vendor through bind-mount often costs 3–10s per request.
+      - hamareh_vendor:/var/www/html/vendor
+      - hamareh_bootstrap_cache:/var/www/html/bootstrap/cache
+      - hamareh_storage_framework:/var/www/html/storage/framework
     environment:
-      # array = in-memory, no Redis extension, no slow file volume I/O
-      # switch to redis only after: docker compose build app (with phpredis)
       CACHE_STORE: array
       SESSION_DRIVER: file
       QUEUE_CONNECTION: sync
@@ -20,8 +24,7 @@ services:
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_CONNECTION: pgsql
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      BCRYPT_ROUNDS: "10"
     depends_on:
       - postgres
     networks:
@@ -43,21 +46,12 @@ services:
     networks:
       - hamareh-network
 
-  redis:
-    image: redis:7-alpine
-    container_name: hamareherp-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    networks:
-      - hamareh-network
-    profiles:
-      - redis
-
 networks:
   hamareh-network:
     driver: bridge
 
 volumes:
   postgres_data:
-    driver: local
+  hamareh_vendor:
+  hamareh_bootstrap_cache:
+  hamareh_storage_framework:
