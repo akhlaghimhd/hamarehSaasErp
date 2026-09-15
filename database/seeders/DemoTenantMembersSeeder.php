@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
 /**
  * Seeds demo employees for the default demo tenant (UI table testing).
  * Safe to re-run: skips emails that already exist.
+ *
+ * IDs must be UUID — PostgreSQL uuid columns reject ULID strings.
  */
 class DemoTenantMembersSeeder extends Seeder
 {
@@ -50,7 +52,7 @@ class DemoTenantMembersSeeder extends Seeder
             if ($existingUser) {
                 $userId = $existingUser->user_id;
             } else {
-                $userId = (string) Str::ulid();
+                $userId = (string) Str::uuid();
                 $userRow = [
                     'user_id'    => $userId,
                     'email'      => $m['email'],
@@ -78,10 +80,10 @@ class DemoTenantMembersSeeder extends Seeder
                         'updated_at'         => now(),
                     ];
                     if (Schema::hasColumn('user_credentials', 'credential_id')) {
-                        $cred['credential_id'] = (string) Str::ulid();
+                        $cred['credential_id'] = (string) Str::uuid();
                     }
                     if (Schema::hasColumn('user_credentials', 'user_credential_id')) {
-                        $cred['user_credential_id'] = (string) Str::ulid();
+                        $cred['user_credential_id'] = (string) Str::uuid();
                     }
                     $cred = array_filter(
                         $cred,
@@ -103,7 +105,7 @@ class DemoTenantMembersSeeder extends Seeder
             }
 
             $tu = [
-                'tenant_user_id' => (string) Str::ulid(),
+                'tenant_user_id' => (string) Str::uuid(),
                 'tenant_id'      => $tenantId,
                 'user_id'        => $userId,
                 'is_owner'       => false,
