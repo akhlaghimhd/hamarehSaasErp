@@ -23,17 +23,27 @@ class UserService
 
     /**
      * List tenant memberships for the current tenant.
+     *
+     * @param  string  $membershipFilter  active|deleted
+     *         active  = not soft-deleted (status 0 or 1)
+     *         deleted = only soft-deleted rows (audit / restore)
      */
-    public function listTenantUsers(): Collection
+    public function listTenantUsers(string $membershipFilter = 'active'): Collection
     {
         $tenantId = $this->getTenantId();
 
-        return TenantUser::query()
+        $query = TenantUser::query()
             ->where('tenant_id', $tenantId)
-            ->where('status', 1)
-            ->with(['user'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+            ->with(['user']);
+
+        if ($membershipFilter === 'deleted') {
+            $query->onlyTrashed()->orderByDesc('deleted_at');
+        } else {
+            // All non-deleted memberships (active + inactive status)
+            $query->orderByDesc('created_at');
+        }
+
+        return $query->get();
     }
 
     /**
@@ -81,12 +91,17 @@ class UserService
                 ]);
             }
 
-            $existingMembership = TenantUser::where('tenant_id', $tenantId)
+            $existingMembership = TenantUser::withTrashed()
+                ->where('tenant_id', $tenantId)
                 ->where('user_id', $user->user_id)
                 ->first();
 
+            if ($existingMembership && $existingMembership->trashed()) {
+                throw new Exception('این کاربر قبلاً از سازمان حذف شده است. از فهرست حذف‌شده‌ها بازگردانی کنید.');
+            }
+
             if ($existingMembership) {
-                throw new Exception('این کاربر هم‌اکنون عضو این مستأجر است.');
+                throw new Exception('این کاربر هم‌اکنون عضو این سازمان است.');
             }
 
             $tenantUser = TenantUser::create([
@@ -96,7 +111,6 @@ class UserService
                 'status'     => 1,
             ]);
 
-            // Initial membership history (join)
             $this->membershipHistoryService->recordChange(
                 $tenantUser->tenant_user_id,
                 null,
@@ -131,10 +145,6 @@ class UserService
         });
     }
 
-    /**
-     * Update tenant membership fields and related user profile fields.
-     * Soft-delete is handled by softDeleteTenantUser().
-     */
     public function updateTenantUser(UpdateTenantUserDTO $dto): TenantUser
     {
         $tenantId = $this->getTenantId();
@@ -154,7 +164,6 @@ class UserService
                 'status'   => $dto->status,
             ], fn ($value) => !is_null($value));
 
-            // Self-service safety: actor cannot deactivate own membership.
             if (
                 $actorUserId
                 && $actorUserId === (string) $tenantUser->user_id
@@ -164,7 +173,6 @@ class UserService
                 throw new Exception('نمی‌توانید عضویت خودتان را غیرفعال کنید.');
             }
 
-            // Last active owner must remain.
             if (
                 array_key_exists('status', $membershipChanges)
                 && (int) $membershipChanges['status'] === 0
@@ -188,7 +196,6 @@ class UserService
                 $tenantUser->update($membershipChanges);
             }
 
-            // Record status transition when status actually changes
             if (array_key_exists('status', $membershipChanges)
                 && (int) $membershipChanges['status'] !== (int) $previousStatus
             ) {
@@ -229,7 +236,7 @@ class UserService
 
     /**
      * Soft-delete a tenant membership (Law 1.4 — no physical delete).
-     * History is recorded BEFORE soft-delete so TenantUser is still visible.
+     * Historical work / audit remains; membership can be restored later.
      */
     public function softDeleteTenantUser(string $tenantUserId): void
     {
@@ -253,7 +260,6 @@ class UserService
 
             $previousStatus = $tenantUser->status;
 
-            // Record audit row while membership is still active
             $this->membershipHistoryService->recordChange(
                 $tenantUserId,
                 (int) $previousStatus,
@@ -275,8 +281,47 @@ class UserService
     }
 
     /**
-     * Reject removing/deactivating the sole active owner of the tenant.
+     * Restore a soft-deleted membership. Does not invent new user data;
+     * previous status becomes inactive (0) so an admin must re-activate deliberately.
      */
+    public function restoreTenantUser(string $tenantUserId): TenantUser
+    {
+        $tenantId = $this->getTenantId();
+
+        return DB::transaction(function () use ($tenantUserId, $tenantId) {
+            $tenantUser = TenantUser::onlyTrashed()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_user_id', $tenantUserId)
+                ->firstOrFail();
+
+            $tenantUser->restore();
+
+            // Safe default after restore: inactive until admin re-enables
+            $tenantUser->update([
+                'status' => 0,
+                'row_version' => ((int) ($tenantUser->row_version ?? 1)) + 1,
+            ]);
+
+            $this->membershipHistoryService->recordChange(
+                $tenantUserId,
+                0,
+                0,
+                'RESTORE',
+                'Tenant membership restored from soft-delete'
+            );
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_users',
+                $tenantUserId,
+                'identity.tenant_user.restored.v1',
+                ['tenant_user_id' => $tenantUserId]
+            );
+
+            return $tenantUser->fresh(['user']);
+        });
+    }
+
     private function assertNotLastActiveOwner(string $tenantId, string $excludeTenantUserId): void
     {
         $otherActiveOwners = TenantUser::query()
@@ -289,7 +334,7 @@ class UserService
 
         if ($otherActiveOwners < 1) {
             throw new Exception(
-                'آخرین مالک فعال مستأجر را نمی‌توان غیرفعال یا حذف کرد. ابتدا مالک دیگری تعیین کنید.'
+                'آخرین مدیر اصلی فعال سازمان را نمی‌توان غیرفعال یا حذف کرد. ابتدا مدیر اصلی دیگری تعیین کنید.'
             );
         }
     }
