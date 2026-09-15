@@ -19,7 +19,7 @@ class UploadAvatarRequest extends FormRequest
                 'file',
                 'image',
                 'mimes:jpg,jpeg,png,webp',
-                'max:2048', // 2 MB
+                'max:512', // 512 KB
             ],
         ];
     }

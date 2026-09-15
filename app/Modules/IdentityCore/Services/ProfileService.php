@@ -121,11 +121,12 @@ class ProfileService
             $payload = [];
 
             if ($dto->hasDisplayBio) {
-                $payload['description'] = $dto->displayBio;
+                $bio = $dto->displayBio;
+                if ($bio !== null && mb_strlen($bio) > 200) {
+                    throw new HttpException(422, 'متن زیر عکس حداکثر ۲۰۰ کاراکتر است.');
+                }
+                $payload['description'] = $bio;
             }
-
-            // Address change is no longer self-service (policy 2026-09-15).
-            // Keep DTO field ignored intentionally.
 
             if ($payload !== []) {
                 $payload['row_version'] = ((int) ($profile->row_version ?? 1)) + 1;
@@ -148,6 +149,10 @@ class ProfileService
         });
     }
 
+    /**
+     * Store avatar on public disk; avatar_url holds relative path "avatars/{userId}/avatar.jpg".
+     * Frontend must load via authenticated GET profiles/me/avatar (not raw public URL).
+     */
     public function uploadAvatar(string $userId, UploadedFile $file): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -165,21 +170,19 @@ class ProfileService
                 ]);
             }
 
-            $dir = 'avatars/' . $userId;
-            $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
-                $ext = 'jpg';
-            }
-            $filename = 'avatar_' . time() . '.' . $ext;
+            $dir = 'avatars/'.$userId;
+            $filename = 'avatar.jpg';
 
             Storage::disk('public')->deleteDirectory($dir);
+
+            // Re-encode to JPEG when possible to keep size down
             $path = $file->storeAs($dir, $filename, 'public');
 
-            // Absolute URL so SPA on another origin can load the image
-            $publicUrl = $this->publicUrlForPath($path);
+            // Relative storage key — stable API avatar endpoint uses this
+            $storageKey = $path;
 
             $profile->update([
-                'avatar_url'  => $publicUrl,
+                'avatar_url'  => $storageKey,
                 'row_version' => ((int) ($profile->row_version ?? 1)) + 1,
             ]);
 
@@ -191,7 +194,7 @@ class ProfileService
                 [
                     'profile_id' => $profile->profile_id,
                     'user_id'    => $userId,
-                    'avatar_url' => $publicUrl,
+                    'avatar_url' => $storageKey,
                 ]
             );
 
@@ -200,8 +203,42 @@ class ProfileService
     }
 
     /**
-     * Step 1: send OTP to the *new* mobile for authenticated user.
+     * Absolute filesystem path for current avatar, or null.
      */
+    public function resolveAvatarAbsolutePath(string $userId): ?string
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($userId, $tenantId);
+
+        $profile = UserProfile::query()
+            ->where('user_id', $userId)
+            ->first();
+
+        if (!$profile || !$profile->avatar_url) {
+            return null;
+        }
+
+        $key = $profile->avatar_url;
+
+        // Legacy full URLs → try extract path after /storage/
+        if (str_starts_with($key, 'http://') || str_starts_with($key, 'https://')) {
+            $pos = strpos($key, '/storage/');
+            if ($pos !== false) {
+                $key = substr($key, $pos + strlen('/storage/'));
+            } else {
+                return null;
+            }
+        }
+
+        $key = ltrim($key, '/');
+
+        if (!Storage::disk('public')->exists($key)) {
+            return null;
+        }
+
+        return Storage::disk('public')->path($key);
+    }
+
     public function requestMobileChange(string $userId, string $newMobile, ?string $requestIp = null): array
     {
         $tenantId = $this->getTenantId();
@@ -273,9 +310,6 @@ class ProfileService
         return $payload;
     }
 
-    /**
-     * Step 2: verify OTP on new mobile and update users.mobile.
-     */
     public function verifyMobileChange(string $userId, string $newMobile, string $code): User
     {
         $tenantId = $this->getTenantId();
@@ -340,7 +374,7 @@ class ProfileService
         $tenantId = $this->getTenantId();
         $this->assertUserBelongsToTenant($userId, $tenantId);
 
-        return DB::transaction(function () use ($userId, $tenantId) {
+        return DB::transaction(function () use ($userId) {
             $profile = UserProfile::query()
                 ->where('user_id', $userId)
                 ->firstOrFail();
@@ -383,14 +417,6 @@ class ProfileService
                 ]
             );
         });
-    }
-
-    private function publicUrlForPath(string $path): string
-    {
-        $base = rtrim((string) config('app.url'), '/');
-        $path = ltrim(str_replace('\\', '/', $path), '/');
-
-        return $base.'/storage/'.$path;
     }
 
     private function normalizeMobile(string $mobile): string
