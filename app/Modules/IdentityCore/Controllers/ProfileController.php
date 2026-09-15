@@ -11,7 +11,9 @@ use App\Modules\IdentityCore\DTOs\SelfUpsertUserProfileDTO;
 use App\Modules\IdentityCore\Services\ProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Exception;
 
@@ -57,6 +59,11 @@ class ProfileController extends Controller
                 'message' => 'Profile saved successfully.',
                 'data'    => $this->presentProfile($profile, $request),
             ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status'  => 'error',
@@ -85,6 +92,41 @@ class ProfileController extends Controller
             return response()->json([
                 'status'  => 'error',
                 'message' => 'User or membership not found.',
+            ], 404);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Stream current user's avatar (auth + tenant required).
+     */
+    public function streamAvatarMe(Request $request): BinaryFileResponse|JsonResponse|Response
+    {
+        try {
+            $userId = $request->user()->user_id;
+            $path = $this->profileService->resolveAvatarAbsolutePath($userId);
+
+            if (!$path || !is_file($path)) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Avatar not found.',
+                ], 404);
+            }
+
+            $mime = mime_content_type($path) ?: 'image/jpeg';
+
+            return response()->file($path, [
+                'Content-Type'  => $mime,
+                'Cache-Control' => 'private, max-age=300',
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Profile not found.',
             ], 404);
         } catch (Exception $e) {
             return response()->json([
@@ -148,9 +190,9 @@ class ProfileController extends Controller
                 'status'  => 'success',
                 'message' => 'Mobile updated.',
                 'data'    => [
-                    'user_id' => $user->user_id,
-                    'mobile'  => $user->mobile,
-                    'email'   => $user->email,
+                    'user_id'    => $user->user_id,
+                    'mobile'     => $user->mobile,
+                    'email'      => $user->email,
                     'first_name' => $user->first_name,
                     'last_name'  => $user->last_name,
                 ],
@@ -263,6 +305,7 @@ class ProfileController extends Controller
     private function presentProfile($profile, ?Request $request = null): array
     {
         $user = $request?->user();
+        $hasAvatar = !empty($profile->avatar_url);
 
         return [
             'profile_id'            => $profile->profile_id,
@@ -270,6 +313,7 @@ class ProfileController extends Controller
             'national_id'           => $profile->national_id,
             'birth_date'            => optional($profile->birth_date)?->format('Y-m-d'),
             'avatar_url'            => $profile->avatar_url,
+            'has_avatar'            => $hasAvatar,
             'gender'                => $profile->gender,
             'address'               => $profile->address,
             'pending_address'       => $profile->pending_address,
@@ -280,7 +324,6 @@ class ProfileController extends Controller
             'row_version'           => $profile->row_version,
             'created_at'            => optional($profile->created_at)?->toIso8601String(),
             'updated_at'            => optional($profile->updated_at)?->toIso8601String(),
-            // convenience for SPA (identity display)
             'user' => $user ? [
                 'user_id'    => $user->user_id,
                 'first_name' => $user->first_name,

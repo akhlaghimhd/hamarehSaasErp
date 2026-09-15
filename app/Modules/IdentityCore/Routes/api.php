@@ -43,6 +43,7 @@ Route::prefix('identity')->group(function () {
             Route::get('/me', [ProfileController::class, 'me']);
             Route::put('/me', [ProfileController::class, 'upsertMe']);
             Route::post('/me/avatar', [ProfileController::class, 'uploadAvatarMe']);
+            Route::get('/me/avatar', [ProfileController::class, 'streamAvatarMe']);
             Route::post('/me/mobile/request', [ProfileController::class, 'requestMobileChange']);
             Route::post('/me/mobile/verify', [ProfileController::class, 'verifyMobileChange']);
 
