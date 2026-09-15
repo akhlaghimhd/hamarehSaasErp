@@ -4,6 +4,7 @@ namespace App\Base\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Context;
 use App\Base\Context\TenantContext;
@@ -12,19 +13,15 @@ use Symfony\Component\HttpFoundation\Response;
 
 class LoadUserScopesMiddleware
 {
+    /** Seconds to cache roles/permissions/scopes per tenant-user (request burst relief). */
+    private const CACHE_TTL = 60;
+
     /**
-     * Reload full Security Context from the database for the authenticated user.
+     * Reload Security Context from DB (or short cache) for the authenticated user.
      * Law 4.4: user_id, tenant_id, roles, scopes (+ permissions).
-     *
-     * F4 — Token vs Request Context:
-     * This middleware is the request-time source of truth for roles/permissions/scopes.
-     * Sanctum token only authenticates the user; it does not carry live authorization data.
-     * Must run after TenantContextMiddleware and auth:sanctum.
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Always start clean: PHPUnit keeps the process alive across HTTP calls,
-        // so a previous request's singleton must not leak into this one.
         ScopeContext::resetInstance();
 
         $user = $request->user();
@@ -34,18 +31,77 @@ class LoadUserScopesMiddleware
             return $next($request);
         }
 
+        $cacheKey = sprintf(
+            'sec_ctx:%s:%s',
+            $tenantId,
+            $user->user_id
+        );
+
+        $payload = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($user, $tenantId) {
+            return $this->loadFromDatabase($user->user_id, $tenantId);
+        });
+
+        if ($payload === null) {
+            return $next($request);
+        }
+
+        $scopes = $payload['scopes'];
+        $roles = $payload['roles'];
+        $permissions = $payload['permissions'];
+        $tenantUserId = $payload['tenant_user_id'];
+        $isOwner = $payload['is_owner'];
+
+        ScopeContext::getInstance()->setScopes($scopes, $tenantUserId);
+
+        $securityContext = [
+            'user_id'        => $user->user_id,
+            'tenant_id'      => $tenantId,
+            'tenant_user_id' => $tenantUserId,
+            'roles'          => $roles,
+            'permissions'    => $permissions,
+            'scopes'         => $scopes,
+            'is_owner'       => $isOwner,
+        ];
+
+        Context::add('user_scopes', $scopes);
+        Context::add('tenant_user_id', $tenantUserId);
+        Context::add('user_roles', $roles);
+        Context::add('user_permissions', $permissions);
+        Context::add('security_context', $securityContext);
+
+        app()->instance('current_tenant_user_id', $tenantUserId);
+        app()->instance('current_user_scopes', $scopes);
+        app()->instance('current_user_roles', $roles);
+        app()->instance('current_user_permissions', $permissions);
+        app()->instance('current_security_context', $securityContext);
+
+        return $next($request);
+    }
+
+    /**
+     * Invalidate cached security context (call after role/permission/scope assignment).
+     */
+    public static function forget(string $tenantId, string $userId): void
+    {
+        Cache::forget(sprintf('sec_ctx:%s:%s', $tenantId, $userId));
+    }
+
+    /**
+     * @return array{tenant_user_id:string,is_owner:bool,scopes:array,roles:array,permissions:array}|null
+     */
+    private function loadFromDatabase(string $userId, string $tenantId): ?array
+    {
         $tenantUser = DB::table('tenant_users')
             ->where('tenant_id', $tenantId)
-            ->where('user_id', $user->user_id)
+            ->where('user_id', $userId)
             ->where('status', 1)
             ->whereNull('deleted_at')
             ->first();
 
         if (!$tenantUser) {
-            return $next($request);
+            return null;
         }
 
-        // 1. Scopes (DB)
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantId)
@@ -61,22 +117,20 @@ class LoadUserScopesMiddleware
                 'tenant_scopes.description',
             ])
             ->get()
-            ->map(fn ($item) => (array) $item)
+            ->map(function ($item) {
+                $row = (array) $item;
+                if (isset($row['scope_type'])) {
+                    $row['scope_type'] = strtoupper((string) $row['scope_type']);
+                }
+
+                return $row;
+            })
             ->toArray();
 
-        // Normalize scope_type to uppercase for consistent matching
-        $scopes = array_map(function (array $scope) {
-            if (isset($scope['scope_type'])) {
-                $scope['scope_type'] = strtoupper((string) $scope['scope_type']);
-            }
-            return $scope;
-        }, $scopes);
-
-        // 2. Roles (DB)
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantId)
-            ->where('tenant_user_roles.user_id', $user->user_id)
+            ->where('tenant_user_roles.user_id', $userId)
             ->whereNull('tenant_user_roles.deleted_at')
             ->whereNull('tenant_roles.deleted_at')
             ->where('tenant_roles.status', 1)
@@ -99,7 +153,6 @@ class LoadUserScopesMiddleware
 
         $roleIds = $roleRows->pluck('tenant_role_id')->unique()->values()->toArray();
 
-        // 3. Permissions (DB)
         $permissions = [];
         if (!empty($roleIds)) {
             $permissions = DB::table('tenant_role_permissions')
@@ -115,33 +168,13 @@ class LoadUserScopesMiddleware
                 ->toArray();
         }
 
-        // 4. ScopeContext
-        ScopeContext::getInstance()->setScopes($scopes, $tenantUser->tenant_user_id);
-
-        // 5. Full security context (Law 4.4) — request-scoped, from DB
-        $securityContext = [
-            'user_id'        => $user->user_id,
-            'tenant_id'      => $tenantId,
+        return [
             'tenant_user_id' => $tenantUser->tenant_user_id,
+            'is_owner'       => (bool) ($tenantUser->is_owner ?? false),
+            'scopes'         => $scopes,
             'roles'          => $roles,
             'permissions'    => $permissions,
-            'scopes'         => $scopes,
-            'is_owner'       => (bool) ($tenantUser->is_owner ?? false),
         ];
-
-        Context::add('user_scopes', $scopes);
-        Context::add('tenant_user_id', $tenantUser->tenant_user_id);
-        Context::add('user_roles', $roles);
-        Context::add('user_permissions', $permissions);
-        Context::add('security_context', $securityContext);
-
-        app()->instance('current_tenant_user_id', $tenantUser->tenant_user_id);
-        app()->instance('current_user_scopes', $scopes);
-        app()->instance('current_user_roles', $roles);
-        app()->instance('current_user_permissions', $permissions);
-        app()->instance('current_security_context', $securityContext);
-
-        return $next($request);
     }
 
     public function terminate($request, $response): void

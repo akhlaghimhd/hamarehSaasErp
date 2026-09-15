@@ -27,18 +27,22 @@ class ProfileController extends Controller
     {
         try {
             $userId = $request->user()->user_id;
-            $profile = $this->profileService->getByUserId($userId);
+            // Soft path: missing profile → empty shell (no 404 exception cost)
+            $profile = $this->profileService->findByUserIdOrNull($userId);
+
+            if (!$profile) {
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'Profile not created yet.',
+                    'data'    => $this->presentEmptyProfile($userId, $request),
+                ], 200);
+            }
 
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Profile retrieved successfully.',
                 'data'    => $this->presentProfile($profile, $request),
             ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Profile not found.',
-            ], 404);
         } catch (Exception $e) {
             return response()->json([
                 'status'  => 'error',
@@ -101,9 +105,6 @@ class ProfileController extends Controller
         }
     }
 
-    /**
-     * Stream current user's avatar (auth + tenant required).
-     */
     public function streamAvatarMe(Request $request): BinaryFileResponse|JsonResponse|Response
     {
         try {
@@ -300,6 +301,37 @@ class ProfileController extends Controller
                 'message' => $e->getMessage(),
             ], 400);
         }
+    }
+
+    private function presentEmptyProfile(string $userId, Request $request): array
+    {
+        $user = $request->user();
+
+        return [
+            'profile_id'            => null,
+            'user_id'               => $userId,
+            'national_id'           => null,
+            'birth_date'            => null,
+            'avatar_url'            => null,
+            'has_avatar'            => false,
+            'gender'                => null,
+            'address'               => null,
+            'pending_address'       => null,
+            'address_change_status' => 0,
+            'phone'                 => null,
+            'display_bio'           => null,
+            'description'           => null,
+            'row_version'           => null,
+            'created_at'            => null,
+            'updated_at'            => null,
+            'user' => $user ? [
+                'user_id'    => $user->user_id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'mobile'     => $user->mobile,
+            ] : null,
+        ];
     }
 
     private function presentProfile($profile, ?Request $request = null): array
