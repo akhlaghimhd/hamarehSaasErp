@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class PermissionSeeder extends Seeder
@@ -105,6 +106,54 @@ class PermissionSeeder extends Seeder
 
         if (!empty($insertData)) {
             DB::table('tenant_role_permissions')->insert($insertData);
+        }
+
+        // Ensure demo tenant members can exercise seeded RBAC in UI (FE-P1).
+        // Prefer owners; if none, fall back to all active memberships.
+        $this->assignTenantAdminToDemoMembers($demoTenantId, $actualRoleId);
+    }
+
+    /**
+     * Attach tenant-admin role to active demo-tenant memberships so login
+     * security_context.permissions is non-empty after re-login.
+     */
+    private function assignTenantAdminToDemoMembers(string $tenantId, string $roleId): void
+    {
+        if (!Schema::hasTable('tenant_users') || !Schema::hasTable('tenant_user_roles')) {
+            return;
+        }
+
+        $query = DB::table('tenant_users')
+            ->where('tenant_id', $tenantId)
+            ->where('status', 1)
+            ->whereNull('deleted_at');
+
+        $owners = (clone $query)->where('is_owner', true)->get(['user_id']);
+        $targets = $owners->isNotEmpty()
+            ? $owners
+            : $query->get(['user_id']);
+
+        foreach ($targets as $row) {
+            $exists = DB::table('tenant_user_roles')
+                ->where('tenant_id', $tenantId)
+                ->where('user_id', $row->user_id)
+                ->where('tenant_role_id', $roleId)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $payload = [
+                'tenant_user_role_id' => (string) Str::uuid(),
+                'tenant_id'           => $tenantId,
+                'user_id'             => $row->user_id,
+                'tenant_role_id'      => $roleId,
+                'created_at'          => now(),
+                'updated_at'          => now(),
+            ];
+
+            DB::table('tenant_user_roles')->insert($payload);
         }
     }
 
