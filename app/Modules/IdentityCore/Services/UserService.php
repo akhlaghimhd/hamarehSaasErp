@@ -86,7 +86,7 @@ class UserService
                 ->first();
 
             if ($existingMembership) {
-                throw new Exception('User is already a member of this tenant.');
+                throw new Exception('این کاربر هم‌اکنون عضو این مستأجر است.');
             }
 
             $tenantUser = TenantUser::create([
@@ -147,11 +147,39 @@ class UserService
                 ->firstOrFail();
 
             $previousStatus = $tenantUser->status;
+            $actorUserId = $this->currentActorUserId();
 
             $membershipChanges = array_filter([
                 'is_owner' => $dto->isOwner,
                 'status'   => $dto->status,
             ], fn ($value) => !is_null($value));
+
+            // Self-service safety: actor cannot deactivate own membership.
+            if (
+                $actorUserId
+                && $actorUserId === (string) $tenantUser->user_id
+                && array_key_exists('status', $membershipChanges)
+                && (int) $membershipChanges['status'] === 0
+            ) {
+                throw new Exception('نمی‌توانید عضویت خودتان را غیرفعال کنید.');
+            }
+
+            // Last active owner must remain.
+            if (
+                array_key_exists('status', $membershipChanges)
+                && (int) $membershipChanges['status'] === 0
+                && (bool) $tenantUser->is_owner
+            ) {
+                $this->assertNotLastActiveOwner($tenantId, $tenantUser->tenant_user_id);
+            }
+
+            if (
+                array_key_exists('is_owner', $membershipChanges)
+                && $membershipChanges['is_owner'] === false
+                && (bool) $tenantUser->is_owner
+            ) {
+                $this->assertNotLastActiveOwner($tenantId, $tenantUser->tenant_user_id);
+            }
 
             if (!empty($membershipChanges)) {
                 if (property_exists($tenantUser, 'row_version') || isset($tenantUser->row_version)) {
@@ -213,6 +241,16 @@ class UserService
                 ->where('tenant_user_id', $tenantUserId)
                 ->firstOrFail();
 
+            $actorUserId = $this->currentActorUserId();
+
+            if ($actorUserId && $actorUserId === (string) $tenantUser->user_id) {
+                throw new Exception('نمی‌توانید عضویت خودتان را حذف کنید.');
+            }
+
+            if ((bool) $tenantUser->is_owner) {
+                $this->assertNotLastActiveOwner($tenantId, $tenantUser->tenant_user_id);
+            }
+
             $previousStatus = $tenantUser->status;
 
             // Record audit row while membership is still active
@@ -234,6 +272,36 @@ class UserService
                 ['tenant_user_id' => $tenantUserId]
             );
         });
+    }
+
+    /**
+     * Reject removing/deactivating the sole active owner of the tenant.
+     */
+    private function assertNotLastActiveOwner(string $tenantId, string $excludeTenantUserId): void
+    {
+        $otherActiveOwners = TenantUser::query()
+            ->where('tenant_id', $tenantId)
+            ->where('is_owner', true)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->where('tenant_user_id', '!=', $excludeTenantUserId)
+            ->count();
+
+        if ($otherActiveOwners < 1) {
+            throw new Exception(
+                'آخرین مالک فعال مستأجر را نمی‌توان غیرفعال یا حذف کرد. ابتدا مالک دیگری تعیین کنید.'
+            );
+        }
+    }
+
+    private function currentActorUserId(): ?string
+    {
+        $user = auth()->user();
+        if (!$user) {
+            return null;
+        }
+
+        return (string) ($user->user_id ?? $user->getAuthIdentifier());
     }
 
     private function getTenantId(): string
