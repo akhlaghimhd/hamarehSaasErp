@@ -20,7 +20,7 @@ class TenantContextMiddleware
         if (! $tenantId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Tenant context is missing.',
+                'message' => 'شناسه مستأجر (X-Tenant-ID) ارسال نشده است.',
             ], Response::HTTP_UNAUTHORIZED);
         }
 
@@ -35,7 +35,7 @@ class TenantContextMiddleware
         if (! $tenantOk) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid or inactive tenant.',
+                'message' => 'مستأجر نامعتبر یا غیرفعال است.',
             ], Response::HTTP_UNAUTHORIZED);
         }
 
@@ -56,7 +56,7 @@ class TenantContextMiddleware
             if (! $isMember) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Access denied or tenant is inactive.',
+                    'message' => 'دسترسی مجاز نیست یا عضویت شما در این مستأجر غیرفعال است.',
                 ], Response::HTTP_FORBIDDEN);
             }
         }
