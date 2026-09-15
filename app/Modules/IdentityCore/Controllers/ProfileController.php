@@ -12,6 +12,7 @@ use App\Modules\IdentityCore\Services\ProfileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Exception;
 
 class ProfileController extends Controller
@@ -20,9 +21,6 @@ class ProfileController extends Controller
         private readonly ProfileService $profileService
     ) {}
 
-    /**
-     * Current authenticated user's profile (self-service).
-     */
     public function me(Request $request): JsonResponse
     {
         try {
@@ -32,7 +30,7 @@ class ProfileController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Profile retrieved successfully.',
-                'data'    => $this->presentProfile($profile),
+                'data'    => $this->presentProfile($profile, $request),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -47,9 +45,6 @@ class ProfileController extends Controller
         }
     }
 
-    /**
-     * Self-service upsert: display_bio + address change request only.
-     */
     public function upsertMe(SelfUpsertProfileRequest $request): JsonResponse
     {
         try {
@@ -60,7 +55,7 @@ class ProfileController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Profile saved successfully.',
-                'data'    => $this->presentProfile($profile),
+                'data'    => $this->presentProfile($profile, $request),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
@@ -75,9 +70,6 @@ class ProfileController extends Controller
         }
     }
 
-    /**
-     * Upload / replace avatar (single image).
-     */
     public function uploadAvatarMe(UploadAvatarRequest $request): JsonResponse
     {
         try {
@@ -87,13 +79,87 @@ class ProfileController extends Controller
             return response()->json([
                 'status'  => 'success',
                 'message' => 'Avatar updated successfully.',
-                'data'    => $this->presentProfile($profile),
+                'data'    => $this->presentProfile($profile, $request),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'User or membership not found.',
             ], 404);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    public function requestMobileChange(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile' => ['required', 'string', 'max:20'],
+            ]);
+
+            $data = $this->profileService->requestMobileChange(
+                $request->user()->user_id,
+                $request->input('mobile'),
+                $request->ip()
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'OTP sent.',
+                'data'    => $data,
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'User not found.',
+            ], 404);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    public function verifyMobileChange(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'mobile' => ['required', 'string', 'max:20'],
+                'code'   => ['required', 'string', 'max:10'],
+            ]);
+
+            $user = $this->profileService->verifyMobileChange(
+                $request->user()->user_id,
+                $request->input('mobile'),
+                $request->input('code')
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Mobile updated.',
+                'data'    => [
+                    'user_id' => $user->user_id,
+                    'mobile'  => $user->mobile,
+                    'email'   => $user->email,
+                    'first_name' => $user->first_name,
+                    'last_name'  => $user->last_name,
+                ],
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         } catch (Exception $e) {
             return response()->json([
                 'status'  => 'error',
@@ -149,9 +215,6 @@ class ProfileController extends Controller
         }
     }
 
-    /**
-     * Admin: approve pending address change.
-     */
     public function approveAddress(string $userId): JsonResponse
     {
         try {
@@ -197,8 +260,10 @@ class ProfileController extends Controller
         }
     }
 
-    private function presentProfile($profile): array
+    private function presentProfile($profile, ?Request $request = null): array
     {
+        $user = $request?->user();
+
         return [
             'profile_id'            => $profile->profile_id,
             'user_id'               => $profile->user_id,
@@ -215,6 +280,14 @@ class ProfileController extends Controller
             'row_version'           => $profile->row_version,
             'created_at'            => optional($profile->created_at)?->toIso8601String(),
             'updated_at'            => optional($profile->updated_at)?->toIso8601String(),
+            // convenience for SPA (identity display)
+            'user' => $user ? [
+                'user_id'    => $user->user_id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'mobile'     => $user->mobile,
+            ] : null,
         ];
     }
 }

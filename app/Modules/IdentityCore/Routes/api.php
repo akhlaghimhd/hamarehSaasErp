@@ -12,16 +12,10 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
 
-    /*
-     |--------------------------------------------------------------------------
-     | Public auth (no X-Tenant-ID required — tenant resolved by system)
-     |--------------------------------------------------------------------------
-     */
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
     Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
 
-    // Pre-auth token after multi-org password/OTP — still no tenant header
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/auth/select-tenant', [AuthController::class, 'selectTenant']);
     });
@@ -49,6 +43,8 @@ Route::prefix('identity')->group(function () {
             Route::get('/me', [ProfileController::class, 'me']);
             Route::put('/me', [ProfileController::class, 'upsertMe']);
             Route::post('/me/avatar', [ProfileController::class, 'uploadAvatarMe']);
+            Route::post('/me/mobile/request', [ProfileController::class, 'requestMobileChange']);
+            Route::post('/me/mobile/verify', [ProfileController::class, 'verifyMobileChange']);
 
             Route::get('/{userId}', [ProfileController::class, 'show'])
                 ->middleware('permission:identity.profile.view');
