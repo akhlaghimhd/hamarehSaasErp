@@ -32,7 +32,7 @@ class MembershipHistoryController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Membership history retrieved successfully.',
+                'message' => 'تاریخچه عضویت با موفقیت دریافت شد.',
                 'data'    => $rows,
             ], 200);
         } catch (Exception $e) {
@@ -53,13 +53,13 @@ class MembershipHistoryController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'Membership history retrieved successfully.',
+                'message' => 'تاریخچه عضویت با موفقیت دریافت شد.',
                 'data'    => $rows,
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Tenant membership not found.',
+                'message' => 'عضویت مستأجر یافت نشد.',
             ], 404);
         } catch (Exception $e) {
             return response()->json([
