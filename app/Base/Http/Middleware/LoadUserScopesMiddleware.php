@@ -10,16 +10,15 @@ use Illuminate\Support\Facades\Context;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class LoadUserScopesMiddleware
 {
-    /** Seconds to cache roles/permissions/scopes per tenant-user (request burst relief). */
     private const CACHE_TTL = 60;
 
-    /**
-     * Reload Security Context from DB (or short cache) for the authenticated user.
-     * Law 4.4: user_id, tenant_id, roles, scopes (+ permissions).
-     */
+    /** @var array<string, array|null> */
+    private static array $requestMemo = [];
+
     public function handle(Request $request, Closure $next): Response
     {
         ScopeContext::resetInstance();
@@ -31,15 +30,14 @@ class LoadUserScopesMiddleware
             return $next($request);
         }
 
-        $cacheKey = sprintf(
-            'sec_ctx:%s:%s',
-            $tenantId,
-            $user->user_id
-        );
+        $memoKey = $tenantId.'|'.$user->user_id;
 
-        $payload = Cache::remember($cacheKey, self::CACHE_TTL, function () use ($user, $tenantId) {
-            return $this->loadFromDatabase($user->user_id, $tenantId);
-        });
+        if (array_key_exists($memoKey, self::$requestMemo)) {
+            $payload = self::$requestMemo[$memoKey];
+        } else {
+            $payload = $this->loadPayload($tenantId, $user->user_id);
+            self::$requestMemo[$memoKey] = $payload;
+        }
 
         if ($payload === null) {
             return $next($request);
@@ -78,17 +76,58 @@ class LoadUserScopesMiddleware
         return $next($request);
     }
 
-    /**
-     * Invalidate cached security context (call after role/permission/scope assignment).
-     */
     public static function forget(string $tenantId, string $userId): void
     {
-        Cache::forget(sprintf('sec_ctx:%s:%s', $tenantId, $userId));
+        $key = sprintf('sec_ctx:%s:%s', $tenantId, $userId);
+        unset(self::$requestMemo[$tenantId.'|'.$userId]);
+        try {
+            if (self::cacheUsable()) {
+                Cache::forget($key);
+            }
+        } catch (Throwable) {
+            // ignore
+        }
+    }
+
+    private function loadPayload(string $tenantId, string $userId): ?array
+    {
+        $cacheKey = sprintf('sec_ctx:%s:%s', $tenantId, $userId);
+
+        if (self::cacheUsable()) {
+            try {
+                $cached = Cache::get($cacheKey);
+                if (is_array($cached)) {
+                    return $cached;
+                }
+            } catch (Throwable) {
+                // fall through to DB
+            }
+        }
+
+        $payload = $this->loadFromDatabase($userId, $tenantId);
+
+        if ($payload !== null && self::cacheUsable()) {
+            try {
+                Cache::put($cacheKey, $payload, self::CACHE_TTL);
+            } catch (Throwable) {
+                // ignore
+            }
+        }
+
+        return $payload;
     }
 
     /**
-     * @return array{tenant_user_id:string,is_owner:bool,scopes:array,roles:array,permissions:array}|null
+     * file cache on Docker bind-mount is pathologically slow on Win/Mac.
+     * Only use redis/memcached/array for hot-path caching.
      */
+    private static function cacheUsable(): bool
+    {
+        $store = (string) config('cache.default');
+
+        return in_array($store, ['redis', 'memcached', 'array', 'octane'], true);
+    }
+
     private function loadFromDatabase(string $userId, string $tenantId): ?array
     {
         $tenantUser = DB::table('tenant_users')
@@ -180,5 +219,6 @@ class LoadUserScopesMiddleware
     public function terminate($request, $response): void
     {
         ScopeContext::resetInstance();
+        self::$requestMemo = [];
     }
 }

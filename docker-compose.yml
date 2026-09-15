@@ -11,14 +11,16 @@ services:
     volumes:
       - .:/var/www/html
     environment:
-      # Force sensible local perf defaults (override .env when keys conflict via Laravel env())
-      CACHE_STORE: file
+      # file cache on bind-mount is slow on Docker Desktop — use redis
+      CACHE_STORE: redis
       SESSION_DRIVER: file
       QUEUE_CONNECTION: sync
       LOG_LEVEL: warning
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_CONNECTION: pgsql
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       - postgres
       - redis

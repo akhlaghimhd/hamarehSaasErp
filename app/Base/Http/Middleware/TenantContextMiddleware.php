@@ -24,18 +24,13 @@ class TenantContextMiddleware
             ], Response::HTTP_UNAUTHORIZED);
         }
 
-        // Short file/redis cache — avoid hitting tenants table on every API call
-        $tenantOk = Cache::remember(
-            'tenant_active:'.$tenantId,
-            120,
-            function () use ($tenantId) {
-                return DB::table('tenants')
-                    ->where('tenant_id', $tenantId)
-                    ->where('status', 1)
-                    ->whereNull('deleted_at')
-                    ->exists();
-            }
-        );
+        $tenantOk = $this->fastRemember('tenant_active:'.$tenantId, 120, function () use ($tenantId) {
+            return DB::table('tenants')
+                ->where('tenant_id', $tenantId)
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->exists();
+        });
 
         if (! $tenantOk) {
             return response()->json([
@@ -45,16 +40,18 @@ class TenantContextMiddleware
         }
 
         if ($user = $request->user()) {
-            // Membership also cached briefly (status changes are rare mid-session)
-            $memberKey = 'tu_active:'.$tenantId.':'.$user->user_id;
-            $isMember = Cache::remember($memberKey, 60, function () use ($tenantId, $user) {
-                return DB::table('tenant_users')
-                    ->where('tenant_id', $tenantId)
-                    ->where('user_id', $user->user_id)
-                    ->where('status', 1)
-                    ->whereNull('deleted_at')
-                    ->exists();
-            });
+            $isMember = $this->fastRemember(
+                'tu_active:'.$tenantId.':'.$user->user_id,
+                60,
+                function () use ($tenantId, $user) {
+                    return DB::table('tenant_users')
+                        ->where('tenant_id', $tenantId)
+                        ->where('user_id', $user->user_id)
+                        ->where('status', 1)
+                        ->whereNull('deleted_at')
+                        ->exists();
+                }
+            );
 
             if (! $isMember) {
                 return response()->json([
@@ -64,7 +61,6 @@ class TenantContextMiddleware
             }
         }
 
-        // RLS session GUC (must run every request — cannot cache)
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
         Context::add('tenant_id', $tenantId);
@@ -74,12 +70,31 @@ class TenantContextMiddleware
         return $next($request);
     }
 
+    /**
+     * Skip file cache on Docker bind-mount (very slow on Win/Mac).
+     */
+    private function fastRemember(string $key, int $ttl, callable $callback): mixed
+    {
+        $store = (string) config('cache.default');
+        $usable = in_array($store, ['redis', 'memcached', 'array', 'octane'], true);
+
+        if (! $usable) {
+            return $callback();
+        }
+
+        try {
+            return Cache::remember($key, $ttl, $callback);
+        } catch (Throwable) {
+            return $callback();
+        }
+    }
+
     public function terminate($request, $response): void
     {
         try {
             DB::statement("SELECT set_config('app.current_tenant_id', '', false)");
         } catch (Throwable $e) {
-            // ignore aborted transaction
+            // ignore
         }
 
         TenantContext::resetInstance();
