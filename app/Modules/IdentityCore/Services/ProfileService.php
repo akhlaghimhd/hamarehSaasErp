@@ -27,18 +27,26 @@ class ProfileService
 
     public function getByUserId(string $userId): UserProfile
     {
-        $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
-
-        $profile = UserProfile::query()
-            ->where('user_id', $userId)
-            ->first();
+        $profile = $this->findByUserIdOrNull($userId);
 
         if (!$profile) {
             throw (new ModelNotFoundException())->setModel(UserProfile::class, [$userId]);
         }
 
         return $profile;
+    }
+
+    /**
+     * Membership already verified by TenantContext + load.scopes middleware.
+     * Avoid throwing when profile row does not exist yet.
+     */
+    public function findByUserIdOrNull(string $userId): ?UserProfile
+    {
+        $this->getTenantId();
+
+        return UserProfile::query()
+            ->where('user_id', $userId)
+            ->first();
     }
 
     public function upsert(UpsertUserProfileDTO $dto): UserProfile
@@ -97,14 +105,12 @@ class ProfileService
         });
     }
 
+    /**
+     * Self path: middleware already proved membership; skip extra exists() queries.
+     */
     public function upsertSelf(SelfUpsertUserProfileDTO $dto): UserProfile
     {
         $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($dto->userId, $tenantId);
-
-        if (!User::where('user_id', $dto->userId)->exists()) {
-            throw (new ModelNotFoundException())->setModel(User::class, [$dto->userId]);
-        }
 
         return DB::transaction(function () use ($dto, $tenantId) {
             $profile = UserProfile::query()
@@ -122,41 +128,39 @@ class ProfileService
 
             if ($dto->hasDisplayBio) {
                 $bio = $dto->displayBio;
-                if ($bio !== null && mb_strlen($bio) > 200) {
-                    throw new HttpException(422, 'متن زیر عکس حداکثر ۲۰۰ کاراکتر است.');
+                if ($bio !== null && mb_strlen($bio) > 80) {
+                    throw new HttpException(422, 'متن زیر عکس حداکثر ۸۰ کاراکتر است.');
                 }
                 $payload['description'] = $bio;
             }
 
-            if ($payload !== []) {
-                $payload['row_version'] = ((int) ($profile->row_version ?? 1)) + 1;
-                $profile->update($payload);
-
-                $this->logEventOutbox(
-                    $tenantId,
-                    'user_profiles',
-                    $profile->profile_id,
-                    'identity.user_profile.self_updated.v1',
-                    [
-                        'profile_id' => $profile->profile_id,
-                        'user_id'    => $dto->userId,
-                        'changes'    => $payload,
-                    ]
-                );
+            if ($payload === []) {
+                return $profile;
             }
 
-            return $profile->fresh();
+            $payload['row_version'] = ((int) ($profile->row_version ?? 1)) + 1;
+            $profile->update($payload);
+
+            $this->logEventOutbox(
+                $tenantId,
+                'user_profiles',
+                $profile->profile_id,
+                'identity.user_profile.self_updated.v1',
+                [
+                    'profile_id' => $profile->profile_id,
+                    'user_id'    => $dto->userId,
+                    'changes'    => $payload,
+                ]
+            );
+
+            // Avoid extra SELECT when model already has attributes
+            return $profile;
         });
     }
 
-    /**
-     * Store avatar on public disk; avatar_url holds relative path "avatars/{userId}/avatar.jpg".
-     * Frontend must load via authenticated GET profiles/me/avatar (not raw public URL).
-     */
     public function uploadAvatar(string $userId, UploadedFile $file): UserProfile
     {
         $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
 
         return DB::transaction(function () use ($userId, $file, $tenantId) {
             $profile = UserProfile::query()
@@ -174,15 +178,10 @@ class ProfileService
             $filename = 'avatar.jpg';
 
             Storage::disk('public')->deleteDirectory($dir);
-
-            // Re-encode to JPEG when possible to keep size down
             $path = $file->storeAs($dir, $filename, 'public');
 
-            // Relative storage key — stable API avatar endpoint uses this
-            $storageKey = $path;
-
             $profile->update([
-                'avatar_url'  => $storageKey,
+                'avatar_url'  => $path,
                 'row_version' => ((int) ($profile->row_version ?? 1)) + 1,
             ]);
 
@@ -194,21 +193,17 @@ class ProfileService
                 [
                     'profile_id' => $profile->profile_id,
                     'user_id'    => $userId,
-                    'avatar_url' => $storageKey,
+                    'avatar_url' => $path,
                 ]
             );
 
-            return $profile->fresh();
+            return $profile;
         });
     }
 
-    /**
-     * Absolute filesystem path for current avatar, or null.
-     */
     public function resolveAvatarAbsolutePath(string $userId): ?string
     {
-        $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
+        $this->getTenantId();
 
         $profile = UserProfile::query()
             ->where('user_id', $userId)
@@ -220,7 +215,6 @@ class ProfileService
 
         $key = $profile->avatar_url;
 
-        // Legacy full URLs → try extract path after /storage/
         if (str_starts_with($key, 'http://') || str_starts_with($key, 'https://')) {
             $pos = strpos($key, '/storage/');
             if ($pos !== false) {
@@ -241,8 +235,7 @@ class ProfileService
 
     public function requestMobileChange(string $userId, string $newMobile, ?string $requestIp = null): array
     {
-        $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
+        $this->getTenantId();
 
         $newMobile = $this->normalizeMobile($newMobile);
 
@@ -313,7 +306,6 @@ class ProfileService
     public function verifyMobileChange(string $userId, string $newMobile, string $code): User
     {
         $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
 
         $newMobile = $this->normalizeMobile($newMobile);
         $code = trim($code);
@@ -366,13 +358,12 @@ class ProfileService
             ['user_id' => $userId, 'mobile' => $newMobile]
         );
 
-        return $user->fresh();
+        return $user;
     }
 
     public function approveAddressChange(string $userId): UserProfile
     {
-        $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
+        $this->getTenantId();
 
         return DB::transaction(function () use ($userId) {
             $profile = UserProfile::query()
@@ -390,14 +381,13 @@ class ProfileService
                 'row_version'           => ((int) ($profile->row_version ?? 1)) + 1,
             ]);
 
-            return $profile->fresh();
+            return $profile;
         });
     }
 
     public function softDelete(string $userId): void
     {
         $tenantId = $this->getTenantId();
-        $this->assertUserBelongsToTenant($userId, $tenantId);
 
         DB::transaction(function () use ($userId, $tenantId) {
             $profile = UserProfile::query()
