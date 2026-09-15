@@ -289,15 +289,47 @@ class AuthenticationService
             return $query->where('email', $identifier)->first();
         }
 
-        $mobile = preg_replace('/\D+/', '', $identifier) ?? $identifier;
-        if (str_starts_with($mobile, '98') && strlen($mobile) === 12) {
-            $mobile = '0'.substr($mobile, 2);
-        }
-        if (str_starts_with($mobile, '9') && strlen($mobile) === 10) {
-            $mobile = '0'.$mobile;
+        $mobile = $this->normalizeIranMobile($identifier);
+        if ($mobile === null) {
+            return null;
         }
 
         return $query->where('mobile', $mobile)->first();
+    }
+
+    /**
+     * Normalize Iranian mobile to 09xxxxxxxxx (11 digits).
+     * Accepts ASCII/Persian digits, +98, 98, 0, or bare 9xxxxxxxxx.
+     */
+    private function normalizeIranMobile(string $raw): ?string
+    {
+        $persian = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+        $arabic  = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+        $ascii   = ['0','1','2','3','4','5','6','7','8','9'];
+
+        $s = str_replace($persian, $ascii, $raw);
+        $s = str_replace($arabic, $ascii, $s);
+        $s = preg_replace('/\D+/', '', $s) ?? '';
+
+        if ($s === '') {
+            return null;
+        }
+
+        if (str_starts_with($s, '0098')) {
+            $s = substr($s, 4);
+        } elseif (str_starts_with($s, '98') && strlen($s) >= 12) {
+            $s = substr($s, 2);
+        }
+
+        if (str_starts_with($s, '9') && strlen($s) === 10) {
+            $s = '0'.$s;
+        }
+
+        if (preg_match('/^09\d{9}$/', $s) !== 1) {
+            return null;
+        }
+
+        return $s;
     }
 
     public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
