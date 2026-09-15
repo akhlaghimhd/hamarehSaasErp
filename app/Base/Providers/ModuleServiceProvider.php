@@ -32,7 +32,6 @@ class ModuleServiceProvider extends ServiceProvider
             return new \App\Base\Context\TenantContext();
         });
 
-        // Local SMS driver until real provider is configured
         $this->app->bind(SmsSenderInterface::class, LogSmsSender::class);
     }
 
@@ -80,25 +79,33 @@ class ModuleServiceProvider extends ServiceProvider
     {
         $modulesPath = app_path('Modules');
 
-        if (File::exists($modulesPath)) {
-            $modules = File::directories($modulesPath);
+        if (! File::exists($modulesPath)) {
+            return;
+        }
 
-            foreach ($modules as $module) {
-                $moduleName = basename($module);
-                $routesPath = $module . '/Routes/api.php';
+        $modules = File::directories($modulesPath);
 
-                if (File::exists($routesPath)) {
-                    $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
+        foreach ($modules as $module) {
+            $moduleName = basename($module);
+            $routesPath = $module.'/Routes/api.php';
 
-                    Route::prefix('api/v1/' . $prefix)
-                        ->middleware('api')
-                        ->group($routesPath);
-
-                    Route::prefix('api/' . $prefix)
-                        ->middleware('api')
-                        ->group($routesPath);
-                }
+            if (! File::exists($routesPath)) {
+                continue;
             }
+
+            // identity-core, saas-platform, ...
+            $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
+
+            // Canonical versioned API (frontend uses this)
+            Route::prefix('api/v1/'.$prefix)
+                ->middleware('api')
+                ->group($routesPath);
+
+            // Legacy unversioned mount — unique name prefix so route:cache works
+            Route::prefix('api/'.$prefix)
+                ->middleware('api')
+                ->name('legacy.')
+                ->group($routesPath);
         }
     }
 
