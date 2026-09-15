@@ -11,8 +11,9 @@ services:
     volumes:
       - .:/var/www/html
     environment:
-      # file cache on bind-mount is slow on Docker Desktop — use redis
-      CACHE_STORE: redis
+      # array = in-memory, no Redis extension, no slow file volume I/O
+      # switch to redis only after: docker compose build app (with phpredis)
+      CACHE_STORE: array
       SESSION_DRIVER: file
       QUEUE_CONNECTION: sync
       LOG_LEVEL: warning
@@ -23,7 +24,6 @@ services:
       REDIS_PORT: "6379"
     depends_on:
       - postgres
-      - redis
     networks:
       - hamareh-network
     command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
@@ -51,6 +51,8 @@ services:
       - "6379:6379"
     networks:
       - hamareh-network
+    profiles:
+      - redis
 
 networks:
   hamareh-network:
