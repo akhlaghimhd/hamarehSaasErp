@@ -7,19 +7,24 @@ use App\Modules\IdentityCore\DTOs\SelfUpsertUserProfileDTO;
 use App\Modules\IdentityCore\Models\UserProfile;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
+use App\Modules\IdentityCore\Models\IdentityLoginOtp;
+use App\Modules\IdentityCore\Contracts\SmsSenderInterface;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Exception;
 
 class ProfileService
 {
-    /**
-     * Get profile for a user that is a member of the current tenant.
-     * Profile itself is platform-level (no tenant_id); isolation is via tenant membership.
-     */
+    public function __construct(
+        private readonly SmsSenderInterface $smsSender,
+    ) {
+    }
+
     public function getByUserId(string $userId): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -36,9 +41,6 @@ class ProfileService
         return $profile;
     }
 
-    /**
-     * Admin upsert — full identity fields (national_id, gender 1|2, birth_date, …).
-     */
     public function upsert(UpsertUserProfileDTO $dto): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -95,9 +97,6 @@ class ProfileService
         });
     }
 
-    /**
-     * Self-service upsert: only display_bio + address change request (pending approval).
-     */
     public function upsertSelf(SelfUpsertUserProfileDTO $dto): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -125,14 +124,8 @@ class ProfileService
                 $payload['description'] = $dto->displayBio;
             }
 
-            if ($dto->hasAddress) {
-                $newAddress = $dto->address;
-                $current = $profile->address;
-                if ($newAddress !== $current) {
-                    $payload['pending_address'] = $newAddress;
-                    $payload['address_change_status'] = UserProfile::ADDRESS_STATUS_PENDING;
-                }
-            }
+            // Address change is no longer self-service (policy 2026-09-15).
+            // Keep DTO field ignored intentionally.
 
             if ($payload !== []) {
                 $payload['row_version'] = ((int) ($profile->row_version ?? 1)) + 1;
@@ -155,9 +148,6 @@ class ProfileService
         });
     }
 
-    /**
-     * Store a single avatar image for the current user (replaces previous).
-     */
     public function uploadAvatar(string $userId, UploadedFile $file): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -180,12 +170,13 @@ class ProfileService
             if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
                 $ext = 'jpg';
             }
-            $filename = 'avatar.' . $ext;
+            $filename = 'avatar_' . time() . '.' . $ext;
 
-            // Remove previous files in user avatar dir
             Storage::disk('public')->deleteDirectory($dir);
             $path = $file->storeAs($dir, $filename, 'public');
-            $publicUrl = Storage::disk('public')->url($path);
+
+            // Absolute URL so SPA on another origin can load the image
+            $publicUrl = $this->publicUrlForPath($path);
 
             $profile->update([
                 'avatar_url'  => $publicUrl,
@@ -209,8 +200,141 @@ class ProfileService
     }
 
     /**
-     * Admin approves pending address → copies pending_address into address.
+     * Step 1: send OTP to the *new* mobile for authenticated user.
      */
+    public function requestMobileChange(string $userId, string $newMobile, ?string $requestIp = null): array
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($userId, $tenantId);
+
+        $newMobile = $this->normalizeMobile($newMobile);
+
+        if (!preg_match('/^09\d{9}$/', $newMobile)) {
+            throw new HttpException(422, 'شماره موبایل معتبر نیست.');
+        }
+
+        $user = User::query()->where('user_id', $userId)->whereNull('deleted_at')->first();
+        if (!$user) {
+            throw (new ModelNotFoundException())->setModel(User::class, [$userId]);
+        }
+
+        if ($user->mobile === $newMobile) {
+            throw new HttpException(422, 'شماره جدید با شماره فعلی یکسان است.');
+        }
+
+        $taken = User::query()
+            ->where('mobile', $newMobile)
+            ->where('user_id', '!=', $userId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if ($taken) {
+            throw new HttpException(422, 'این شماره قبلاً ثبت شده است.');
+        }
+
+        $active = IdentityLoginOtp::query()
+            ->where('mobile', $newMobile)
+            ->whereNull('consumed_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('last_sent_at')
+            ->first();
+
+        if ($active) {
+            throw new HttpException(429, 'کد قبلی هنوز معتبر است.');
+        }
+
+        $plainCode = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        IdentityLoginOtp::create([
+            'otp_id'        => (string) Str::uuid(),
+            'mobile'        => $newMobile,
+            'code_hash'     => Hash::make($plainCode),
+            'expires_at'    => now()->addSeconds(180),
+            'last_sent_at'  => now(),
+            'consumed_at'   => null,
+            'attempt_count' => 0,
+            'request_ip'    => $requestIp,
+        ]);
+
+        $this->smsSender->send(
+            $newMobile,
+            'کد تأیید تغییر موبایل هماره ERP: '.$plainCode
+        );
+
+        $payload = [
+            'expires_in'          => 180,
+            'resend_available_in' => 180,
+        ];
+
+        if (config('app.debug') === true) {
+            $payload['debug_code'] = $plainCode;
+        }
+
+        return $payload;
+    }
+
+    /**
+     * Step 2: verify OTP on new mobile and update users.mobile.
+     */
+    public function verifyMobileChange(string $userId, string $newMobile, string $code): User
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($userId, $tenantId);
+
+        $newMobile = $this->normalizeMobile($newMobile);
+        $code = trim($code);
+
+        $otp = IdentityLoginOtp::query()
+            ->where('mobile', $newMobile)
+            ->whereNull('consumed_at')
+            ->orderByDesc('last_sent_at')
+            ->first();
+
+        if (!$otp || $otp->isExpired()) {
+            throw new HttpException(401, 'کد منقضی شده یا یافت نشد.');
+        }
+
+        if ((int) $otp->attempt_count >= 5) {
+            $otp->consumed_at = now();
+            $otp->save();
+            throw new HttpException(429, 'تعداد تلاش بیش از حد مجاز است.');
+        }
+
+        if (!Hash::check($code, $otp->code_hash)) {
+            $otp->attempt_count = (int) $otp->attempt_count + 1;
+            $otp->save();
+            throw new HttpException(401, 'کد وارد شده نادرست است.');
+        }
+
+        $otp->consumed_at = now();
+        $otp->save();
+
+        $taken = User::query()
+            ->where('mobile', $newMobile)
+            ->where('user_id', '!=', $userId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if ($taken) {
+            throw new HttpException(422, 'این شماره قبلاً ثبت شده است.');
+        }
+
+        $user = User::query()->where('user_id', $userId)->firstOrFail();
+        $user->mobile = $newMobile;
+        $user->row_version = ((int) ($user->row_version ?? 1)) + 1;
+        $user->save();
+
+        $this->logEventOutbox(
+            $tenantId,
+            'users',
+            $userId,
+            'identity.user.mobile_changed.v1',
+            ['user_id' => $userId, 'mobile' => $newMobile]
+        );
+
+        return $user->fresh();
+    }
+
     public function approveAddressChange(string $userId): UserProfile
     {
         $tenantId = $this->getTenantId();
@@ -231,18 +355,6 @@ class ProfileService
                 'address_change_status' => UserProfile::ADDRESS_STATUS_APPROVED,
                 'row_version'           => ((int) ($profile->row_version ?? 1)) + 1,
             ]);
-
-            $this->logEventOutbox(
-                $tenantId,
-                'user_profiles',
-                $profile->profile_id,
-                'identity.user_profile.address_approved.v1',
-                [
-                    'profile_id' => $profile->profile_id,
-                    'user_id'    => $userId,
-                    'address'    => $profile->address,
-                ]
-            );
 
             return $profile->fresh();
         });
@@ -271,6 +383,27 @@ class ProfileService
                 ]
             );
         });
+    }
+
+    private function publicUrlForPath(string $path): string
+    {
+        $base = rtrim((string) config('app.url'), '/');
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+
+        return $base.'/storage/'.$path;
+    }
+
+    private function normalizeMobile(string $mobile): string
+    {
+        $digits = preg_replace('/\D+/', '', $mobile) ?? '';
+        if (str_starts_with($digits, '98') && strlen($digits) === 12) {
+            $digits = '0'.substr($digits, 2);
+        }
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $digits = '0'.$digits;
+        }
+
+        return $digits;
     }
 
     private function assertUserBelongsToTenant(string $userId, string $tenantId): void
