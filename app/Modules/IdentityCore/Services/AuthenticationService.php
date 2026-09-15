@@ -134,7 +134,6 @@ class AuthenticationService
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantIdToLogin)
             ->where('tenant_user_roles.user_id', $user->user_id)
-            ->whereNull('tenant_user_roles.deleted_at')
             ->whereNull('tenant_roles.deleted_at')
             ->where('tenant_roles.status', 1)
             ->select([
@@ -160,7 +159,6 @@ class AuthenticationService
                 ->join('tenant_permissions', 'tenant_role_permissions.tenant_permission_id', '=', 'tenant_permissions.tenant_permission_id')
                 ->where('tenant_role_permissions.tenant_id', $tenantIdToLogin)
                 ->whereIn('tenant_role_permissions.tenant_role_id', $roleIds)
-                ->whereNull('tenant_role_permissions.deleted_at')
                 ->whereNull('tenant_permissions.deleted_at')
                 ->where('tenant_permissions.status', 1)
                 ->pluck('tenant_permissions.code')
@@ -169,11 +167,25 @@ class AuthenticationService
                 ->toArray();
         }
 
+        // Tenant owners always receive the full active permission catalog for this tenant
+        // (so UI gates work even if role assignment was missed in early seeds).
+        if ((bool) $tenantUser->is_owner) {
+            $ownerPerms = DB::table('tenant_permissions')
+                ->where('tenant_id', $tenantIdToLogin)
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->pluck('code')
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $permissions = array_values(array_unique(array_merge($permissions, $ownerPerms)));
+        }
+
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantIdToLogin)
             ->where('tenant_user_scopes.tenant_user_id', $tenantUser->tenant_user_id)
-            ->whereNull('tenant_user_scopes.deleted_at')
             ->whereNull('tenant_scopes.deleted_at')
             ->where('tenant_scopes.is_active', true)
             ->select([
