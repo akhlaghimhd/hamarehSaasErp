@@ -32,6 +32,8 @@ Route::prefix('identity')->group(function () {
             ->middleware('permission:identity.user.view');
         Route::post('/users', [UserController::class, 'store'])
             ->middleware('permission:identity.user.create');
+        Route::post('/users/{id}/restore', [UserController::class, 'restore'])
+            ->middleware('permission:identity.user.restore');
         Route::get('/users/{id}', [UserController::class, 'show'])
             ->middleware('permission:identity.user.view');
         Route::put('/users/{id}', [UserController::class, 'update'])
