@@ -3,10 +3,13 @@
 namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\DTOs\UpsertUserProfileDTO;
+use App\Modules\IdentityCore\DTOs\SelfUpsertUserProfileDTO;
 use App\Modules\IdentityCore\Models\UserProfile;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
@@ -34,7 +37,7 @@ class ProfileService
     }
 
     /**
-     * Create or update profile for a tenant-member user.
+     * Admin upsert — full identity fields (national_id, gender 1|2, birth_date, …).
      */
     public function upsert(UpsertUserProfileDTO $dto): UserProfile
     {
@@ -43,6 +46,10 @@ class ProfileService
 
         if (!User::where('user_id', $dto->userId)->exists()) {
             throw (new ModelNotFoundException())->setModel(User::class, [$dto->userId]);
+        }
+
+        if ($dto->gender !== null && !in_array((int) $dto->gender, [1, 2], true)) {
+            throw new Exception('Gender must be 1 (male) or 2 (female).');
         }
 
         return DB::transaction(function () use ($dto, $tenantId) {
@@ -89,8 +96,158 @@ class ProfileService
     }
 
     /**
-     * Soft-delete profile (Law 1.4).
+     * Self-service upsert: only display_bio + address change request (pending approval).
      */
+    public function upsertSelf(SelfUpsertUserProfileDTO $dto): UserProfile
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($dto->userId, $tenantId);
+
+        if (!User::where('user_id', $dto->userId)->exists()) {
+            throw (new ModelNotFoundException())->setModel(User::class, [$dto->userId]);
+        }
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $profile = UserProfile::query()
+                ->where('user_id', $dto->userId)
+                ->first();
+
+            if (!$profile) {
+                $profile = UserProfile::create([
+                    'user_id'     => $dto->userId,
+                    'row_version' => 1,
+                ]);
+            }
+
+            $payload = [];
+
+            if ($dto->hasDisplayBio) {
+                $payload['description'] = $dto->displayBio;
+            }
+
+            if ($dto->hasAddress) {
+                $newAddress = $dto->address;
+                $current = $profile->address;
+                if ($newAddress !== $current) {
+                    $payload['pending_address'] = $newAddress;
+                    $payload['address_change_status'] = UserProfile::ADDRESS_STATUS_PENDING;
+                }
+            }
+
+            if ($payload !== []) {
+                $payload['row_version'] = ((int) ($profile->row_version ?? 1)) + 1;
+                $profile->update($payload);
+
+                $this->logEventOutbox(
+                    $tenantId,
+                    'user_profiles',
+                    $profile->profile_id,
+                    'identity.user_profile.self_updated.v1',
+                    [
+                        'profile_id' => $profile->profile_id,
+                        'user_id'    => $dto->userId,
+                        'changes'    => $payload,
+                    ]
+                );
+            }
+
+            return $profile->fresh();
+        });
+    }
+
+    /**
+     * Store a single avatar image for the current user (replaces previous).
+     */
+    public function uploadAvatar(string $userId, UploadedFile $file): UserProfile
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($userId, $tenantId);
+
+        return DB::transaction(function () use ($userId, $file, $tenantId) {
+            $profile = UserProfile::query()
+                ->where('user_id', $userId)
+                ->first();
+
+            if (!$profile) {
+                $profile = UserProfile::create([
+                    'user_id'     => $userId,
+                    'row_version' => 1,
+                ]);
+            }
+
+            $dir = 'avatars/' . $userId;
+            $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+                $ext = 'jpg';
+            }
+            $filename = 'avatar.' . $ext;
+
+            // Remove previous files in user avatar dir
+            Storage::disk('public')->deleteDirectory($dir);
+            $path = $file->storeAs($dir, $filename, 'public');
+            $publicUrl = Storage::disk('public')->url($path);
+
+            $profile->update([
+                'avatar_url'  => $publicUrl,
+                'row_version' => ((int) ($profile->row_version ?? 1)) + 1,
+            ]);
+
+            $this->logEventOutbox(
+                $tenantId,
+                'user_profiles',
+                $profile->profile_id,
+                'identity.user_profile.avatar_updated.v1',
+                [
+                    'profile_id' => $profile->profile_id,
+                    'user_id'    => $userId,
+                    'avatar_url' => $publicUrl,
+                ]
+            );
+
+            return $profile->fresh();
+        });
+    }
+
+    /**
+     * Admin approves pending address → copies pending_address into address.
+     */
+    public function approveAddressChange(string $userId): UserProfile
+    {
+        $tenantId = $this->getTenantId();
+        $this->assertUserBelongsToTenant($userId, $tenantId);
+
+        return DB::transaction(function () use ($userId, $tenantId) {
+            $profile = UserProfile::query()
+                ->where('user_id', $userId)
+                ->firstOrFail();
+
+            if ((int) $profile->address_change_status !== UserProfile::ADDRESS_STATUS_PENDING) {
+                throw new Exception('No pending address change to approve.');
+            }
+
+            $profile->update([
+                'address'               => $profile->pending_address,
+                'pending_address'       => null,
+                'address_change_status' => UserProfile::ADDRESS_STATUS_APPROVED,
+                'row_version'           => ((int) ($profile->row_version ?? 1)) + 1,
+            ]);
+
+            $this->logEventOutbox(
+                $tenantId,
+                'user_profiles',
+                $profile->profile_id,
+                'identity.user_profile.address_approved.v1',
+                [
+                    'profile_id' => $profile->profile_id,
+                    'user_id'    => $userId,
+                    'address'    => $profile->address,
+                ]
+            );
+
+            return $profile->fresh();
+        });
+    }
+
     public function softDelete(string $userId): void
     {
         $tenantId = $this->getTenantId();

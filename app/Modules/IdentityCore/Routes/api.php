@@ -48,10 +48,13 @@ Route::prefix('identity')->group(function () {
         Route::prefix('profiles')->group(function () {
             Route::get('/me', [ProfileController::class, 'me']);
             Route::put('/me', [ProfileController::class, 'upsertMe']);
+            Route::post('/me/avatar', [ProfileController::class, 'uploadAvatarMe']);
 
             Route::get('/{userId}', [ProfileController::class, 'show'])
                 ->middleware('permission:identity.profile.view');
             Route::put('/{userId}', [ProfileController::class, 'upsert'])
+                ->middleware('permission:identity.profile.update');
+            Route::post('/{userId}/approve-address', [ProfileController::class, 'approveAddress'])
                 ->middleware('permission:identity.profile.update');
             Route::delete('/{userId}', [ProfileController::class, 'destroy'])
                 ->middleware('permission:identity.profile.delete');

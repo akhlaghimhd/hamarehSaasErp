@@ -19,6 +19,12 @@ class UserProfile extends Model
     const CREATED_AT = 'created_at';
     const UPDATED_AT = 'updated_at';
 
+    /** address_change_status */
+    public const ADDRESS_STATUS_NONE = 0;
+    public const ADDRESS_STATUS_PENDING = 1;
+    public const ADDRESS_STATUS_APPROVED = 2;
+    public const ADDRESS_STATUS_REJECTED = 3;
+
     protected $fillable = [
         'user_id',
         'national_id',
@@ -26,6 +32,8 @@ class UserProfile extends Model
         'avatar_url',
         'gender',
         'address',
+        'pending_address',
+        'address_change_status',
         'phone',
         'description',
         'created_by',
@@ -37,6 +45,7 @@ class UserProfile extends Model
     protected $casts = [
         'birth_date' => 'date',
         'gender' => 'integer',
+        'address_change_status' => 'integer',
         'row_version' => 'integer',
     ];
 

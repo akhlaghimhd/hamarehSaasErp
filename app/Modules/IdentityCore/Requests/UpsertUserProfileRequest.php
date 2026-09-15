@@ -28,10 +28,12 @@ class UpsertUserProfileRequest extends FormRequest
             ],
             'birth_date'  => ['sometimes', 'nullable', 'date', 'before:today'],
             'avatar_url'  => ['sometimes', 'nullable', 'string', 'max:500'],
-            'gender'      => ['sometimes', 'nullable', 'integer', 'in:1,2,3'],
+            // Policy: male=1, female=2 only (no "other")
+            'gender'      => ['sometimes', 'nullable', 'integer', 'in:1,2'],
             'address'     => ['sometimes', 'nullable', 'string'],
             'phone'       => ['sometimes', 'nullable', 'string', 'max:50'],
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'display_bio' => ['sometimes', 'nullable', 'string', 'max:500'],
         ];
     }
 }
