@@ -30,6 +30,8 @@ Route::prefix('identity')->group(function () {
 
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
+        Route::get('/users/email-host', [UserController::class, 'emailHost'])
+            ->middleware('permission:identity.user.create');
         Route::post('/users', [UserController::class, 'store'])
             ->middleware('permission:identity.user.create');
         Route::post('/users/{id}/restore', [UserController::class, 'restore'])

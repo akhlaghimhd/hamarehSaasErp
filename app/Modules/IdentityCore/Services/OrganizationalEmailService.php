@@ -10,12 +10,11 @@ use App\Modules\SaasPlatform\Models\TenantSetting;
 use Exception;
 
 /**
- * Resolves organizational email host and generates unique local-part emails.
+ * Resolves organizational email host and builds unique emails.
  *
- * Host rules (Phase 1):
- * - White-label: primary tenant domain (is_primary + active) when primary_domain_enabled
+ * Host rules:
+ * - White-label: primary tenant domain when primary_domain_enabled
  * - Shared platform: {email_domain_suffix}.{platform_email_base_domain}
- * - Otherwise: cannot resolve → caller must block member create
  */
 class OrganizationalEmailService
 {
@@ -80,7 +79,30 @@ class OrganizationalEmailService
     }
 
     /**
-     * Generate unique email: first.last[@seq]@host
+     * Build email from admin-chosen local part + org host. Rejects if taken.
+     *
+     * @throws Exception
+     */
+    public function buildEmailFromLocalPart(string $tenantId, string $localPart): string
+    {
+        $host = $this->resolveEmailHost($tenantId);
+        $local = $this->sanitizeLocalPart($localPart);
+
+        if ($local === '') {
+            throw new Exception('بخش ابتدایی ایمیل معتبر نیست.');
+        }
+
+        $email = $local.'@'.$host;
+
+        if ($this->emailExists($email)) {
+            throw new Exception('این آدرس ایمیل قبلاً ثبت شده است. بخش ابتدایی را تغییر دهید.');
+        }
+
+        return $email;
+    }
+
+    /**
+     * Generate unique email: first.last[@seq]@host (server-side fallback).
      *
      * @throws Exception
      */
@@ -121,6 +143,17 @@ class OrganizationalEmailService
         return $first.'.'.$last;
     }
 
+    public function sanitizeLocalPart(string $localPart): string
+    {
+        $value = strtolower(trim($localPart));
+        $value = $this->transliterateFa($value);
+        $value = preg_replace('/[^a-z0-9._-]+/', '', $value) ?? '';
+        $value = trim($value, '.-_');
+        $value = preg_replace('/\.{2,}/', '.', $value) ?? $value;
+
+        return $value;
+    }
+
     private function emailExists(string $email): bool
     {
         return User::query()
@@ -134,7 +167,6 @@ class OrganizationalEmailService
         $host = strtolower(trim($host));
         $host = preg_replace('#^https?://#', '', $host) ?? $host;
         $host = rtrim($host, '/');
-        // strip path if any
         $host = explode('/', $host)[0] ?? $host;
 
         return $host;
@@ -151,9 +183,6 @@ class OrganizationalEmailService
         return $value;
     }
 
-    /**
-     * Minimal Persian → Latin map for email local-part (no external dependency).
-     */
     private function transliterateFa(string $text): string
     {
         $map = [

@@ -8,6 +8,7 @@ use App\Modules\IdentityCore\Requests\UpdateTenantUserRequest;
 use App\Modules\IdentityCore\DTOs\CreateTenantUserDTO;
 use App\Modules\IdentityCore\DTOs\UpdateTenantUserDTO;
 use App\Modules\IdentityCore\Services\UserService;
+use App\Modules\IdentityCore\Services\OrganizationalEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -16,13 +17,10 @@ use Exception;
 class UserController extends Controller
 {
     public function __construct(
-        private readonly UserService $userService
+        private readonly UserService $userService,
+        private readonly OrganizationalEmailService $organizationalEmailService,
     ) {}
 
-    /**
-     * List users belonging to the current tenant.
-     * Query: membership=active|deleted (default active).
-     */
     public function index(Request $request): JsonResponse
     {
         $filter = $request->query('membership', 'active');
@@ -37,6 +35,34 @@ class UserController extends Controller
             'message' => 'لیست کاربران با موفقیت دریافت شد.',
             'data'    => $users,
         ], 200);
+    }
+
+    /**
+     * Email host for current tenant (for member-create UI).
+     */
+    public function emailHost(): JsonResponse
+    {
+        try {
+            $tenantId = app()->bound('current_tenant_id') ? app('current_tenant_id') : null;
+            if (!$tenantId) {
+                throw new Exception('Tenant Context is missing. Architecture Violation.');
+            }
+
+            $host = $this->organizationalEmailService->resolveEmailHost((string) $tenantId);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'دامنه ایمیل سازمانی دریافت شد.',
+                'data'    => [
+                    'email_host' => $host,
+                ],
+            ], 200);
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
     }
 
     public function show(string $id): JsonResponse
@@ -127,9 +153,6 @@ class UserController extends Controller
         }
     }
 
-    /**
-     * Restore soft-deleted membership (permission: identity.user.restore).
-     */
     public function restore(string $id): JsonResponse
     {
         try {
