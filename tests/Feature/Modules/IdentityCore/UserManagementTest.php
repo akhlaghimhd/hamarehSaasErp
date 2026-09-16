@@ -4,12 +4,15 @@ namespace Tests\Feature\Modules\IdentityCore;
 
 use Tests\TestCase;
 use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Models\TenantSetting;
 use App\Modules\IdentityCore\Models\User;
+use App\Modules\IdentityCore\Models\UserCredential;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
+use App\Modules\IdentityCore\Services\OrganizationalEmailService;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -29,8 +32,19 @@ class UserManagementTest extends TestCase
         parent::setUp();
 
         $this->tenant = Tenant::factory()->create([
-            'tenant_code' => 'USER_MGMT',
-            'status'      => 1,
+            'tenant_code'            => 'USER_MGMT',
+            'slug'                   => 'usermgmt',
+            'status'                 => 1,
+            'primary_domain_enabled' => false,
+        ]);
+
+        // Shared-platform email host: suffix + platform base (seeded or default erp.ir)
+        TenantSetting::create([
+            'tenant_setting_id' => (string) Str::uuid(),
+            'tenant_id'         => $this->tenant->tenant_id,
+            'setting_key'       => OrganizationalEmailService::SETTING_EMAIL_DOMAIN_SUFFIX,
+            'setting_value'     => 'usermgmt',
+            'setting_group'     => 'IDENTITY',
         ]);
 
         $this->adminUser = User::factory()->create(['status' => 1]);
@@ -113,11 +127,9 @@ class UserManagementTest extends TestCase
     }
 
     #[Test]
-    public function authorized_user_can_create_tenant_user(): void
+    public function authorized_user_can_create_tenant_user_without_password(): void
     {
         $payload = [
-            'email'      => 'new.user@example.com',
-            'password'   => 'SecurePass123!',
             'first_name' => 'New',
             'last_name'  => 'User',
             'mobile'     => '09121234567',
@@ -129,17 +141,29 @@ class UserManagementTest extends TestCase
             ->postJson('/api/v1/identity-core/identity/users', $payload);
 
         $response->assertStatus(201)
-            ->assertJsonPath('status', 'success')
-            ->assertJsonPath('data.user.email', 'new.user@example.com');
+            ->assertJsonPath('status', 'success');
+
+        $email = $response->json('data.user.email');
+        $this->assertNotEmpty($email);
+        $this->assertStringEndsWith('@usermgmt.erp.ir', $email);
+        $this->assertStringContainsString('new.user', strtolower($email));
 
         $this->assertDatabaseHas('users', [
-            'email'      => 'new.user@example.com',
+            'mobile'     => '09121234567',
             'first_name' => 'New',
             'last_name'  => 'User',
+            'email'      => $email,
         ]);
+
+        $userId = $response->json('data.user.user_id');
+        $credential = UserCredential::where('user_id', $userId)->first();
+        $this->assertNotNull($credential);
+        $this->assertNull($credential->password_hash);
+        $this->assertTrue((bool) $credential->must_set_password);
 
         $this->assertDatabaseHas('tenant_users', [
             'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => $userId,
             'status'    => 1,
         ]);
 
@@ -149,6 +173,25 @@ class UserManagementTest extends TestCase
             'event_type'     => 'identity.tenant_user.created.v1',
             'status'         => 1,
         ]);
+    }
+
+    #[Test]
+    public function create_tenant_user_blocked_when_email_host_not_configured(): void
+    {
+        TenantSetting::query()
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('setting_key', OrganizationalEmailService::SETTING_EMAIL_DOMAIN_SUFFIX)
+            ->delete();
+
+        $response = $this->withHeaders($this->authHeaders())
+            ->postJson('/api/v1/identity-core/identity/users', [
+                'first_name' => 'No',
+                'last_name'  => 'Host',
+                'mobile'     => '09129998877',
+            ]);
+
+        $response->assertStatus(400)
+            ->assertJsonPath('status', 'error');
     }
 
     #[Test]
@@ -172,10 +215,9 @@ class UserManagementTest extends TestCase
             'X-Tenant-ID'   => $this->tenant->tenant_id,
             'Accept'        => 'application/json',
         ])->postJson('/api/v1/identity-core/identity/users', [
-            'email'      => 'forbidden@example.com',
-            'password'   => 'SecurePass123!',
             'first_name' => 'Forbidden',
             'last_name'  => 'User',
+            'mobile'     => '09121112233',
         ]);
 
         $response->assertStatus(403)
@@ -187,7 +229,7 @@ class UserManagementTest extends TestCase
     {
         $response = $this->withHeaders($this->authHeaders())
             ->postJson('/api/v1/identity-core/identity/users', [
-                'email' => 'incomplete@example.com',
+                'first_name' => 'OnlyName',
             ]);
 
         $response->assertStatus(422);
@@ -197,10 +239,9 @@ class UserManagementTest extends TestCase
     public function cannot_add_same_user_twice_to_same_tenant(): void
     {
         $payload = [
-            'email'      => 'duplicate@example.com',
-            'password'   => 'SecurePass123!',
             'first_name' => 'Dup',
             'last_name'  => 'User',
+            'mobile'     => '09123334455',
         ];
 
         $this->withHeaders($this->authHeaders())
