@@ -21,13 +21,6 @@ class UserService
         private readonly OrganizationalEmailService $organizationalEmailService,
     ) {}
 
-    /**
-     * List tenant memberships for the current tenant.
-     *
-     * @param  string  $membershipFilter  active|deleted
-     *         active  = not soft-deleted (status 0 or 1)
-     *         deleted = only soft-deleted rows (audit / restore)
-     */
     public function listTenantUsers(string $membershipFilter = 'active'): Collection
     {
         $tenantId = $this->getTenantId();
@@ -58,8 +51,7 @@ class UserService
 
     /**
      * Create user (if needed) + tenant membership (+ optional roles).
-     * Admin does not set password; new users must set password after first OTP login.
-     * Email is generated from organizational host rules.
+     * Email: admin may send email_local_part; domain always from org host rules.
      */
     public function createTenantUser(CreateTenantUserDTO $dto): TenantUser
     {
@@ -70,7 +62,6 @@ class UserService
             throw new Exception('شماره موبایل معتبر نیست.');
         }
 
-        // Fail fast if org email host cannot be resolved (before creating rows)
         $this->organizationalEmailService->resolveEmailHost($tenantId);
 
         return DB::transaction(function () use ($dto, $tenantId, $mobile) {
@@ -80,11 +71,18 @@ class UserService
                 ->first();
 
             if (!$user) {
-                $email = $this->organizationalEmailService->generateUniqueEmail(
-                    $tenantId,
-                    $dto->firstName,
-                    $dto->lastName
-                );
+                if (filled($dto->emailLocalPart)) {
+                    $email = $this->organizationalEmailService->buildEmailFromLocalPart(
+                        $tenantId,
+                        (string) $dto->emailLocalPart
+                    );
+                } else {
+                    $email = $this->organizationalEmailService->generateUniqueEmail(
+                        $tenantId,
+                        $dto->firstName,
+                        $dto->lastName
+                    );
+                }
 
                 $user = User::create([
                     'first_name' => $dto->firstName,
@@ -100,7 +98,7 @@ class UserService
                     'user_id'             => $user->user_id,
                     'password_hash'       => null,
                     'must_set_password'   => true,
-                    'authentication_type' => 2, // OTP-first until password is set
+                    'authentication_type' => 2,
                     'is_verified'         => false,
                     'two_factor_enabled'  => false,
                     'failed_login_count'  => 0,
