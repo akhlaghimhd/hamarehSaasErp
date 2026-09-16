@@ -14,7 +14,7 @@ use Exception;
  *
  * Host rules:
  * - White-label: primary tenant domain when primary_domain_enabled
- * - Shared platform: {email_domain_suffix}.{platform_email_base_domain}
+ * - Shared platform: {email_domain_suffix|tenant.slug}.{platform_email_base_domain}
  */
 class OrganizationalEmailService
 {
@@ -59,6 +59,13 @@ class OrganizationalEmailService
         $suffix = is_string($suffix) ? strtolower(trim($suffix)) : '';
         $suffix = preg_replace('/[^a-z0-9-]/', '', $suffix) ?? '';
 
+        // Temporary default: fall back to tenant slug so create is not blocked
+        if ($suffix === '') {
+            $slug = is_string($tenant->slug ?? null) ? strtolower(trim((string) $tenant->slug)) : '';
+            $slug = preg_replace('/[^a-z0-9-]/', '', $slug) ?? '';
+            $suffix = $slug;
+        }
+
         if ($suffix === '') {
             throw new Exception(
                 'دامنه ایمیل سازمانی تنظیم نشده است. ابتدا پسوند ایمیل سازمان را یک‌بار تنظیم کنید یا دامنه اختصاصی فعال کنید.'
@@ -72,15 +79,13 @@ class OrganizationalEmailService
         $base = $this->normalizeHost((string) $base);
 
         if ($base === '') {
-            throw new Exception('دامنه عمومی پلتفرم برای ایمیل تنظیم نشده است.');
+            $base = self::DEFAULT_PLATFORM_EMAIL_BASE;
         }
 
         return $suffix.'.'.$base;
     }
 
     /**
-     * Build email from admin-chosen local part + org host. Rejects if taken.
-     *
      * @throws Exception
      */
     public function buildEmailFromLocalPart(string $tenantId, string $localPart): string
@@ -102,8 +107,6 @@ class OrganizationalEmailService
     }
 
     /**
-     * Generate unique email: first.last[@seq]@host (server-side fallback).
-     *
      * @throws Exception
      */
     public function generateUniqueEmail(string $tenantId, string $firstName, string $lastName): string
@@ -183,18 +186,91 @@ class OrganizationalEmailService
         return $value;
     }
 
+    /**
+     * Dictionary-first Persian → Latin, then character map.
+     */
     private function transliterateFa(string $text): string
     {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        $dict = $this->nameDictionary();
+        $normalized = str_replace(['‌', 'ـ'], ['', ''], $text);
+        $key = mb_strtolower($normalized);
+
+        if (isset($dict[$key])) {
+            return $dict[$key];
+        }
+
+        // Multi-char digraphs first
         $map = [
+            'خوا' => 'kha',
+            'خا' => 'kha',
+            'چه' => 'che',
+            'شه' => 'she',
+            'ژه' => 'zhe',
+            'غه' => 'ghe',
+            'قه' => 'ghe',
             'آ' => 'a', 'ا' => 'a', 'ب' => 'b', 'پ' => 'p', 'ت' => 't', 'ث' => 's',
             'ج' => 'j', 'چ' => 'ch', 'ح' => 'h', 'خ' => 'kh', 'د' => 'd', 'ذ' => 'z',
             'ر' => 'r', 'ز' => 'z', 'ژ' => 'zh', 'س' => 's', 'ش' => 'sh', 'ص' => 's',
             'ض' => 'z', 'ط' => 't', 'ظ' => 'z', 'ع' => 'a', 'غ' => 'gh', 'ف' => 'f',
-            'ق' => 'gh', 'ک' => 'k', 'گ' => 'g', 'ل' => 'l', 'م' => 'm', 'ن' => 'n',
-            'و' => 'v', 'ه' => 'h', 'ی' => 'y', 'ي' => 'y', 'ء' => '', 'ٔ' => '',
-            'ه‌' => 'eh', 'ة' => 'h',
+            'ق' => 'gh', 'ک' => 'k', 'ك' => 'k', 'گ' => 'g', 'ل' => 'l', 'م' => 'm', 'ن' => 'n',
+            'و' => 'o', 'ه' => 'h', 'ی' => 'i', 'ي' => 'i', 'ئ' => 'i', 'ء' => '', 'ٔ' => '',
+            'ة' => 'h', 'ؤ' => 'o', 'إ' => 'e', 'أ' => 'a', 'آ' => 'a',
         ];
 
-        return strtr($text, $map);
+        return strtr($normalized, $map);
+    }
+
+    /**
+     * High-frequency Persian given/family names → standard Finglish.
+     *
+     * @return array<string, string>
+     */
+    private function nameDictionary(): array
+    {
+        return [
+            // Given names
+            'علی' => 'ali', 'محمد' => 'mohammad', 'مهدی' => 'mahdi', 'حسین' => 'hossein',
+            'حسن' => 'hasan', 'رضا' => 'reza', 'امیر' => 'amir', 'سعید' => 'saeed',
+            'مجید' => 'majid', 'حمید' => 'hamid', 'جواد' => 'javad', 'احمد' => 'ahmad',
+            'محمود' => 'mahmoud', 'عباس' => 'abbas', 'اکبر' => 'akbar', 'اصغر' => 'asghar',
+            'یاسر' => 'yaser', 'یاسین' => 'yasin', 'یوسف' => 'yousef', 'ابراهیم' => 'ebrahim',
+            'اسماعیل' => 'esmaeil', 'مصطفی' => 'mostafa', 'مرتضی' => 'morteza', 'کاظم' => 'kazem',
+            'ناصر' => 'naser', 'نادر' => 'nader', 'فرهاد' => 'farhad', 'فرید' => 'farid',
+            'فرزاد' => 'farzad', 'بهرام' => 'bahram', 'بهروز' => 'behrouz', 'بهنام' => 'behnam',
+            'بابک' => 'babak', 'پرویز' => 'parviz', 'پیمان' => 'peyman', 'پویا' => 'pouya',
+            'کیان' => 'kian', 'کیوان' => 'keyvan', 'کوروش' => 'kourosh', 'آرش' => 'arash',
+            'آرمان' => 'arman', 'آرمین' => 'armin', 'سینا' => 'sina', 'سامان' => 'saman',
+            'سام' => 'sam', 'سهراب' => 'sohrab', 'شهاب' => 'shahab', 'شهرام' => 'shahram',
+            'داریوش' => 'dariush', 'داوود' => 'davoud', 'داود' => 'davoud', 'روح‌الله' => 'rouhollah',
+            'روح الله' => 'rouhollah', 'عبدالله' => 'abdollah', 'عبداله' => 'abdollah',
+            'فاطمه' => 'fatemeh', 'زهرا' => 'zahra', 'مریم' => 'maryam', 'زینب' => 'zeynab',
+            'سارا' => 'sara', 'سارہ' => 'sara', 'نرگس' => 'narges', 'نازنین' => 'nazanin',
+            'نسیم' => 'nasim', 'نیلوفر' => 'niloufar', 'مینا' => 'mina', 'مهسا' => 'mahsa',
+            'مهناز' => 'mahnaz', 'مونا' => 'mona', 'هانیه' => 'hanieh', 'هستی' => 'hasti',
+            'هلیا' => 'helia', 'الهام' => 'elham', 'الهه' => 'elahe', 'ایدا' => 'aida',
+            'آیدا' => 'aida', 'آتنا' => 'atena', 'آیدا' => 'aida', 'پریسا' => 'parisa',
+            'پریا' => 'pariya', 'پگاه' => 'pegah', 'شیرین' => 'shirin', 'شیدا' => 'sheida',
+            'شیدا' => 'sheida', 'سمیرا' => 'samira', 'سمیه' => 'somayeh', 'سعیده' => 'saeedeh',
+            'لیلا' => 'leila', 'لیلا' => 'leila', 'لیدا' => 'lida', 'رویا' => 'roya',
+            'ریحانه' => 'reyhaneh', 'راضیه' => 'razie', 'طاهره' => 'tahereh',
+            // Family names (common)
+            'محمدی' => 'mohammadi', 'حسینی' => 'hosseini', 'رضایی' => 'rezaei', 'رضائی' => 'rezaei',
+            'احمدی' => 'ahmadi', 'موسوی' => 'mousavi', 'کریمی' => 'karimi', 'جعفری' => 'jafari',
+            'حیدری' => 'heidari', 'نوری' => 'nouri', 'اکبری' => 'akbari', 'کاظمی' => 'kazemi',
+            'عباسی' => 'abbasi', 'مرادی' => 'moradi', 'جعفرزاده' => 'jafarzadeh',
+            'علیزاده' => 'alizadeh', 'محمدزاده' => 'mohammadzadeh', 'رحیمی' => 'rahimi',
+            'صالحی' => 'salehi', 'طاهری' => 'taheri', 'صادقی' => 'sadeghi', 'باقری' => 'bagheri',
+            'نجفی' => 'najafi', 'شریفی' => 'sharifi', 'قاسمی' => 'ghasemi', 'یوسفی' => 'yousefi',
+            'اسدی' => 'asadi', 'جوان' => 'javan', 'فرهادی' => 'farhadi', 'بهرامی' => 'bahrami',
+            'پناهی' => 'panahi', 'کبیری' => 'kabiri', 'نظری' => 'nazari', 'امینی' => 'amini',
+            'هاشمی' => 'hashemi', 'میرزایی' => 'mirzaei', 'میرزائی' => 'mirzaei',
+            'سلطانی' => 'soltani', 'پارسا' => 'parsa', 'رستمی' => 'rostami',
+            'اخلاقی' => 'akhlaghi', 'اکلاقی' => 'akhlaghi',
+        ];
     }
 }

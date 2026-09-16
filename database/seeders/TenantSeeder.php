@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class TenantSeeder extends Seeder
 {
@@ -68,6 +69,33 @@ class TenantSeeder extends Seeder
                     'updated_at' => now(),
                 ]
             );
+        }
+
+        // Default org email suffix for demo (shared-platform mode)
+        if (Schema::hasTable('tenant_settings')) {
+            foreach ([
+                [$demoTenantId, 'demo'],
+                [$systemTenantId, 'system'],
+            ] as [$tid, $suffix]) {
+                $exists = DB::table('tenant_settings')
+                    ->where('tenant_id', $tid)
+                    ->where('setting_key', 'email_domain_suffix')
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if (!$exists) {
+                    DB::table('tenant_settings')->insert([
+                        'tenant_setting_id' => (string) Str::uuid(),
+                        'tenant_id'         => $tid,
+                        'setting_key'       => 'email_domain_suffix',
+                        'setting_value'     => $suffix,
+                        'setting_group'     => 'IDENTITY',
+                        'created_at'        => now(),
+                        'updated_at'        => now(),
+                        'row_version'       => 1,
+                    ]);
+                }
+            }
         }
     }
 }
