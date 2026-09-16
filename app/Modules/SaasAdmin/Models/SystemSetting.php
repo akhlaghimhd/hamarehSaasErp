@@ -3,13 +3,15 @@
 namespace App\Modules\SaasAdmin\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * system_settings — platform-wide key/value (Owner: SaaS Admin)
+ */
 class SystemSetting extends Model
 {
-    use HasFactory, HasUuids, SoftDeletes;
+    use HasUuids, SoftDeletes;
 
     protected $table = 'system_settings';
 
@@ -26,6 +28,7 @@ class SystemSetting extends Model
         'created_by',
         'updated_by',
         'deleted_by',
+        'row_version',
     ];
 
     protected function casts(): array
@@ -36,5 +39,19 @@ class SystemSetting extends Model
             'updated_at'  => 'datetime',
             'deleted_at'  => 'datetime',
         ];
+    }
+
+    public static function getValue(string $key, ?string $default = null): ?string
+    {
+        $row = static::query()
+            ->where('setting_key', $key)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row || $row->setting_value === null || $row->setting_value === '') {
+            return $default;
+        }
+
+        return (string) $row->setting_value;
     }
 }

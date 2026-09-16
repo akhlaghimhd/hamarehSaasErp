@@ -18,11 +18,9 @@ class CreateTenantUserRequest extends FormRequest
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         return [
-            'email'      => ['required', 'email', 'max:255'],
-            'password'   => ['required', 'string', 'min:8', 'max:100'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name'  => ['required', 'string', 'max:100'],
-            'mobile'     => ['nullable', 'string', 'max:20'],
+            'mobile'     => ['required', 'string', 'max:20'],
             'is_owner'   => ['nullable', 'boolean'],
             'role_ids'   => ['nullable', 'array'],
             'role_ids.*' => [
@@ -31,6 +29,15 @@ class CreateTenantUserRequest extends FormRequest
                     ->where('tenant_id', $tenantId)
                     ->whereNull('deleted_at'),
             ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'mobile.required'     => 'شماره موبایل الزامی است.',
+            'first_name.required' => 'نام الزامی است.',
+            'last_name.required'  => 'نام خانوادگی الزامی است.',
         ];
     }
 }

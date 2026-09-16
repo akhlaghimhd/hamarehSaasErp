@@ -9,7 +9,6 @@ use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\UserCredential;
 use App\Modules\IdentityCore\Models\TenantUser;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection;
 use Exception;
@@ -18,7 +17,8 @@ class UserService
 {
     public function __construct(
         private readonly RoleService $roleService,
-        private readonly MembershipHistoryService $membershipHistoryService
+        private readonly MembershipHistoryService $membershipHistoryService,
+        private readonly OrganizationalEmailService $organizationalEmailService,
     ) {}
 
     /**
@@ -39,16 +39,12 @@ class UserService
         if ($membershipFilter === 'deleted') {
             $query->onlyTrashed()->orderByDesc('deleted_at');
         } else {
-            // All non-deleted memberships (active + inactive status)
             $query->orderByDesc('created_at');
         }
 
         return $query->get();
     }
 
-    /**
-     * Show one tenant membership in the current tenant.
-     */
     public function getTenantUser(string $tenantUserId): TenantUser
     {
         $tenantId = $this->getTenantId();
@@ -62,20 +58,39 @@ class UserService
 
     /**
      * Create user (if needed) + tenant membership (+ optional roles).
+     * Admin does not set password; new users must set password after first OTP login.
+     * Email is generated from organizational host rules.
      */
     public function createTenantUser(CreateTenantUserDTO $dto): TenantUser
     {
         $tenantId = $this->getTenantId();
+        $mobile = $this->normalizeMobile($dto->mobile);
 
-        return DB::transaction(function () use ($dto, $tenantId) {
-            $user = User::where('email', $dto->email)->first();
+        if ($mobile === '' || strlen($mobile) < 10) {
+            throw new Exception('شماره موبایل معتبر نیست.');
+        }
+
+        // Fail fast if org email host cannot be resolved (before creating rows)
+        $this->organizationalEmailService->resolveEmailHost($tenantId);
+
+        return DB::transaction(function () use ($dto, $tenantId, $mobile) {
+            $user = User::query()
+                ->where('mobile', $mobile)
+                ->whereNull('deleted_at')
+                ->first();
 
             if (!$user) {
+                $email = $this->organizationalEmailService->generateUniqueEmail(
+                    $tenantId,
+                    $dto->firstName,
+                    $dto->lastName
+                );
+
                 $user = User::create([
                     'first_name' => $dto->firstName,
                     'last_name'  => $dto->lastName,
-                    'email'      => $dto->email,
-                    'mobile'     => $dto->mobile,
+                    'email'      => $email,
+                    'mobile'     => $mobile,
                     'user_kind'  => 1,
                     'status'     => 1,
                 ]);
@@ -83,8 +98,9 @@ class UserService
                 UserCredential::create([
                     'credential_id'       => (string) Str::uuid(),
                     'user_id'             => $user->user_id,
-                    'password_hash'       => Hash::make($dto->password),
-                    'authentication_type' => 1,
+                    'password_hash'       => null,
+                    'must_set_password'   => true,
+                    'authentication_type' => 2, // OTP-first until password is set
                     'is_verified'         => false,
                     'two_factor_enabled'  => false,
                     'failed_login_count'  => 0,
@@ -128,6 +144,7 @@ class UserService
                     'tenant_user_id' => $tenantUser->tenant_user_id,
                     'user_id'        => $user->user_id,
                     'email'          => $user->email,
+                    'mobile'         => $user->mobile,
                 ]
             );
 
@@ -211,7 +228,7 @@ class UserService
             $userChanges = array_filter([
                 'first_name' => $dto->firstName,
                 'last_name'  => $dto->lastName,
-                'mobile'     => $dto->mobile,
+                'mobile'     => $dto->mobile !== null ? $this->normalizeMobile($dto->mobile) : null,
             ], fn ($value) => !is_null($value));
 
             if (!empty($userChanges) && $tenantUser->user) {
@@ -224,9 +241,9 @@ class UserService
                 $tenantUser->tenant_user_id,
                 'identity.tenant_user.updated.v1',
                 [
-                    'tenant_user_id'      => $tenantUser->tenant_user_id,
-                    'membership_changes'  => $membershipChanges,
-                    'user_changes'        => $userChanges,
+                    'tenant_user_id'     => $tenantUser->tenant_user_id,
+                    'membership_changes' => $membershipChanges,
+                    'user_changes'       => $userChanges,
                 ]
             );
 
@@ -234,10 +251,6 @@ class UserService
         });
     }
 
-    /**
-     * Soft-delete a tenant membership (Law 1.4 — no physical delete).
-     * Historical work / audit remains; membership can be restored later.
-     */
     public function softDeleteTenantUser(string $tenantUserId): void
     {
         $tenantId = $this->getTenantId();
@@ -280,10 +293,6 @@ class UserService
         });
     }
 
-    /**
-     * Restore a soft-deleted membership. Does not invent new user data;
-     * previous status becomes inactive (0) so an admin must re-activate deliberately.
-     */
     public function restoreTenantUser(string $tenantUserId): TenantUser
     {
         $tenantId = $this->getTenantId();
@@ -296,9 +305,8 @@ class UserService
 
             $tenantUser->restore();
 
-            // Safe default after restore: inactive until admin re-enables
             $tenantUser->update([
-                'status' => 0,
+                'status'      => 0,
                 'row_version' => ((int) ($tenantUser->row_version ?? 1)) + 1,
             ]);
 
@@ -320,6 +328,19 @@ class UserService
 
             return $tenantUser->fresh(['user']);
         });
+    }
+
+    private function normalizeMobile(string $mobile): string
+    {
+        $digits = preg_replace('/\D+/', '', $mobile) ?? '';
+        if (str_starts_with($digits, '98') && strlen($digits) === 12) {
+            $digits = '0'.substr($digits, 2);
+        }
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $digits = '0'.$digits;
+        }
+
+        return $digits;
     }
 
     private function assertNotLastActiveOwner(string $tenantId, string $excludeTenantUserId): void
