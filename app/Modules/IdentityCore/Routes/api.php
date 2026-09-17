@@ -90,6 +90,8 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.assign');
             Route::post('/assign-permissions', [RoleController::class, 'assignPermissions'])
                 ->middleware('permission:identity.role.assign-permissions');
+            Route::get('/user/{userId}', [RoleController::class, 'userRoles'])
+                ->middleware('permission:identity.role.view');
 
             Route::get('/{id}', [RoleController::class, 'show'])
                 ->middleware('permission:identity.role.view');

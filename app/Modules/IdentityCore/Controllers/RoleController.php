@@ -87,6 +87,17 @@ class RoleController extends Controller
         ], 200);
     }
 
+    public function userRoles(string $userId): JsonResponse
+    {
+        $roles = $this->roleService->listRolesForUser($userId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'User roles retrieved successfully.',
+            'data'    => $roles,
+        ], 200);
+    }
+
     public function assignPermissions(AssignPermissionsRequest $request): JsonResponse
     {
         $dto = AssignPermissionsToRoleDTO::fromRequest($request->validated());
