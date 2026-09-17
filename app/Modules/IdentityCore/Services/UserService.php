@@ -49,10 +49,6 @@ class UserService
             ->firstOrFail();
     }
 
-    /**
-     * Create user (if needed) + tenant membership (+ optional roles).
-     * Email: admin may send email_local_part; domain always from org host rules.
-     */
     public function createTenantUser(CreateTenantUserDTO $dto): TenantUser
     {
         $tenantId = $this->getTenantId();
@@ -130,7 +126,8 @@ class UserService
                 null,
                 1,
                 'JOIN',
-                'Tenant membership created'
+                'عضویت در سازمان',
+                $this->currentActorUserId()
             );
 
             $this->logEventOutbox(
@@ -219,7 +216,8 @@ class UserService
                     (int) $previousStatus,
                     (int) $membershipChanges['status'],
                     'STATUS_CHANGE',
-                    'Membership status updated via API'
+                    'تغییر وضعیت عضویت',
+                    $actorUserId
                 );
             }
 
@@ -231,6 +229,26 @@ class UserService
 
             if (!empty($userChanges) && $tenantUser->user) {
                 $tenantUser->user->update($userChanges);
+
+                $parts = [];
+                if (array_key_exists('first_name', $userChanges) || array_key_exists('last_name', $userChanges)) {
+                    $parts[] = 'نام';
+                }
+                if (array_key_exists('mobile', $userChanges)) {
+                    $parts[] = 'موبایل';
+                }
+                $desc = $parts === []
+                    ? 'به‌روزرسانی اطلاعات هویتی'
+                    : 'ویرایش ' . implode('، ', $parts);
+
+                $this->membershipHistoryService->recordChange(
+                    $tenantUser->tenant_user_id,
+                    (int) $tenantUser->status,
+                    (int) $tenantUser->status,
+                    'IDENTITY_UPDATE',
+                    $desc,
+                    $actorUserId
+                );
             }
 
             $this->logEventOutbox(
@@ -276,7 +294,8 @@ class UserService
                 (int) $previousStatus,
                 0,
                 'SOFT_DELETE',
-                'Tenant membership soft-deleted'
+                'حذف از سازمان',
+                $actorUserId
             );
 
             $tenantUser->delete();
@@ -313,7 +332,8 @@ class UserService
                 0,
                 0,
                 'RESTORE',
-                'Tenant membership restored from soft-delete'
+                'بازگردانی به فهرست سازمان',
+                $this->currentActorUserId()
             );
 
             $this->logEventOutbox(
