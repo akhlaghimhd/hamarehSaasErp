@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use App\Base\Traits\TenantScoped;
 
 class TenantRole extends Model
@@ -20,6 +22,7 @@ class TenantRole extends Model
 
     protected $fillable = [
         'tenant_id',
+        'parent_role_id',
         'code',
         'name',
         'description',
@@ -51,6 +54,16 @@ class TenantRole extends Model
     public function userRoles()
     {
         return $this->hasMany(TenantUserRole::class, 'tenant_role_id', 'tenant_role_id');
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_role_id', 'tenant_role_id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_role_id', 'tenant_role_id');
     }
 
     protected static function newFactory()
