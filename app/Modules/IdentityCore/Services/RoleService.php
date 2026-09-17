@@ -251,37 +251,72 @@ class RoleService
         });
     }
 
+    /**
+     * Assign one or more roles to a platform user in the current tenant.
+     */
     public function assignRoleToUser(AssignRoleToUserDTO $dto): TenantUserRole
     {
         $tenantId = $this->getTenantId();
+        $roleIds = array_values(array_unique(array_filter($dto->roleIds)));
 
-        $role = TenantRole::where('tenant_role_id', $dto->roleIds[0] ?? null)
-            ->where('tenant_id', $tenantId)
-            ->firstOrFail();
+        if ($roleIds === []) {
+            throw new Exception('At least one role_id is required.');
+        }
 
-        return DB::transaction(function () use ($dto, $tenantId, $role) {
-            $userRole = TenantUserRole::firstOrCreate([
-                'tenant_id'      => $tenantId,
-                'user_id'        => $dto->userId,
-                'tenant_role_id' => $role->tenant_role_id,
-            ]);
+        return DB::transaction(function () use ($dto, $tenantId, $roleIds) {
+            $last = null;
+            foreach ($roleIds as $roleId) {
+                $role = TenantRole::where('tenant_role_id', $roleId)
+                    ->where('tenant_id', $tenantId)
+                    ->firstOrFail();
 
-            $this->logEventOutbox(
-                $tenantId,
-                'tenant_user_roles',
-                $userRole->tenant_user_role_id ?? (string) Str::uuid(),
-                'identity.role.assigned.v1',
-                [
-                    'user_id'     => $dto->userId,
-                    'role_id'     => $role->tenant_role_id,
-                    'assigned_at' => now()->toIso8601String(),
-                ]
-            );
+                $userRole = TenantUserRole::firstOrCreate([
+                    'tenant_id'      => $tenantId,
+                    'user_id'        => $dto->userId,
+                    'tenant_role_id' => $role->tenant_role_id,
+                ]);
+
+                $this->logEventOutbox(
+                    $tenantId,
+                    'tenant_user_roles',
+                    $userRole->tenant_user_role_id ?? (string) Str::uuid(),
+                    'identity.role.assigned.v1',
+                    [
+                        'user_id'     => $dto->userId,
+                        'role_id'     => $role->tenant_role_id,
+                        'assigned_at' => now()->toIso8601String(),
+                    ]
+                );
+                $last = $userRole;
+            }
 
             TenantCache::forget('identity', "user_permissions:{$dto->userId}", $tenantId);
 
-            return $userRole;
+            return $last;
         });
+    }
+
+    /**
+     * @return Collection<int, TenantRole>
+     */
+    public function listRolesForUser(string $userId): Collection
+    {
+        $tenantId = $this->getTenantId();
+
+        $roleIds = TenantUserRole::query()
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $userId)
+            ->pluck('tenant_role_id');
+
+        if ($roleIds->isEmpty()) {
+            return new Collection();
+        }
+
+        return TenantRole::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('tenant_role_id', $roleIds)
+            ->orderBy('name')
+            ->get();
     }
 
     public function assignPermissionsToRole(AssignPermissionsToRoleDTO $dto): void
