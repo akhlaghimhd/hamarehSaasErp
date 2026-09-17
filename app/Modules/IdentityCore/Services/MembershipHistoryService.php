@@ -4,41 +4,36 @@ namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\Models\TenantMembershipHistory;
 use App\Modules\IdentityCore\Models\TenantUser;
+use App\Modules\IdentityCore\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Exception;
 
 /**
- * Append-only audit of tenant membership status changes.
- * Read APIs + internal recordChange used by UserService.
+ * Append-only audit of tenant membership changes.
  */
 class MembershipHistoryService
 {
-    /**
-     * List history rows for one tenant membership (current tenant only).
-     */
     public function listByTenantUser(string $tenantUserId): Collection
     {
         $tenantId = $this->getTenantId();
 
-        // Ensure membership belongs to current tenant (include soft-deleted for audit continuity).
         TenantUser::withTrashed()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->firstOrFail();
 
-        return TenantMembershipHistory::query()
+        $rows = TenantMembershipHistory::query()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->orderByDesc('effective_date')
             ->orderByDesc('created_at')
             ->get();
+
+        return $this->withActorNames($rows);
     }
 
-    /**
-     * List recent membership history for the current tenant (optional filter by tenant_user_id).
-     */
     public function listForTenant(?string $tenantUserId = null, int $limit = 100): Collection
     {
         $tenantId = $this->getTenantId();
@@ -53,13 +48,9 @@ class MembershipHistoryService
             $query->where('tenant_user_id', $tenantUserId);
         }
 
-        return $query->get();
+        return $this->withActorNames($query->get());
     }
 
-    /**
-     * Append a status-change history row (no update of existing rows).
-     * Called from UserService when membership status changes or is soft-deleted.
-     */
     public function recordChange(
         string $tenantUserId,
         ?int $previousStatus,
@@ -70,7 +61,6 @@ class MembershipHistoryService
     ): TenantMembershipHistory {
         $tenantId = $this->getTenantId();
 
-        // withTrashed: allows recording SOFT_DELETE while membership may already be soft-deleted
         TenantUser::withTrashed()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
@@ -113,6 +103,35 @@ class MembershipHistoryService
             );
 
             return $history;
+        });
+    }
+
+    /**
+     * @param  Collection<int, TenantMembershipHistory>  $rows
+     * @return Collection<int, TenantMembershipHistory>
+     */
+    private function withActorNames(Collection $rows): Collection
+    {
+        $ids = $rows->pluck('created_by')->filter()->unique()->values();
+        if ($ids->isEmpty()) {
+            return $rows->each(function (TenantMembershipHistory $row) {
+                $row->setAttribute('actor_name', null);
+            });
+        }
+
+        $users = User::query()
+            ->whereIn('user_id', $ids)
+            ->get(['user_id', 'first_name', 'last_name', 'email'])
+            ->keyBy('user_id');
+
+        return $rows->each(function (TenantMembershipHistory $row) use ($users) {
+            $actor = $row->created_by ? $users->get($row->created_by) : null;
+            if (!$actor) {
+                $row->setAttribute('actor_name', null);
+                return;
+            }
+            $name = trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? ''));
+            $row->setAttribute('actor_name', $name !== '' ? $name : ($actor->email ?? null));
         });
     }
 
