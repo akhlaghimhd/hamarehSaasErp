@@ -252,7 +252,8 @@ class RoleService
     }
 
     /**
-     * Assign one or more roles to a platform user in the current tenant.
+     * Sync roles for a platform user in the current tenant.
+     * Adds missing role_ids and removes assignments not in the list.
      */
     public function assignRoleToUser(AssignRoleToUserDTO $dto): TenantUserRole
     {
@@ -264,16 +265,47 @@ class RoleService
         }
 
         return DB::transaction(function () use ($dto, $tenantId, $roleIds) {
-            $last = null;
             foreach ($roleIds as $roleId) {
-                $role = TenantRole::where('tenant_role_id', $roleId)
+                TenantRole::where('tenant_role_id', $roleId)
                     ->where('tenant_id', $tenantId)
                     ->firstOrFail();
+            }
 
-                $userRole = TenantUserRole::firstOrCreate([
-                    'tenant_id'      => $tenantId,
-                    'user_id'        => $dto->userId,
-                    'tenant_role_id' => $role->tenant_role_id,
+            $existing = TenantUserRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('user_id', $dto->userId)
+                ->get();
+
+            $existingIds = $existing->pluck('tenant_role_id')->all();
+            $toAdd = array_diff($roleIds, $existingIds);
+            $toRemove = array_diff($existingIds, $roleIds);
+
+            foreach ($toRemove as $removeId) {
+                TenantUserRole::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('user_id', $dto->userId)
+                    ->where('tenant_role_id', $removeId)
+                    ->delete();
+
+                $this->logEventOutbox(
+                    $tenantId,
+                    'tenant_user_roles',
+                    (string) Str::uuid(),
+                    'identity.role.unassigned.v1',
+                    [
+                        'user_id' => $dto->userId,
+                        'role_id' => $removeId,
+                    ]
+                );
+            }
+
+            $last = $existing->first();
+            foreach ($toAdd as $roleId) {
+                $userRole = TenantUserRole::create([
+                    'tenant_user_role_id' => (string) Str::uuid(),
+                    'tenant_id'           => $tenantId,
+                    'user_id'             => $dto->userId,
+                    'tenant_role_id'      => $roleId,
                 ]);
 
                 $this->logEventOutbox(
@@ -283,7 +315,7 @@ class RoleService
                     'identity.role.assigned.v1',
                     [
                         'user_id'     => $dto->userId,
-                        'role_id'     => $role->tenant_role_id,
+                        'role_id'     => $roleId,
                         'assigned_at' => now()->toIso8601String(),
                     ]
                 );
@@ -291,6 +323,14 @@ class RoleService
             }
 
             TenantCache::forget('identity', "user_permissions:{$dto->userId}", $tenantId);
+
+            if ($last === null) {
+                $last = TenantUserRole::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('user_id', $dto->userId)
+                    ->whereIn('tenant_role_id', $roleIds)
+                    ->firstOrFail();
+            }
 
             return $last;
         });
