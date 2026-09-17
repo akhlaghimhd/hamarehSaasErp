@@ -25,6 +25,7 @@ class RoleService
         $this->getTenantId();
 
         return TenantRole::query()
+            ->with(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name'])
             ->orderBy('code')
             ->get();
     }
@@ -36,6 +37,11 @@ class RoleService
         return TenantRole::query()
             ->where('tenant_id', $tenantId)
             ->where('tenant_role_id', $tenantRoleId)
+            ->with([
+                'parent:tenant_role_id,name,code',
+                'children:tenant_role_id,parent_role_id,name,code,status',
+                'permissions:tenant_permission_id,code,name,module_name',
+            ])
             ->firstOrFail();
     }
 
@@ -161,12 +167,20 @@ class RoleService
         $tenantId = $this->getTenantId();
 
         return DB::transaction(function () use ($dto, $tenantId) {
+            if ($dto->parentRoleId) {
+                TenantRole::query()
+                    ->where('tenant_id', $tenantId)
+                    ->where('tenant_role_id', $dto->parentRoleId)
+                    ->firstOrFail();
+            }
+
             $role = TenantRole::create([
-                'tenant_id'   => $tenantId,
-                'code'        => $dto->roleName,
-                'name'        => $dto->roleName,
-                'description' => $dto->description,
-                'status'      => 1,
+                'tenant_id'       => $tenantId,
+                'parent_role_id'  => $dto->parentRoleId,
+                'code'            => $dto->roleName,
+                'name'            => $dto->roleName,
+                'description'     => $dto->description,
+                'status'          => 1,
             ]);
 
             $this->logEventOutbox(
@@ -175,17 +189,21 @@ class RoleService
                 $role->tenant_role_id,
                 'identity.role.created.v1',
                 [
-                    'role_id' => $role->tenant_role_id,
-                    'code'    => $role->code,
+                    'role_id'         => $role->tenant_role_id,
+                    'code'            => $role->code,
+                    'parent_role_id'  => $dto->parentRoleId,
                 ]
             );
 
+            // permission_ids are an explicit snapshot only — no live inheritance from parent.
             if (!empty($dto->permissionIds)) {
                 $permissionsDto = new AssignPermissionsToRoleDTO($role->tenant_role_id, $dto->permissionIds);
                 $this->assignPermissionsToRole($permissionsDto);
             }
 
-            return $role;
+            TenantCache::flushTenant($tenantId);
+
+            return $role->load(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name']);
         });
     }
 
@@ -223,7 +241,7 @@ class RoleService
 
             TenantCache::flushTenant($tenantId);
 
-            return $role->fresh();
+            return $role->fresh(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name']);
         });
     }
 

@@ -7,7 +7,8 @@ readonly class CreateRoleDTO
     public function __construct(
         public string $roleName,
         public ?string $description,
-        public array $permissionIds = []
+        public array $permissionIds = [],
+        public ?string $parentRoleId = null,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -15,7 +16,8 @@ readonly class CreateRoleDTO
         return new self(
             roleName: $validatedData['role_name'],
             description: $validatedData['description'] ?? null,
-            permissionIds: $validatedData['permission_ids'] ?? []
+            permissionIds: $validatedData['permission_ids'] ?? [],
+            parentRoleId: $validatedData['parent_role_id'] ?? null,
         );
     }
 }
