@@ -255,6 +255,30 @@ class RoleService
                 ->where('tenant_role_id', $tenantRoleId)
                 ->firstOrFail();
 
+            if (!empty($role->is_system_default)) {
+                throw new Exception('نقش سیستمی قابل حذف نیست.');
+            }
+
+            $childCount = TenantRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('parent_role_id', $tenantRoleId)
+                ->count();
+
+            if ($childCount > 0) {
+                throw new Exception('این نقش دارای زیرنقش است. ابتدا زیرنقش‌ها را منتقل یا حذف کنید.');
+            }
+
+            // Detach user assignments so soft-deleted roles never break auth lookups.
+            TenantUserRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_role_id', $tenantRoleId)
+                ->delete();
+
+            TenantRolePermission::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_role_id', $tenantRoleId)
+                ->delete();
+
             $role->delete();
 
             $this->logEventOutbox(
