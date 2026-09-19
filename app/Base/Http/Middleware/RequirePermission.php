@@ -15,11 +15,10 @@ class RequirePermission
      * Handle an incoming request.
      * Usage in routes: middleware('permission:identity.role.create')
      *
-     * Tenant owners (is_owner) receive the full active permission catalog for the tenant
-     * — same policy as AuthenticationService::issueTenantSession.
-     *
-     * F4: Permission codes are always resolved from DB (cache is derived only).
-     * F7: Cache key = tenant:{tenant_id}:identity:user_permissions:{user_id}
+     * Policy:
+     * - Tenant owner (is_owner on active membership) always passes — does not depend on
+     *   tenant_permissions rows existing or on a cached role→permission map.
+     * - Everyone else is checked against role-assigned permission codes (cached).
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -33,17 +32,22 @@ class RequirePermission
             ], 401);
         }
 
+        // Owner check is never served from the permission-list cache (avoids stale empty lists).
+        if ($this->isActiveTenantOwner($tenantId, $userId)) {
+            return $next($request);
+        }
+
         $userPermissions = TenantCache::remember(
             'identity',
             "user_permissions:{$userId}",
             now()->addHours(12),
             function () use ($tenantId, $userId) {
-                return $this->resolveUserPermissionCodes($tenantId, $userId);
+                return $this->resolveRolePermissionCodes($tenantId, $userId);
             },
             $tenantId
         );
 
-        if (!in_array($permission, $userPermissions, true)) {
+        if (!is_array($userPermissions) || !in_array($permission, $userPermissions, true)) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'شما مجوز دسترسی به این بخش را ندارید.',
@@ -53,29 +57,22 @@ class RequirePermission
         return $next($request);
     }
 
-    /**
-     * @return list<string>
-     */
-    private function resolveUserPermissionCodes(string $tenantId, string $userId): array
+    private function isActiveTenantOwner(string $tenantId, string $userId): bool
     {
-        $isOwner = (bool) DB::table('tenant_users')
+        return (bool) DB::table('tenant_users')
             ->where('tenant_id', $tenantId)
             ->where('user_id', $userId)
             ->where('status', 1)
             ->whereNull('deleted_at')
-            ->value('is_owner');
+            ->where('is_owner', true)
+            ->exists();
+    }
 
-        if ($isOwner) {
-            return DB::table('tenant_permissions')
-                ->where('tenant_id', $tenantId)
-                ->where('status', 1)
-                ->whereNull('deleted_at')
-                ->pluck('code')
-                ->unique()
-                ->values()
-                ->toArray();
-        }
-
+    /**
+     * @return list<string>
+     */
+    private function resolveRolePermissionCodes(string $tenantId, string $userId): array
+    {
         return DB::table('tenant_user_roles')
             ->join(
                 'tenant_role_permissions',
