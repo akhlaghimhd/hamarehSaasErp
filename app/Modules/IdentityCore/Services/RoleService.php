@@ -67,111 +67,23 @@ class RoleService
             ->firstOrFail();
     }
 
+    /**
+     * Permission catalog is platform-owned (seeders only).
+     * Tenant Identity API must not invent or remove system operations.
+     */
     public function createPermission(CreatePermissionDTO $dto): TenantPermission
     {
-        $tenantId = $this->getTenantId();
-
-        return DB::transaction(function () use ($dto, $tenantId) {
-            $permission = TenantPermission::create([
-                'tenant_permission_id' => (string) Str::uuid(),
-                'tenant_id'     => $tenantId,
-                'code'         => $dto->code,
-                'name'         => $dto->name,
-                'module_name'  => $dto->moduleName,
-                'action_type'  => $dto->actionType,
-                'description'  => $dto->description,
-                'status'       => 1,
-            ]);
-
-            $this->logEventOutbox(
-                $tenantId,
-                'tenant_permissions',
-                $permission->tenant_permission_id,
-                'identity.permission.created.v1',
-                ['permission_id' => $permission->tenant_permission_id, 'code' => $permission->code]
-            );
-
-            TenantCache::flushTenant($tenantId);
-
-            return $permission;
-        });
+        throw new Exception('ایجاد مجوز از طریق سامانه مجاز نیست. کاتالوگ عملیات فقط توسط تیم توسعه (سیدر) به‌روز می‌شود.');
     }
 
     public function updatePermission(UpdatePermissionDTO $dto): TenantPermission
     {
-        $tenantId = $this->getTenantId();
-
-        return DB::transaction(function () use ($dto, $tenantId) {
-            $permission = TenantPermission::query()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_permission_id', $dto->tenantPermissionId)
-                ->firstOrFail();
-
-            $changes = array_filter([
-                'name'        => $dto->name,
-                'module_name' => $dto->moduleName,
-                'action_type' => $dto->actionType,
-                'description' => $dto->description,
-                'status'      => $dto->status,
-            ], fn ($value) => !is_null($value));
-
-            if (!empty($changes)) {
-                $changes['row_version'] = ((int) ($permission->row_version ?? 1)) + 1;
-                $permission->update($changes);
-            }
-
-            $this->logEventOutbox(
-                $tenantId,
-                'tenant_permissions',
-                $permission->tenant_permission_id,
-                'identity.permission.updated.v1',
-                ['permission_id' => $permission->tenant_permission_id, 'changes' => $changes]
-            );
-
-            TenantCache::flushTenant($tenantId);
-
-            return $permission->fresh();
-        });
+        throw new Exception('ویرایش مجوز برای سازمان مشتری مجاز نیست. عناوین و وضعیت کاتالوگ توسط مالک پلتفرم مدیریت می‌شود.');
     }
 
     public function softDeletePermission(string $tenantPermissionId): void
     {
-        $tenantId = $this->getTenantId();
-
-        DB::transaction(function () use ($tenantPermissionId, $tenantId) {
-            $permission = TenantPermission::query()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_permission_id', $tenantPermissionId)
-                ->firstOrFail();
-
-            $roleCount = TenantRolePermission::query()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_permission_id', $tenantPermissionId)
-                ->count();
-
-            if ($roleCount > 0) {
-                throw new Exception(
-                    "این مجوز به {$roleCount} نقش تخصیص داده شده است. ابتدا مجوز را از نقش‌ها بردارید، سپس حذف کنید."
-                );
-            }
-
-            TenantRolePermission::query()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_permission_id', $tenantPermissionId)
-                ->delete();
-
-            $permission->delete();
-
-            $this->logEventOutbox(
-                $tenantId,
-                'tenant_permissions',
-                $tenantPermissionId,
-                'identity.permission.deleted.v1',
-                ['permission_id' => $tenantPermissionId]
-            );
-
-            TenantCache::flushTenant($tenantId);
-        });
+        throw new Exception('حذف مجوز از طریق سامانه مجاز نیست. کاتالوگ عملیات فقط توسط تیم توسعه (سیدر) مدیریت می‌شود.');
     }
 
     public function createRole(CreateRoleDTO $dto): TenantRole
