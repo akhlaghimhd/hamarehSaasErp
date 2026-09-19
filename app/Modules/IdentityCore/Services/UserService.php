@@ -25,9 +25,10 @@ class UserService
     {
         $tenantId = $this->getTenantId();
 
+        // Strict tenant isolation: never list memberships outside current tenant.
         $query = TenantUser::query()
-            ->where('tenant_id', $tenantId)
-            ->with(['user']);
+            ->where('tenant_users.tenant_id', $tenantId)
+            ->with(['user:user_id,first_name,last_name,email,mobile,status,user_kind,created_at']);
 
         if ($membershipFilter === 'deleted') {
             $query->onlyTrashed()->orderByDesc('deleted_at');
@@ -374,9 +375,6 @@ class UserService
         return $digits;
     }
 
-    /**
-     * Only an existing tenant owner may grant or revoke the is_owner flag.
-     */
     private function assertActorIsTenantOwner(string $tenantId): void
     {
         $actorUserId = $this->currentActorUserId();
