@@ -144,6 +144,17 @@ class RoleService
                 ->where('tenant_permission_id', $tenantPermissionId)
                 ->firstOrFail();
 
+            $roleCount = TenantRolePermission::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_permission_id', $tenantPermissionId)
+                ->count();
+
+            if ($roleCount > 0) {
+                throw new Exception(
+                    "این مجوز به {$roleCount} نقش تخصیص داده شده است. ابتدا مجوز را از نقش‌ها بردارید، سپس حذف کنید."
+                );
+            }
+
             TenantRolePermission::query()
                 ->where('tenant_id', $tenantId)
                 ->where('tenant_permission_id', $tenantPermissionId)
@@ -455,7 +466,6 @@ class RoleService
                 return;
             }
 
-            // Schema PK is event_id (migration 2026_08_12_044009)
             DB::table('event_outbox')->insert([
                 'event_id'       => (string) Str::uuid(),
                 'tenant_id'      => $tenantId,
@@ -468,7 +478,6 @@ class RoleService
                 'created_at'     => now(),
             ]);
         } catch (\Throwable $e) {
-            // Never fail the business operation because of outbox write
             \Illuminate\Support\Facades\Log::error('event_outbox write failed', [
                 'event_type'   => $eventType,
                 'aggregate'    => $aggregateType,
