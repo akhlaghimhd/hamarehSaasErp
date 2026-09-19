@@ -67,18 +67,11 @@ class RoleService
             ->firstOrFail();
     }
 
-    /**
-     * Permission catalog codes are platform-owned (seeders only).
-     */
     public function createPermission(CreatePermissionDTO $dto): TenantPermission
     {
         throw new Exception('ایجاد مجوز از طریق سامانه مجاز نیست. کاتالوگ عملیات فقط توسط تیم توسعه (سیدر) به‌روز می‌شود.');
     }
 
-    /**
-     * Tenant owner may only relabel display name + user-facing description (hint).
-     * code / module_name / action_type stay system-owned.
-     */
     public function updatePermission(UpdatePermissionDTO $dto): TenantPermission
     {
         $tenantId = $this->getTenantId();
@@ -113,9 +106,6 @@ class RoleService
                 }
                 $changes['description'] = $desc === '' ? null : $desc;
             }
-
-            // Intentionally ignore module_name / action_type / status from DTO here:
-            // code identity is seeder-owned; group enablement is a future platform entitlement feature.
 
             if ($changes === []) {
                 return $permission;
@@ -159,12 +149,17 @@ class RoleService
                     ->firstOrFail();
             }
 
+            $roleName = trim($dto->roleName);
+            if ($roleName === '') {
+                throw new Exception('نام نقش الزامی است.');
+            }
+
             $role = TenantRole::create([
                 'tenant_role_id'  => (string) Str::uuid(),
                 'tenant_id'       => $tenantId,
                 'parent_role_id'  => $dto->parentRoleId,
-                'code'            => $dto->roleCode,
-                'name'            => $dto->roleName,
+                'code'            => $this->makeUniqueRoleCode($tenantId, $roleName),
+                'name'            => $roleName,
                 'description'     => $dto->description,
                 'status'          => 1,
             ]);
@@ -428,6 +423,37 @@ class RoleService
                 'tenant_permission_id'      => $permId,
             ]);
         }
+    }
+
+    /**
+     * Generate a unique role code within the tenant (UI does not collect code).
+     */
+    private function makeUniqueRoleCode(string $tenantId, string $roleName): string
+    {
+        $base = Str::slug($roleName, '-');
+        if ($base === '' || !preg_match('/[a-z0-9]/i', $base)) {
+            $base = 'role';
+        }
+        $base = Str::lower(Str::limit($base, 40, ''));
+
+        $code = $base;
+        $i = 2;
+        while (
+            TenantRole::query()
+                ->where('tenant_id', $tenantId)
+                ->where('code', $code)
+                ->exists()
+        ) {
+            $suffix = '-' . $i;
+            $code = Str::limit($base, 50 - strlen($suffix), '') . $suffix;
+            $i++;
+            if ($i > 500) {
+                $code = 'role-' . Str::lower(Str::random(8));
+                break;
+            }
+        }
+
+        return $code;
     }
 
     private function getTenantId(): string
