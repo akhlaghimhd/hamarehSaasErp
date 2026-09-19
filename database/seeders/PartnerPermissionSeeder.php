@@ -56,7 +56,6 @@ class PartnerPermissionSeeder extends Seeder
             }
         }
 
-        // Attach to tenant-admin role if present
         $existingRole = DB::table('tenant_roles')
             ->where('tenant_id', $demoTenantId)
             ->where('code', 'tenant-admin')
@@ -89,71 +88,51 @@ class PartnerPermissionSeeder extends Seeder
 
     private function getPartnerPermissions(): array
     {
-        $module = 'PartnerLayer';
+        $module = 'لایه شریک';
+
         return [
-            // Partner core
-            ['code' => 'partner.partner.view',   'name' => 'View Partners',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.partner.create', 'name' => 'Create Partner',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.partner.update', 'name' => 'Update Partner',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.partner.delete', 'name' => 'Delete Partner',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Partner User
-            ['code' => 'partner.partner_user.view',   'name' => 'View Partner Users',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.partner_user.create', 'name' => 'Create Partner User',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.partner_user.update', 'name' => 'Update Partner User',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.partner_user.delete', 'name' => 'Delete Partner User',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Tenant Assignment
-            ['code' => 'partner.assignment.view',   'name' => 'View Partner Tenant Assignments',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.assignment.create', 'name' => 'Create Partner Tenant Assignment', 'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.assignment.update', 'name' => 'Update Partner Tenant Assignment', 'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.assignment.delete', 'name' => 'Delete Partner Tenant Assignment', 'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Agreement
-            ['code' => 'partner.agreement.view',   'name' => 'View Partner Agreements',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.agreement.create', 'name' => 'Create Partner Agreement',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.agreement.update', 'name' => 'Update Partner Agreement',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.agreement.delete', 'name' => 'Delete Partner Agreement',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Commission Rule
-            ['code' => 'partner.commission_rule.view',   'name' => 'View Partner Commission Rules',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.commission_rule.create', 'name' => 'Create Partner Commission Rule',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.commission_rule.update', 'name' => 'Update Partner Commission Rule',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.commission_rule.delete', 'name' => 'Delete Partner Commission Rule',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Commission
-            ['code' => 'partner.commission.view',   'name' => 'View Partner Commissions',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.commission.create', 'name' => 'Create Partner Commission',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.commission.update', 'name' => 'Update Partner Commission',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.commission.delete', 'name' => 'Delete Partner Commission',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Payout
-            ['code' => 'partner.payout.view',   'name' => 'View Partner Payouts',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.payout.create', 'name' => 'Create Partner Payout',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.payout.update', 'name' => 'Update Partner Payout',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.payout.delete', 'name' => 'Delete Partner Payout',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Contact
-            ['code' => 'partner.contact.view',   'name' => 'View Partner Contacts',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.contact.create', 'name' => 'Create Partner Contact',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.contact.update', 'name' => 'Update Partner Contact',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.contact.delete', 'name' => 'Delete Partner Contact',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Document
-            ['code' => 'partner.document.view',   'name' => 'View Partner Documents',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.document.create', 'name' => 'Create Partner Document',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.document.update', 'name' => 'Update Partner Document',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.document.delete', 'name' => 'Delete Partner Document',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Bank Account
-            ['code' => 'partner.bank_account.view',   'name' => 'View Partner Bank Accounts',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.bank_account.create', 'name' => 'Create Partner Bank Account',  'module_name' => $module, 'action_type' => 'CREATE'],
-            ['code' => 'partner.bank_account.update', 'name' => 'Update Partner Bank Account',  'module_name' => $module, 'action_type' => 'UPDATE'],
-            ['code' => 'partner.bank_account.delete', 'name' => 'Delete Partner Bank Account',  'module_name' => $module, 'action_type' => 'DELETE'],
-
-            // Activity Log
-            ['code' => 'partner.activity_log.view',   'name' => 'View Partner Activity Logs',   'module_name' => $module, 'action_type' => 'READ'],
-            ['code' => 'partner.activity_log.create', 'name' => 'Create Partner Activity Log',  'module_name' => $module, 'action_type' => 'CREATE'],
+            ['code' => 'partner.partner.view', 'name' => 'مشاهده شرکا', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'فهرست و جزئیات شرکای تجاری را می‌بیند.'],
+            ['code' => 'partner.partner.create', 'name' => 'ایجاد شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'شریک تجاری جدید ثبت می‌کند.'],
+            ['code' => 'partner.partner.update', 'name' => 'ویرایش شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'اطلاعات شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.partner.delete', 'name' => 'حذف شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'شریک را حذف نرم می‌کند.'],
+            ['code' => 'partner.partner_user.view', 'name' => 'مشاهده کاربران شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'کاربران وابسته به شریک را می‌بیند.'],
+            ['code' => 'partner.partner_user.create', 'name' => 'ایجاد کاربر شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'کاربر جدید برای شریک ثبت می‌کند.'],
+            ['code' => 'partner.partner_user.update', 'name' => 'ویرایش کاربر شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'کاربر شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.partner_user.delete', 'name' => 'حذف کاربر شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'کاربر شریک را حذف می‌کند.'],
+            ['code' => 'partner.assignment.view', 'name' => 'مشاهده تخصیص مستأجر به شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'تخصیص سازمان‌ها به شرکا را می‌بیند.'],
+            ['code' => 'partner.assignment.create', 'name' => 'ایجاد تخصیص مستأجر', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'سازمان را به شریک تخصیص می‌دهد.'],
+            ['code' => 'partner.assignment.update', 'name' => 'ویرایش تخصیص مستأجر', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'تخصیص سازمان به شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.assignment.delete', 'name' => 'حذف تخصیص مستأجر', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'تخصیص سازمان به شریک را حذف می‌کند.'],
+            ['code' => 'partner.agreement.view', 'name' => 'مشاهده توافق‌نامه‌های شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'توافق‌نامه‌های شریک را می‌بیند.'],
+            ['code' => 'partner.agreement.create', 'name' => 'ایجاد توافق‌نامه شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'توافق‌نامه جدید برای شریک ثبت می‌کند.'],
+            ['code' => 'partner.agreement.update', 'name' => 'ویرایش توافق‌نامه شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'توافق‌نامه شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.agreement.delete', 'name' => 'حذف توافق‌نامه شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'توافق‌نامه شریک را حذف می‌کند.'],
+            ['code' => 'partner.commission_rule.view', 'name' => 'مشاهده قواعد کمیسیون', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'قواعد کمیسیون شریک را می‌بیند.'],
+            ['code' => 'partner.commission_rule.create', 'name' => 'ایجاد قاعده کمیسیون', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'قاعده کمیسیون جدید تعریف می‌کند.'],
+            ['code' => 'partner.commission_rule.update', 'name' => 'ویرایش قاعده کمیسیون', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'قاعده کمیسیون را ویرایش می‌کند.'],
+            ['code' => 'partner.commission_rule.delete', 'name' => 'حذف قاعده کمیسیون', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'قاعده کمیسیون را حذف می‌کند.'],
+            ['code' => 'partner.commission.view', 'name' => 'مشاهده کمیسیون‌ها', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'کمیسیون‌های محاسبه‌شده را می‌بیند.'],
+            ['code' => 'partner.commission.create', 'name' => 'ایجاد کمیسیون', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'رکورد کمیسیون جدید ثبت می‌کند.'],
+            ['code' => 'partner.commission.update', 'name' => 'ویرایش کمیسیون', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'کمیسیون را ویرایش می‌کند.'],
+            ['code' => 'partner.commission.delete', 'name' => 'حذف کمیسیون', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'کمیسیون را حذف می‌کند.'],
+            ['code' => 'partner.payout.view', 'name' => 'مشاهده پرداخت‌های شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'پرداخت‌های شریک را می‌بیند.'],
+            ['code' => 'partner.payout.create', 'name' => 'ایجاد پرداخت شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'پرداخت به شریک ثبت می‌کند.'],
+            ['code' => 'partner.payout.update', 'name' => 'ویرایش پرداخت شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'پرداخت شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.payout.delete', 'name' => 'حذف پرداخت شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'پرداخت شریک را حذف می‌کند.'],
+            ['code' => 'partner.contact.view', 'name' => 'مشاهده مخاطبین شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'مخاطبین شریک را می‌بیند.'],
+            ['code' => 'partner.contact.create', 'name' => 'ایجاد مخاطب شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'مخاطب جدید برای شریک ثبت می‌کند.'],
+            ['code' => 'partner.contact.update', 'name' => 'ویرایش مخاطب شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'مخاطب شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.contact.delete', 'name' => 'حذف مخاطب شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'مخاطب شریک را حذف می‌کند.'],
+            ['code' => 'partner.document.view', 'name' => 'مشاهده اسناد شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'اسناد پیوست شریک را می‌بیند.'],
+            ['code' => 'partner.document.create', 'name' => 'ایجاد سند شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'سند جدید برای شریک ثبت می‌کند.'],
+            ['code' => 'partner.document.update', 'name' => 'ویرایش سند شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'سند شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.document.delete', 'name' => 'حذف سند شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'سند شریک را حذف می‌کند.'],
+            ['code' => 'partner.bank_account.view', 'name' => 'مشاهده حساب‌های بانکی شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'حساب‌های بانکی شریک را می‌بیند.'],
+            ['code' => 'partner.bank_account.create', 'name' => 'ایجاد حساب بانکی شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'حساب بانکی جدید برای شریک ثبت می‌کند.'],
+            ['code' => 'partner.bank_account.update', 'name' => 'ویرایش حساب بانکی شریک', 'module_name' => $module, 'action_type' => 'UPDATE', 'description' => 'حساب بانکی شریک را ویرایش می‌کند.'],
+            ['code' => 'partner.bank_account.delete', 'name' => 'حذف حساب بانکی شریک', 'module_name' => $module, 'action_type' => 'DELETE', 'description' => 'حساب بانکی شریک را حذف می‌کند.'],
+            ['code' => 'partner.activity_log.view', 'name' => 'مشاهده لاگ فعالیت شریک', 'module_name' => $module, 'action_type' => 'READ', 'description' => 'لاگ فعالیت‌های شریک را می‌بیند.'],
+            ['code' => 'partner.activity_log.create', 'name' => 'ایجاد لاگ فعالیت شریک', 'module_name' => $module, 'action_type' => 'CREATE', 'description' => 'رویداد فعالیت شریک را ثبت می‌کند.'],
         ];
     }
 }
