@@ -9,105 +9,330 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Heavy QA dataset under the demo tenant owner:
- * - Key roles + child roles (hierarchy via parent_role_id when column exists)
- * - Permission assignment per role (only codes that exist in tenant_permissions)
- * - One dedicated user per role for login tests
+ * Heavy QA dataset: hierarchical roles + permissions + one user per role.
+ * Runs for EVERY tenant that already has memberships (fixes empty UI when login tenant ≠ legacy demo UUID).
  *
- * Prerequisites:
- *   php artisan db:seed --class=PermissionSeeder
- *   php artisan db:seed --class=DemoTenantOwnerSeeder
- *
- * Usage:
+ *   docker compose exec app php artisan db:seed --class=PermissionSeeder
  *   docker compose exec app php artisan db:seed --class=DemoOrgRolesUsersSeeder
  *
- * Default password for all staff users: Staff123!
+ * Staff password: Staff123!
  */
 class DemoOrgRolesUsersSeeder extends Seeder
 {
-    private const DEMO_TENANT_ID = '3ab77cac-1343-4b13-8e14-0d887aad132a';
     private const STAFF_PASSWORD = 'Staff123!';
 
-    /** @var array<string, string> code => role_id */
+    /** @var array<string, string> */
     private array $roleIds = [];
 
-    /** @var array<string, string> permission code => id */
+    /** @var array<string, string> */
     private array $permMap = [];
 
     private bool $hasParentColumn = false;
 
     public function run(): void
     {
-        $tenantId = $this->resolveTenantId();
-        if ($tenantId === null) {
-            $this->command?->error('No tenant found. Seed tenants + PermissionSeeder first.');
+        if (!Schema::hasTable('tenants') || !Schema::hasTable('tenant_roles')) {
+            $this->command?->error('Required tables missing.');
 
             return;
         }
-
-        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
         $this->hasParentColumn = Schema::hasColumn('tenant_roles', 'parent_role_id');
-        $this->permMap = $this->loadPermissionMap($tenantId);
 
-        if ($this->permMap === []) {
-            $this->command?->error('No permissions for tenant. Run: php artisan db:seed --class=PermissionSeeder');
+        $tenantIds = $this->resolveTenantIds();
+        if ($tenantIds === []) {
+            $this->command?->error('No tenants found.');
 
             return;
         }
 
-        $tree = $this->roleTree();
+        $this->printDiagnostics($tenantIds);
 
-        // Pass 1: create parents then children
-        foreach ($tree as $node) {
-            $this->upsertRole($tenantId, $node, null);
-            foreach ($node['children'] ?? [] as $child) {
-                $this->upsertRole($tenantId, $child, $node['code']);
+        // Ensure permission catalog exists somewhere, then clone to each tenant
+        $this->ensureCatalogOnAllTenants($tenantIds);
+
+        foreach ($tenantIds as $tenantId) {
+            $this->roleIds = [];
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+
+            $this->permMap = $this->loadPermissionMap($tenantId);
+            if ($this->permMap === []) {
+                $this->command?->warn("Tenant {$tenantId}: still 0 permissions after catalog sync — skip roles.");
+                continue;
             }
+
+            $tree = $this->roleTree();
+
+            foreach ($tree as $node) {
+                $this->upsertRole($tenantId, $node, null);
+                foreach ($node['children'] ?? [] as $child) {
+                    $this->upsertRole($tenantId, $child, $node['code']);
+                }
+            }
+
+            // Keep tenant-admin as full catalog (owner)
+            $this->ensureTenantAdminFullAccess($tenantId);
+
+            foreach ($tree as $node) {
+                $this->syncPermissions($tenantId, $node['code'], $node['permissions'] ?? []);
+                foreach ($node['children'] ?? [] as $child) {
+                    $this->syncPermissions($tenantId, $child['code'], $child['permissions'] ?? []);
+                }
+            }
+
+            $created = [];
+            foreach ($tree as $node) {
+                $created[] = $this->ensureUserForRole($tenantId, $node);
+                foreach ($node['children'] ?? [] as $child) {
+                    $created[] = $this->ensureUserForRole($tenantId, $child);
+                }
+            }
+
+            $roleCount = (int) DB::table('tenant_roles')->where('tenant_id', $tenantId)->whereNull('deleted_at')->count();
+            $permCount = count($this->permMap);
+            $this->command?->info("Tenant {$tenantId}: roles={$roleCount} perms={$permCount} staff_users=".count($created));
         }
 
-        // Pass 2: assign permissions
-        foreach ($tree as $node) {
-            $this->syncPermissions($tenantId, $node['code'], $node['permissions'] ?? []);
-            foreach ($node['children'] ?? [] as $child) {
-                $this->syncPermissions($tenantId, $child['code'], $child['permissions'] ?? []);
-            }
-        }
-
-        // Pass 3: one user per role
-        $created = [];
-        foreach ($tree as $node) {
-            $created[] = $this->ensureUserForRole($tenantId, $node);
-            foreach ($node['children'] ?? [] as $child) {
-                $created[] = $this->ensureUserForRole($tenantId, $child);
-            }
-        }
-
-        $this->command?->info('Demo org structure ready on tenant '.$tenantId);
         $this->command?->info('Staff password for all role users: '.self::STAFF_PASSWORD);
-        $this->command?->table(
-            ['Role', 'Email', 'Mobile', 'Perms assigned'],
-            array_map(static fn ($r) => [
-                $r['role'],
-                $r['email'],
-                $r['mobile'],
-                $r['perm_count'],
-            ], $created)
-        );
+        $this->command?->info('Re-login after seed. Owner: owner@demo.local / Owner123!');
     }
 
-    private function resolveTenantId(): ?string
+    /** @return list<string> */
+    private function resolveTenantIds(): array
     {
-        $fromEnv = env('DEMO_TENANT_ID');
-        if (is_string($fromEnv) && $fromEnv !== '' && DB::table('tenants')->where('tenant_id', $fromEnv)->exists()) {
-            return $fromEnv;
+        $ids = DB::table('tenants')->pluck('tenant_id')->map(fn ($id) => (string) $id)->all();
+
+        // Prefer tenants that already have members (active login targets)
+        if (Schema::hasTable('tenant_users')) {
+            $withMembers = DB::table('tenant_users')
+                ->whereNull('deleted_at')
+                ->distinct()
+                ->pluck('tenant_id')
+                ->map(fn ($id) => (string) $id)
+                ->all();
+
+            if ($withMembers !== []) {
+                // Union: members tenants first, then any remaining
+                $ids = array_values(array_unique(array_merge($withMembers, $ids)));
+            }
         }
 
-        if (DB::table('tenants')->where('tenant_id', self::DEMO_TENANT_ID)->exists()) {
-            return self::DEMO_TENANT_ID;
+        return $ids;
+    }
+
+    /** @param list<string> $tenantIds */
+    private function printDiagnostics(array $tenantIds): void
+    {
+        $this->command?->info('--- Identity data diagnostic (before seed) ---');
+        foreach ($tenantIds as $tid) {
+            $roles = Schema::hasTable('tenant_roles')
+                ? (int) DB::table('tenant_roles')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
+                : 0;
+            $perms = Schema::hasTable('tenant_permissions')
+                ? (int) DB::table('tenant_permissions')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
+                : 0;
+            $members = Schema::hasTable('tenant_users')
+                ? (int) DB::table('tenant_users')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
+                : 0;
+            $owners = Schema::hasTable('tenant_users')
+                ? (int) DB::table('tenant_users')->where('tenant_id', $tid)->where('is_owner', true)->whereNull('deleted_at')->count()
+                : 0;
+            $this->command?->info("  {$tid}  roles={$roles}  perms={$perms}  members={$members}  owners={$owners}");
+        }
+        $this->command?->info('-----------------------------------------------');
+    }
+
+    /** @param list<string> $tenantIds */
+    private function ensureCatalogOnAllTenants(array $tenantIds): void
+    {
+        if (!Schema::hasTable('tenant_permissions')) {
+            return;
         }
 
-        return DB::table('tenants')->orderBy('created_at')->value('tenant_id');
+        $sourceTenantId = DB::table('tenant_permissions')
+            ->select('tenant_id', DB::raw('COUNT(*) as c'))
+            ->groupBy('tenant_id')
+            ->orderByDesc('c')
+            ->value('tenant_id');
+
+        if (!$sourceTenantId) {
+            // bootstrap minimal identity on first tenant
+            $first = $tenantIds[0];
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$first]);
+            $this->bootstrapMinimalIdentity($first);
+            $sourceTenantId = $first;
+        }
+
+        $sourcePerms = DB::table('tenant_permissions')
+            ->where('tenant_id', $sourceTenantId)
+            ->whereNull('deleted_at')
+            ->get();
+
+        if ($sourcePerms->isEmpty()) {
+            $this->bootstrapMinimalIdentity((string) $sourceTenantId);
+            $sourcePerms = DB::table('tenant_permissions')
+                ->where('tenant_id', $sourceTenantId)
+                ->whereNull('deleted_at')
+                ->get();
+        }
+
+        foreach ($tenantIds as $tenantId) {
+            if ($tenantId === (string) $sourceTenantId) {
+                continue;
+            }
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+            foreach ($sourcePerms as $perm) {
+                $exists = DB::table('tenant_permissions')
+                    ->where('tenant_id', $tenantId)
+                    ->where('code', $perm->code)
+                    ->exists();
+                if ($exists) {
+                    continue;
+                }
+                DB::table('tenant_permissions')->insert([
+                    'tenant_permission_id' => (string) Str::uuid(),
+                    'tenant_id' => $tenantId,
+                    'code' => $perm->code,
+                    'name' => $perm->name,
+                    'module_name' => $perm->module_name,
+                    'action_type' => $perm->action_type ?? null,
+                    'description' => $perm->description ?? null,
+                    'status' => 1,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        }
+    }
+
+    private function bootstrapMinimalIdentity(string $tenantId): void
+    {
+        $minimal = [
+            ['code' => 'identity.user.view', 'name' => 'مشاهده کاربران', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+            ['code' => 'identity.user.create', 'name' => 'ایجاد کاربر', 'module_name' => 'هویت و دسترسی', 'action_type' => 'CREATE'],
+            ['code' => 'identity.user.update', 'name' => 'ویرایش کاربر', 'module_name' => 'هویت و دسترسی', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.user.delete', 'name' => 'حذف کاربر', 'module_name' => 'هویت و دسترسی', 'action_type' => 'DELETE'],
+            ['code' => 'identity.role.view', 'name' => 'مشاهده نقش‌ها', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+            ['code' => 'identity.role.create', 'name' => 'ایجاد نقش', 'module_name' => 'هویت و دسترسی', 'action_type' => 'CREATE'],
+            ['code' => 'identity.role.update', 'name' => 'ویرایش نقش', 'module_name' => 'هویت و دسترسی', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.role.delete', 'name' => 'حذف نقش', 'module_name' => 'هویت و دسترسی', 'action_type' => 'DELETE'],
+            ['code' => 'identity.role.assign', 'name' => 'تخصیص نقش', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.role.assign-permissions', 'name' => 'تخصیص مجوز به نقش', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.permission.view', 'name' => 'مشاهده مجوزها', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+            ['code' => 'identity.scope.view', 'name' => 'مشاهده محدوده دسترسی', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+            ['code' => 'identity.profile.view', 'name' => 'مشاهده پروفایل', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+            ['code' => 'identity.profile.update', 'name' => 'ویرایش پروفایل', 'module_name' => 'هویت و دسترسی', 'action_type' => 'UPDATE'],
+            ['code' => 'identity.membership_history.view', 'name' => 'مشاهده تاریخچه عضویت', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
+        ];
+
+        foreach ($minimal as $perm) {
+            if (DB::table('tenant_permissions')->where('tenant_id', $tenantId)->where('code', $perm['code'])->exists()) {
+                continue;
+            }
+            DB::table('tenant_permissions')->insert([
+                'tenant_permission_id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'code' => $perm['code'],
+                'name' => $perm['name'],
+                'module_name' => $perm['module_name'],
+                'action_type' => $perm['action_type'],
+                'description' => $perm['name'],
+                'status' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    private function ensureTenantAdminFullAccess(string $tenantId): void
+    {
+        $role = DB::table('tenant_roles')
+            ->where('tenant_id', $tenantId)
+            ->where('code', 'tenant-admin')
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$role) {
+            $roleId = (string) Str::uuid();
+            $insert = [
+                'tenant_role_id' => $roleId,
+                'tenant_id' => $tenantId,
+                'code' => 'tenant-admin',
+                'name' => 'مدیر سازمان',
+                'description' => 'دسترسی کامل به تمام قابلیت‌های سازمان',
+                'status' => 1,
+                'is_system_default' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+                'row_version' => 1,
+            ];
+            if ($this->hasParentColumn) {
+                $insert['parent_role_id'] = null;
+            }
+            DB::table('tenant_roles')->insert($insert);
+        } else {
+            $roleId = (string) $role->tenant_role_id;
+            DB::table('tenant_roles')->where('tenant_role_id', $roleId)->update([
+                'name' => 'مدیر سازمان',
+                'status' => 1,
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->roleIds['tenant-admin'] = $roleId;
+
+        DB::table('tenant_role_permissions')
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_role_id', $roleId)
+            ->delete();
+
+        $rows = [];
+        foreach ($this->permMap as $pid) {
+            $rows[] = [
+                'tenant_role_permission_id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'tenant_role_id' => $roleId,
+                'tenant_permission_id' => $pid,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+        }
+        if ($rows !== []) {
+            foreach (array_chunk($rows, 100) as $chunk) {
+                DB::table('tenant_role_permissions')->insert($chunk);
+            }
+        }
+
+        // Assign to all owners of this tenant
+        if (!Schema::hasTable('tenant_users')) {
+            return;
+        }
+        $owners = DB::table('tenant_users')
+            ->where('tenant_id', $tenantId)
+            ->where('is_owner', true)
+            ->whereNull('deleted_at')
+            ->pluck('user_id');
+
+        foreach ($owners as $userId) {
+            $exists = DB::table('tenant_user_roles')
+                ->where('tenant_id', $tenantId)
+                ->where('user_id', $userId)
+                ->where('tenant_role_id', $roleId)
+                ->whereNull('deleted_at')
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+            DB::table('tenant_user_roles')->insert([
+                'tenant_user_role_id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'user_id' => $userId,
+                'tenant_role_id' => $roleId,
+                'created_at' => now(),
+                'updated_at' => now(),
+                'row_version' => 1,
+            ]);
+        }
     }
 
     /** @return array<string, string> */
@@ -127,11 +352,7 @@ class DemoOrgRolesUsersSeeder extends Seeder
         return $map;
     }
 
-    /**
-     * Hierarchical org roles for ERP testing under tenant owner.
-     *
-     * @return list<array<string, mixed>>
-     */
+    /** @return list<array<string, mixed>> */
     private function roleTree(): array
     {
         $identityBase = [
@@ -150,22 +371,11 @@ class DemoOrgRolesUsersSeeder extends Seeder
                 'first_name' => 'مدیر',
                 'last_name' => 'هویت',
                 'permissions' => array_merge($identityBase, [
-                    'identity.user.create',
-                    'identity.user.update',
-                    'identity.user.delete',
-                    'identity.user.restore',
-                    'identity.role.view',
-                    'identity.role.create',
-                    'identity.role.update',
-                    'identity.role.delete',
-                    'identity.role.assign',
-                    'identity.role.assign-permissions',
+                    'identity.user.create', 'identity.user.update', 'identity.user.delete', 'identity.user.restore',
+                    'identity.role.view', 'identity.role.create', 'identity.role.update', 'identity.role.delete',
+                    'identity.role.assign', 'identity.role.assign-permissions',
                     'identity.permission.view',
-                    'identity.scope.view',
-                    'identity.scope.create',
-                    'identity.scope.update',
-                    'identity.scope.delete',
-                    'identity.scope.assign',
+                    'identity.scope.view', 'identity.scope.create', 'identity.scope.update', 'identity.scope.delete', 'identity.scope.assign',
                     'identity.membership_history.view',
                 ]),
                 'children' => [
@@ -178,26 +388,20 @@ class DemoOrgRolesUsersSeeder extends Seeder
                         'first_name' => 'کارشناس',
                         'last_name' => 'اعضا',
                         'permissions' => array_merge($identityBase, [
-                            'identity.user.create',
-                            'identity.user.update',
-                            'identity.membership_history.view',
+                            'identity.user.create', 'identity.user.update', 'identity.membership_history.view',
                         ]),
                     ],
                     [
                         'code' => 'identity-roles',
                         'name' => 'کارشناس نقش‌ها',
-                        'description' => 'تعریف نقش و تخصیص مجوز به نقش؛ بدون حذف کاربر',
+                        'description' => 'تعریف نقش و تخصیص مجوز به نقش',
                         'email' => 'identity.roles@demo.local',
                         'mobile' => '09121000003',
                         'first_name' => 'کارشناس',
                         'last_name' => 'نقش',
                         'permissions' => array_merge($identityBase, [
-                            'identity.role.view',
-                            'identity.role.create',
-                            'identity.role.update',
-                            'identity.role.assign',
-                            'identity.role.assign-permissions',
-                            'identity.permission.view',
+                            'identity.role.view', 'identity.role.create', 'identity.role.update',
+                            'identity.role.assign', 'identity.role.assign-permissions', 'identity.permission.view',
                         ]),
                     ],
                 ],
@@ -211,14 +415,9 @@ class DemoOrgRolesUsersSeeder extends Seeder
                 'first_name' => 'مدیر',
                 'last_name' => 'مالی',
                 'permissions' => array_merge($identityBase, [
-                    'accounting.voucher.view',
-                    'accounting.voucher.post',
-                    'accounting.account.view',
-                    'procurement.payment-schedule.view',
-                    'procurement.cash-transaction.view',
-                    'procurement.cash-transaction.create',
-                    'procurement.sales-invoice.view',
-                    'procurement.purchase-invoice.view',
+                    'accounting.voucher.view', 'accounting.voucher.post', 'accounting.account.view',
+                    'procurement.payment-schedule.view', 'procurement.cash-transaction.view', 'procurement.cash-transaction.create',
+                    'procurement.sales-invoice.view', 'procurement.purchase-invoice.view',
                 ]),
                 'children' => [
                     [
@@ -230,10 +429,7 @@ class DemoOrgRolesUsersSeeder extends Seeder
                         'first_name' => 'حسابدار',
                         'last_name' => 'ارشد',
                         'permissions' => array_merge($identityBase, [
-                            'accounting.voucher.view',
-                            'accounting.voucher.post',
-                            'accounting.account.view',
-                            'procurement.cash-transaction.view',
+                            'accounting.voucher.view', 'accounting.voucher.post', 'accounting.account.view',
                         ]),
                     ],
                     [
@@ -245,8 +441,7 @@ class DemoOrgRolesUsersSeeder extends Seeder
                         'first_name' => 'حسابدار',
                         'last_name' => 'جونیور',
                         'permissions' => array_merge($identityBase, [
-                            'accounting.voucher.view',
-                            'accounting.account.view',
+                            'accounting.voucher.view', 'accounting.account.view',
                         ]),
                     ],
                 ],
@@ -254,42 +449,31 @@ class DemoOrgRolesUsersSeeder extends Seeder
             [
                 'code' => 'sales-manager',
                 'name' => 'مدیر فروش',
-                'description' => 'مدیریت سفارش، حواله و فاکتور فروش',
+                'description' => 'مدیریت سفارش و فاکتور فروش',
                 'email' => 'sales.manager@demo.local',
                 'mobile' => '09121000021',
                 'first_name' => 'مدیر',
                 'last_name' => 'فروش',
                 'permissions' => array_merge($identityBase, [
-                    'procurement.sales-order.view',
-                    'procurement.sales-order.create',
-                    'procurement.sales-order.confirm',
+                    'procurement.sales-order.view', 'procurement.sales-order.create', 'procurement.sales-order.confirm',
                     'procurement.sales-quotation.create',
-                    'procurement.sales-delivery.view',
-                    'procurement.sales-delivery.create',
-                    'procurement.sales-delivery.post',
-                    'procurement.sales-invoice.view',
-                    'procurement.sales-invoice.create',
-                    'procurement.sales-invoice.update',
-                    'procurement.sales-invoice.post',
+                    'procurement.sales-delivery.view', 'procurement.sales-delivery.create', 'procurement.sales-delivery.post',
+                    'procurement.sales-invoice.view', 'procurement.sales-invoice.create', 'procurement.sales-invoice.update', 'procurement.sales-invoice.post',
                     'procurement.return-order.create',
-                    'masterdata.business-partner.view',
-                    'masterdata.business-partner.create',
-                    'masterdata.business-partner.update',
+                    'masterdata.business-partner.view', 'masterdata.business-partner.create', 'masterdata.business-partner.update',
                 ]),
                 'children' => [
                     [
                         'code' => 'sales-rep',
                         'name' => 'کارشناس فروش',
-                        'description' => 'ثبت سفارش و پیش‌فاکتور بدون قطعی‌سازی فاکتور',
+                        'description' => 'ثبت سفارش بدون قطعی‌سازی فاکتور',
                         'email' => 'sales.rep@demo.local',
                         'mobile' => '09121000022',
                         'first_name' => 'کارشناس',
                         'last_name' => 'فروش',
                         'permissions' => array_merge($identityBase, [
-                            'procurement.sales-order.view',
-                            'procurement.sales-order.create',
-                            'procurement.sales-quotation.create',
-                            'procurement.sales-invoice.view',
+                            'procurement.sales-order.view', 'procurement.sales-order.create',
+                            'procurement.sales-quotation.create', 'procurement.sales-invoice.view',
                             'masterdata.business-partner.view',
                         ]),
                     ],
@@ -304,36 +488,26 @@ class DemoOrgRolesUsersSeeder extends Seeder
                 'first_name' => 'مدیر',
                 'last_name' => 'خرید',
                 'permissions' => array_merge($identityBase, [
-                    'procurement.purchase-requisition.view',
-                    'procurement.purchase-requisition.create',
-                    'procurement.purchase-requisition.submit',
-                    'procurement.purchase-requisition.approve',
+                    'procurement.purchase-requisition.view', 'procurement.purchase-requisition.create',
+                    'procurement.purchase-requisition.submit', 'procurement.purchase-requisition.approve',
                     'procurement.purchase-order.create',
-                    'procurement.purchase-receipt.view',
-                    'procurement.purchase-receipt.create',
-                    'procurement.purchase-receipt.post',
-                    'procurement.purchase-invoice.view',
-                    'procurement.purchase-invoice.create',
-                    'procurement.purchase-invoice.post',
-                    'masterdata.business-partner.view',
-                    'masterdata.business-partner.create',
+                    'procurement.purchase-receipt.view', 'procurement.purchase-receipt.create', 'procurement.purchase-receipt.post',
+                    'procurement.purchase-invoice.view', 'procurement.purchase-invoice.create', 'procurement.purchase-invoice.post',
+                    'masterdata.business-partner.view', 'masterdata.business-partner.create',
                 ]),
                 'children' => [
                     [
                         'code' => 'purchase-clerk',
                         'name' => 'کارشناس خرید',
-                        'description' => 'ثبت درخواست و سفارش بدون تأیید نهایی',
+                        'description' => 'ثبت درخواست و سفارش',
                         'email' => 'purchase.clerk@demo.local',
                         'mobile' => '09121000032',
                         'first_name' => 'کارشناس',
                         'last_name' => 'خرید',
                         'permissions' => array_merge($identityBase, [
-                            'procurement.purchase-requisition.view',
-                            'procurement.purchase-requisition.create',
-                            'procurement.purchase-requisition.submit',
-                            'procurement.purchase-order.create',
-                            'procurement.purchase-receipt.view',
-                            'masterdata.business-partner.view',
+                            'procurement.purchase-requisition.view', 'procurement.purchase-requisition.create',
+                            'procurement.purchase-requisition.submit', 'procurement.purchase-order.create',
+                            'procurement.purchase-receipt.view', 'masterdata.business-partner.view',
                         ]),
                     ],
                 ],
@@ -347,27 +521,21 @@ class DemoOrgRolesUsersSeeder extends Seeder
                 'first_name' => 'مدیر',
                 'last_name' => 'انبار',
                 'permissions' => array_merge($identityBase, [
-                    'inventory.item.view',
-                    'inventory.item.create',
-                    'inventory.warehouse.view',
-                    'inventory.document.view',
-                    'inventory.document.create',
-                    'inventory.document.post',
+                    'inventory.item.view', 'inventory.item.create', 'inventory.warehouse.view',
+                    'inventory.document.view', 'inventory.document.create', 'inventory.document.post',
                 ]),
                 'children' => [
                     [
                         'code' => 'warehouse-clerk',
                         'name' => 'انباردار',
-                        'description' => 'ثبت اسناد موجودی بدون قطعی‌سازی',
+                        'description' => 'ثبت اسناد موجودی',
                         'email' => 'warehouse.clerk@demo.local',
                         'mobile' => '09121000042',
                         'first_name' => 'انباردار',
                         'last_name' => 'عملیاتی',
                         'permissions' => array_merge($identityBase, [
-                            'inventory.item.view',
-                            'inventory.warehouse.view',
-                            'inventory.document.view',
-                            'inventory.document.create',
+                            'inventory.item.view', 'inventory.warehouse.view',
+                            'inventory.document.view', 'inventory.document.create',
                         ]),
                     ],
                 ],
@@ -375,27 +543,19 @@ class DemoOrgRolesUsersSeeder extends Seeder
             [
                 'code' => 'operations-viewer',
                 'name' => 'ناظر عملیات',
-                'description' => 'دسترسی فقط‌خواندنی چندماژوله برای کنترل مدیریتی',
+                'description' => 'دسترسی فقط‌خواندنی چندماژوله',
                 'email' => 'ops.viewer@demo.local',
                 'mobile' => '09121000051',
                 'first_name' => 'ناظر',
                 'last_name' => 'عملیات',
                 'permissions' => array_merge($identityBase, [
-                    'identity.role.view',
-                    'identity.permission.view',
-                    'identity.membership_history.view',
-                    'accounting.voucher.view',
-                    'accounting.account.view',
-                    'inventory.item.view',
-                    'inventory.warehouse.view',
-                    'inventory.document.view',
-                    'procurement.sales-order.view',
-                    'procurement.sales-invoice.view',
-                    'procurement.purchase-receipt.view',
-                    'procurement.purchase-invoice.view',
+                    'identity.role.view', 'identity.permission.view', 'identity.membership_history.view',
+                    'accounting.voucher.view', 'accounting.account.view',
+                    'inventory.item.view', 'inventory.warehouse.view', 'inventory.document.view',
+                    'procurement.sales-order.view', 'procurement.sales-invoice.view',
+                    'procurement.purchase-receipt.view', 'procurement.purchase-invoice.view',
                     'masterdata.business-partner.view',
-                    'workflow.instance.view',
-                    'workflow.task.view',
+                    'workflow.instance.view', 'workflow.task.view',
                 ]),
                 'children' => [],
             ],
@@ -423,7 +583,6 @@ class DemoOrgRolesUsersSeeder extends Seeder
             'status' => 1,
             'updated_at' => now(),
         ];
-
         if ($this->hasParentColumn) {
             $payload['parent_role_id'] = $parentId;
         }
