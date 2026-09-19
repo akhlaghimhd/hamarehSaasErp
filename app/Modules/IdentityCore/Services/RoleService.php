@@ -25,7 +25,7 @@ class RoleService
         $this->getTenantId();
 
         return TenantRole::query()
-            ->with(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name'])
+            ->with(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name,description'])
             ->orderBy('code')
             ->get();
     }
@@ -40,7 +40,7 @@ class RoleService
             ->with([
                 'parent:tenant_role_id,name,code',
                 'children:tenant_role_id,parent_role_id,name,code,status',
-                'permissions:tenant_permission_id,code,name,module_name',
+                'permissions:tenant_permission_id,code,name,module_name,description',
             ])
             ->firstOrFail();
     }
@@ -195,7 +195,6 @@ class RoleService
                 ]
             );
 
-            // permission_ids are an explicit snapshot only — no live inheritance from parent.
             if (!empty($dto->permissionIds)) {
                 $permissionsDto = new AssignPermissionsToRoleDTO($role->tenant_role_id, $dto->permissionIds);
                 $this->assignPermissionsToRole($permissionsDto);
@@ -203,7 +202,7 @@ class RoleService
 
             TenantCache::flushTenant($tenantId);
 
-            return $role->load(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name']);
+            return $role->load(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name,description']);
         });
     }
 
@@ -241,7 +240,7 @@ class RoleService
 
             TenantCache::flushTenant($tenantId);
 
-            return $role->fresh(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name']);
+            return $role->fresh(['parent:tenant_role_id,name,code', 'permissions:tenant_permission_id,code,name,description']);
         });
     }
 
@@ -268,7 +267,6 @@ class RoleService
                 throw new Exception('این نقش دارای زیرنقش است. ابتدا زیرنقش‌ها را منتقل یا حذف کنید.');
             }
 
-            // Detach user assignments so soft-deleted roles never break auth lookups.
             TenantUserRole::query()
                 ->where('tenant_id', $tenantId)
                 ->where('tenant_role_id', $tenantRoleId)
@@ -293,10 +291,6 @@ class RoleService
         });
     }
 
-    /**
-     * Sync roles for a platform user in the current tenant.
-     * Adds missing role_ids and removes assignments not in the list.
-     */
     public function assignRoleToUser(AssignRoleToUserDTO $dto): TenantUserRole
     {
         $tenantId = $this->getTenantId();
