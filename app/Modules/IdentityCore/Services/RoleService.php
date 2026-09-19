@@ -5,13 +5,14 @@ namespace App\Modules\IdentityCore\Services;
 use App\Modules\IdentityCore\DTOs\CreateRoleDTO;
 use App\Modules\IdentityCore\DTOs\UpdateRoleDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
+use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\DTOs\CreatePermissionDTO;
 use App\Modules\IdentityCore\DTOs\UpdatePermissionDTO;
 use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantPermission;
 use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Modules\IdentityCore\Models\TenantUserRole;
-use App\Base\Cache\TenantCache;
+use App\Base\Support\TenantCache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -30,7 +31,7 @@ class RoleService
             ->get();
     }
 
-    public function getRoleById(string $tenantRoleId): TenantRole
+    public function getRole(string $tenantRoleId): TenantRole
     {
         $tenantId = $this->getTenantId();
 
@@ -56,7 +57,7 @@ class RoleService
             ->get();
     }
 
-    public function getPermissionById(string $tenantPermissionId): TenantPermission
+    public function getPermission(string $tenantPermissionId): TenantPermission
     {
         $tenantId = $this->getTenantId();
 
@@ -307,7 +308,7 @@ class RoleService
         $roleIds = array_values(array_unique(array_filter($dto->roleIds)));
 
         if ($roleIds === []) {
-            throw new Exception('At least one role_id is required.');
+            throw new Exception('حداقل یک نقش باید انتخاب شود.');
         }
 
         return DB::transaction(function () use ($dto, $tenantId, $roleIds) {
@@ -374,9 +375,11 @@ class RoleService
             ->get();
     }
 
-    public function assignPermissionsToRole(string $tenantRoleId, array $permissionIds): TenantRole
+    public function assignPermissionsToRole(AssignPermissionsToRoleDTO $dto): TenantRole
     {
         $tenantId = $this->getTenantId();
+        $tenantRoleId = $dto->tenantRoleId;
+        $permissionIds = $dto->permissionIds;
 
         return DB::transaction(function () use ($tenantRoleId, $permissionIds, $tenantId) {
             $role = TenantRole::query()
@@ -447,19 +450,31 @@ class RoleService
         string $eventType,
         array $payload
     ): void {
-        if (!\Illuminate\Support\Facades\Schema::hasTable('event_outbox')) {
-            return;
-        }
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('event_outbox')) {
+                return;
+            }
 
-        DB::table('event_outbox')->insert([
-            'event_outbox_id' => (string) Str::uuid(),
-            'tenant_id'       => $tenantId,
-            'aggregate_type'  => $aggregateType,
-            'aggregate_id'    => $aggregateId,
-            'event_type'      => $eventType,
-            'payload'         => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            'status'          => 1,
-            'created_at'      => now(),
-        ]);
+            // Schema PK is event_id (migration 2026_08_12_044009)
+            DB::table('event_outbox')->insert([
+                'event_id'       => (string) Str::uuid(),
+                'tenant_id'      => $tenantId,
+                'aggregate_type' => $aggregateType,
+                'aggregate_id'   => $aggregateId,
+                'event_type'     => $eventType,
+                'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'status'         => 1,
+                'retry_count'    => 0,
+                'created_at'     => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Never fail the business operation because of outbox write
+            \Illuminate\Support\Facades\Log::error('event_outbox write failed', [
+                'event_type'   => $eventType,
+                'aggregate'    => $aggregateType,
+                'aggregate_id' => $aggregateId,
+                'error'        => $e->getMessage(),
+            ]);
+        }
     }
 }
