@@ -68,17 +68,78 @@ class RoleService
     }
 
     /**
-     * Permission catalog is platform-owned (seeders only).
-     * Tenant Identity API must not invent or remove system operations.
+     * Permission catalog codes are platform-owned (seeders only).
      */
     public function createPermission(CreatePermissionDTO $dto): TenantPermission
     {
         throw new Exception('ایجاد مجوز از طریق سامانه مجاز نیست. کاتالوگ عملیات فقط توسط تیم توسعه (سیدر) به‌روز می‌شود.');
     }
 
+    /**
+     * Tenant owner may only relabel display name + user-facing description (hint).
+     * code / module_name / action_type stay system-owned.
+     */
     public function updatePermission(UpdatePermissionDTO $dto): TenantPermission
     {
-        throw new Exception('ویرایش مجوز برای سازمان مشتری مجاز نیست. عناوین و وضعیت کاتالوگ توسط مالک پلتفرم مدیریت می‌شود.');
+        $tenantId = $this->getTenantId();
+
+        if (!$this->currentUserIsTenantOwner($tenantId)) {
+            throw new Exception('فقط مالک سازمان می‌تواند عنوان و راهنمای کاربری مجوز را ویرایش کند.');
+        }
+
+        return DB::transaction(function () use ($dto, $tenantId) {
+            $permission = TenantPermission::query()
+                ->where('tenant_id', $tenantId)
+                ->where('tenant_permission_id', $dto->tenantPermissionId)
+                ->firstOrFail();
+
+            $changes = [];
+
+            if ($dto->name !== null) {
+                $name = trim($dto->name);
+                if ($name === '') {
+                    throw new Exception('عنوان مجوز نمی‌تواند خالی باشد.');
+                }
+                if (mb_strlen($name) > 200) {
+                    throw new Exception('عنوان مجوز حداکثر ۲۰۰ کاراکتر است.');
+                }
+                $changes['name'] = $name;
+            }
+
+            if ($dto->description !== null) {
+                $desc = trim($dto->description);
+                if (mb_strlen($desc) > 500) {
+                    throw new Exception('راهنمای کاربری حداکثر ۵۰۰ کاراکتر است.');
+                }
+                $changes['description'] = $desc === '' ? null : $desc;
+            }
+
+            // Intentionally ignore module_name / action_type / status from DTO here:
+            // code identity is seeder-owned; group enablement is a future platform entitlement feature.
+
+            if ($changes === []) {
+                return $permission;
+            }
+
+            $changes['row_version'] = ((int) ($permission->row_version ?? 1)) + 1;
+            $permission->update($changes);
+
+            $this->logEventOutbox(
+                $tenantId,
+                'tenant_permissions',
+                $permission->tenant_permission_id,
+                'identity.permission.relabeled.v1',
+                [
+                    'permission_id' => $permission->tenant_permission_id,
+                    'code' => $permission->code,
+                    'changes' => $changes,
+                ]
+            );
+
+            TenantCache::flushTenant($tenantId);
+
+            return $permission->fresh();
+        });
     }
 
     public function softDeletePermission(string $tenantPermissionId): void
@@ -327,6 +388,22 @@ class RoleService
 
             return $role->fresh(['permissions:tenant_permission_id,code,name,module_name,description']);
         });
+    }
+
+    private function currentUserIsTenantOwner(string $tenantId): bool
+    {
+        $userId = auth()->user()?->user_id ?? null;
+        if (!$userId) {
+            return false;
+        }
+
+        return DB::table('tenant_users')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $userId)
+            ->where('status', 1)
+            ->whereNull('deleted_at')
+            ->where('is_owner', true)
+            ->exists();
     }
 
     private function syncRolePermissions(string $tenantId, string $roleId, array $permissionIds): void
