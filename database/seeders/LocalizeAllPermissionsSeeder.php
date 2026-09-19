@@ -46,12 +46,16 @@ class LocalizeAllPermissionsSeeder extends Seeder
                 ->update(['module_name' => $fa, 'updated_at' => now()]);
         }
 
+        // PostgreSQL POSIX regex cannot use Unicode ranges; filter English-only names in PHP.
         $rows = DB::table('tenant_permissions')
             ->whereRaw("name ~ '[A-Za-z]{3,}'")
-            ->whereRaw("name !~ '[\\x{0600}-\\x{06FF}]'")
             ->get(['tenant_permission_id', 'code', 'name']);
 
         foreach ($rows as $row) {
+            // Skip names that already contain Persian/Arabic letters
+            if (preg_match('/[\x{0600}-\x{06FF}]/u', (string) $row->name)) {
+                continue;
+            }
             $fa = $this->heuristicFaName($row->code, $row->name);
             if ($fa !== $row->name) {
                 DB::table('tenant_permissions')
