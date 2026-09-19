@@ -141,6 +141,8 @@ class LoadUserScopesMiddleware
             return null;
         }
 
+        $isOwner = (bool) ($tenantUser->is_owner ?? false);
+
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantId)
@@ -207,9 +209,23 @@ class LoadUserScopesMiddleware
                 ->toArray();
         }
 
+        // Same policy as login: owner gets full active catalog for this tenant.
+        if ($isOwner) {
+            $ownerPerms = DB::table('tenant_permissions')
+                ->where('tenant_id', $tenantId)
+                ->where('status', 1)
+                ->whereNull('deleted_at')
+                ->pluck('code')
+                ->unique()
+                ->values()
+                ->toArray();
+
+            $permissions = array_values(array_unique(array_merge($permissions, $ownerPerms)));
+        }
+
         return [
             'tenant_user_id' => $tenantUser->tenant_user_id,
-            'is_owner'       => (bool) ($tenantUser->is_owner ?? false),
+            'is_owner'       => $isOwner,
             'scopes'         => $scopes,
             'roles'          => $roles,
             'permissions'    => $permissions,
