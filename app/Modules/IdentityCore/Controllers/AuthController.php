@@ -94,11 +94,13 @@ class AuthController extends Controller
         try {
             $request->validate([
                 'mobile' => 'required|string|max:20',
+                'force_resend' => 'sometimes|boolean',
             ]);
 
             $result = $this->otpLoginService->requestOtp(
                 $request->input('mobile'),
-                $request->ip()
+                $request->ip(),
+                (bool) $request->boolean('force_resend')
             );
 
             return response()->json([
