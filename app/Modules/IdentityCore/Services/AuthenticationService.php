@@ -16,9 +16,6 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthenticationService
 {
-    /**
-     * Password login with identifier (email or mobile).
-     */
     public function login(LoginDTO $dto): array
     {
         $user = $this->findUserByIdentifier($dto->identifier);
@@ -59,7 +56,6 @@ class AuthenticationService
             ->orderByDesc('updated_at')
             ->get(['tenant_user_id', 'tenant_id', 'user_id', 'status', 'is_owner']);
 
-        // One active membership per tenant
         $memberships = $memberships->unique('tenant_id')->values();
 
         if ($memberships->isEmpty()) {
@@ -76,12 +72,26 @@ class AuthenticationService
         } elseif ($memberships->count() === 1) {
             $tenantIdToLogin = $memberships->first()->tenant_id;
         } else {
-            $tenantIds = $memberships->pluck('tenant_id')->all();
-            $tenants = Tenant::query()
+            $tenantIds = $memberships->pluck('tenant_id')->unique()->values()->all();
+            $tenants = DB::table('tenants')
                 ->whereIn('tenant_id', $tenantIds)
                 ->where('status', 1)
                 ->whereNull('deleted_at')
                 ->get(['tenant_id', 'tenant_code', 'tenant_name', 'slug']);
+
+            if ($tenants->isEmpty()) {
+                throw new HttpException(
+                    403,
+                    'سازمان فعالی برای عضویت‌های شما یافت نشد. با پشتیبانی تماس بگیرید.'
+                );
+            }
+
+            if ($tenants->count() === 1) {
+                $tenantIdToLogin = $tenants->first()->tenant_id;
+                $tenantUser = $memberships->firstWhere('tenant_id', $tenantIdToLogin);
+
+                return $this->issueTenantSession($user, $tenantUser);
+            }
 
             $preAuth = $user->createToken('pre_auth_select_tenant', ['pre_auth'])->plainTextToken;
 
@@ -203,8 +213,7 @@ class AuthenticationService
             ->values()
             ->all();
 
-        $tokenName = 'tenant_session';
-        $tokenResult = $user->createToken($tokenName, ['*', 'tenant:'.$tenantIdToLogin]);
+        $tokenResult = $user->createToken('tenant_session', ['*', 'tenant:'.$tenantIdToLogin]);
         $token = $tokenResult->plainTextToken;
 
         DB::table('users')
@@ -233,9 +242,16 @@ class AuthenticationService
             60
         );
 
+        $org = DB::table('tenants')
+            ->where('tenant_id', $tenantIdToLogin)
+            ->first(['tenant_id', 'tenant_code', 'tenant_name']);
+
         return [
-            'token'      => $token,
-            'token_type' => 'Bearer',
+            'access_token'              => $token,
+            'token'                     => $token,
+            'token_type'                => 'Bearer',
+            'expires_in'                => null,
+            'requires_tenant_selection' => false,
             'user' => [
                 'user_id'        => $user->user_id,
                 'first_name'     => $user->first_name,
@@ -244,8 +260,14 @@ class AuthenticationService
                 'mobile'         => $user->mobile,
                 'tenant_user_id' => $tenantUser->tenant_user_id,
             ],
-            'security_context' => $securityContext,
+            'active_tenant_id' => $tenantIdToLogin,
             'tenant_id'        => $tenantIdToLogin,
+            'organization' => [
+                'tenant_id'   => $tenantIdToLogin,
+                'tenant_name' => $org->tenant_name ?? null,
+                'tenant_code' => $org->tenant_code ?? null,
+            ],
+            'security_context' => $securityContext,
         ];
     }
 
@@ -337,33 +359,6 @@ class AuthenticationService
             $credential->failed_login_count = 0;
             $credential->locked_until = null;
             $credential->save();
-        }
-    }
-
-    private function writeOutboxEvent(
-        string $tenantId,
-        string $aggregateType,
-        string $aggregateId,
-        string $eventType,
-        array $payload
-    ): void {
-        try {
-            if (!\Illuminate\Support\Facades\Schema::hasTable('event_outbox')) {
-                return;
-            }
-            DB::table('event_outbox')->insert([
-                'event_id'       => (string) Str::uuid(),
-                'tenant_id'      => $tenantId,
-                'aggregate_type' => $aggregateType,
-                'aggregate_id'   => $aggregateId,
-                'event_type'     => $eventType,
-                'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE),
-                'status'         => 1,
-                'retry_count'    => 0,
-                'created_at'     => now(),
-            ]);
-        } catch (\Throwable $e) {
-            // ignore
         }
     }
 }
