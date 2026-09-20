@@ -2,19 +2,15 @@
 
 namespace App\Modules\IdentityCore\Services;
 
-use App\Base\Http\Middleware\LoadUserScopesMiddleware;
 use App\Modules\IdentityCore\DTOs\LoginDTO;
-use App\Modules\IdentityCore\DTOs\UserRegistrationDTO;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\UserCredential;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\SaasPlatform\Models\Tenant;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Laravel\Sanctum\PersonalAccessToken;
-use Exception;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthenticationService
@@ -26,43 +22,46 @@ class AuthenticationService
     {
         $user = $this->findUserByIdentifier($dto->identifier);
 
-        if (!$user) {
+        if (!$user || !$user->credential) {
             throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
-        // One relation load instead of lazy N+1
         $credential = $user->credential;
 
-        if ($credential && $credential->locked_until && $credential->locked_until->isFuture()) {
-            throw new HttpException(403, 'حساب کاربری موقتاً قفل شده است. لطفاً بعداً تلاش کنید.');
+        if ($credential->locked_until && now()->lt($credential->locked_until)) {
+            throw new HttpException(423, 'حساب موقتاً قفل شده است. کمی بعد تلاش کنید.');
         }
 
-        if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
-            if ($credential) {
-                $this->registerFailedLoginAttempt($credential);
-            }
+        if (!$credential->password_hash || !Hash::check($dto->password, $credential->password_hash)) {
+            $this->registerFailedLogin($credential);
             throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
         if ((int) $user->status !== 1) {
-            throw new HttpException(403, 'حساب کاربری شما غیرفعال یا مسدود شده است.');
+            throw new HttpException(403, 'حساب کاربری غیرفعال است.');
         }
 
-        $this->clearFailedLoginAttempts($credential);
+        $this->clearFailedLogin($credential);
 
         return $this->completeLoginForUser($user, $dto->tenantId);
     }
 
     public function completeLoginForUser(User $user, ?string $requestedTenantId = null): array
     {
+        // Soft-deleted or inactive memberships must never issue a session.
         $memberships = TenantUser::withoutGlobalScopes()
             ->where('user_id', $user->user_id)
             ->where('status', 1)
             ->whereNull('deleted_at')
+            ->orderByDesc('is_owner')
+            ->orderByDesc('updated_at')
             ->get(['tenant_user_id', 'tenant_id', 'user_id', 'status', 'is_owner']);
 
+        // Data integrity: at most one active membership per tenant (keep newest/owner).
+        $memberships = $memberships->unique('tenant_id')->values();
+
         if ($memberships->isEmpty()) {
-            throw new HttpException(403, 'عضویت فعالی در هیچ سازمانی برای این کاربر یافت نشد.');
+            throw new HttpException(403, 'عضویت فعالی در هیچ سازمانی برای این حساب وجود ندارد.');
         }
 
         $tenantIdToLogin = $requestedTenantId;
@@ -114,42 +113,50 @@ class AuthenticationService
         return $this->completeLoginForUser($user, $tenantId);
     }
 
-    /**
-     * Issue session with minimal round-trips (3–4 queries total for RBAC).
-     */
     private function issueTenantSession(User $user, object $tenantUser): array
     {
         $tenantIdToLogin = $tenantUser->tenant_id;
 
+        // Re-read membership from DB (ignore stale in-memory / duplicate rows).
+        $fresh = TenantUser::withoutGlobalScopes()
+            ->where('tenant_user_id', $tenantUser->tenant_user_id)
+            ->where('tenant_id', $tenantIdToLogin)
+            ->where('user_id', $user->user_id)
+            ->whereNull('deleted_at')
+            ->first(['tenant_user_id', 'tenant_id', 'user_id', 'status', 'is_owner']);
+
+        if (!$fresh) {
+            throw new HttpException(403, 'عضویت شما در این سازمان حذف شده یا معتبر نیست.');
+        }
+        $tenantUser = $fresh;
+
         if ((int) $tenantUser->status === 2) {
-            throw new HttpException(403, 'Your account is suspended in this organization.');
+            throw new HttpException(403, 'حساب شما در این سازمان معلق است.');
         }
 
         if ((int) $tenantUser->status !== 1) {
-            throw new HttpException(403, 'Your account is not active in this organization.');
+            throw new HttpException(403, 'حساب شما در این سازمان فعال نیست.');
         }
 
-        // Roles + codes in one join
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantIdToLogin)
             ->where('tenant_user_roles.user_id', $user->user_id)
             ->whereNull('tenant_roles.deleted_at')
             ->where('tenant_roles.status', 1)
-            ->select([
+            ->get([
                 'tenant_roles.tenant_role_id',
                 'tenant_roles.code',
                 'tenant_roles.name',
                 'tenant_roles.is_system_default',
-            ])
-            ->get();
+            ]);
 
         $roles = $roleRows->map(fn ($role) => [
             'role_id'           => $role->tenant_role_id,
             'code'              => $role->code,
             'name'              => $role->name,
-            'is_system_default' => (bool) $role->is_system_default,
-        ])->values()->toArray();
+            'is_system_default' => (bool) ($role->is_system_default ?? false),
+        ])->values()->all();
 
         $roleIds = $roleRows->pluck('tenant_role_id')->unique()->values()->toArray();
 
@@ -164,21 +171,16 @@ class AuthenticationService
                 ->pluck('tenant_permissions.code')
                 ->unique()
                 ->values()
-                ->toArray();
+                ->all();
         }
 
-        // Tenant owners always receive the full active permission catalog for this tenant
-        // (so UI gates work even if role assignment was missed in early seeds).
         if ((bool) $tenantUser->is_owner) {
             $ownerPerms = DB::table('tenant_permissions')
                 ->where('tenant_id', $tenantIdToLogin)
                 ->where('status', 1)
                 ->whereNull('deleted_at')
                 ->pluck('code')
-                ->unique()
-                ->values()
-                ->toArray();
-
+                ->all();
             $permissions = array_values(array_unique(array_merge($permissions, $ownerPerms)));
         }
 
@@ -187,35 +189,21 @@ class AuthenticationService
             ->where('tenant_user_scopes.tenant_id', $tenantIdToLogin)
             ->where('tenant_user_scopes.tenant_user_id', $tenantUser->tenant_user_id)
             ->whereNull('tenant_scopes.deleted_at')
-            ->where('tenant_scopes.is_active', true)
-            ->select([
+            ->get([
                 'tenant_scopes.scope_id',
-                'tenant_scopes.scope_name',
                 'tenant_scopes.scope_type',
-                'tenant_scopes.reference_id',
+                'tenant_scopes.resource_id',
             ])
-            ->get()
-            ->map(fn ($scope) => [
-                'scope_id'     => $scope->scope_id,
-                'scope_name'   => $scope->scope_name,
-                'scope_type'   => strtoupper((string) $scope->scope_type),
-                'reference_id' => $scope->reference_id,
+            ->map(fn ($s) => [
+                'scope_id'     => $s->scope_id,
+                'scope_type'   => $s->scope_type,
+                'resource_id'  => $s->resource_id,
             ])
             ->values()
-            ->toArray();
+            ->all();
 
-        // Single tenant row
-        $tenantRow = Tenant::query()
-            ->where('tenant_id', $tenantIdToLogin)
-            ->first(['tenant_id', 'tenant_name', 'tenant_code']);
+        $token = $user->createToken('tenant_session')->plainTextToken;
 
-        // Token ops
-        $user->tokens()->where('name', 'pre_auth_select_tenant')->delete();
-
-        $tokenName = 'auth_token_tenant_'.$tenantIdToLogin;
-        $tokenResult = $user->createToken($tokenName, ['*', 'tenant:'.$tenantIdToLogin]);
-
-        // last_login without full model events if possible
         DB::table('users')
             ->where('user_id', $user->user_id)
             ->update(['last_login_at' => now()]);
@@ -230,199 +218,71 @@ class AuthenticationService
             'is_owner'       => (bool) $tenantUser->is_owner,
         ];
 
-        // Warm middleware cache so first dashboard API calls skip RBAC re-load
         Cache::put(
             sprintf('sec_ctx:%s:%s', $tenantIdToLogin, $user->user_id),
             [
                 'tenant_user_id' => $tenantUser->tenant_user_id,
                 'is_owner'       => (bool) $tenantUser->is_owner,
-                'scopes'         => $scopes,
                 'roles'          => $roles,
                 'permissions'    => $permissions,
+                'scopes'         => $scopes,
             ],
             60
         );
 
-        $this->writeOutboxEvent(
-            tenantId: $tenantIdToLogin,
-            aggregateId: $user->user_id,
-            eventType: 'identity.user.logged_in.v1',
-            payload: [
-                'user_id'        => $user->user_id,
-                'tenant_id'      => $tenantIdToLogin,
-                'tenant_user_id' => $tenantUser->tenant_user_id,
-                'token_name'     => $tokenName,
-                'occurred_at'    => now()->toIso8601String(),
-            ]
-        );
-
         return [
-            'requires_tenant_selection' => false,
-            'access_token'              => $tokenResult->plainTextToken,
-            'token_type'                => 'Bearer',
-            'expires_in'                => null,
+            'token'      => $token,
+            'token_type' => 'Bearer',
             'user' => [
                 'user_id'        => $user->user_id,
-                'tenant_user_id' => $tenantUser->tenant_user_id,
                 'first_name'     => $user->first_name,
                 'last_name'      => $user->last_name,
                 'email'          => $user->email,
                 'mobile'         => $user->mobile,
-            ],
-            'active_tenant_id' => $tenantIdToLogin,
-            'organization' => [
-                'tenant_id'   => $tenantIdToLogin,
-                'tenant_name' => $tenantRow?->tenant_name,
-                'tenant_code' => $tenantRow?->tenant_code,
+                'tenant_user_id' => $tenantUser->tenant_user_id,
             ],
             'security_context' => $securityContext,
+            'tenant_id'        => $tenantIdToLogin,
         ];
     }
 
-    public function findUserByIdentifier(string $identifier): ?User
+    private function findUserByIdentifier(string $identifier): ?User
     {
         $identifier = trim($identifier);
-
         $query = User::query()->whereNull('deleted_at')->with('credential');
 
         if (str_contains($identifier, '@')) {
             return $query->where('email', $identifier)->first();
         }
 
-        $mobile = $this->normalizeIranMobile($identifier);
-        if ($mobile === null) {
-            return null;
+        $digits = preg_replace('/\D+/', '', $identifier) ?? '';
+        if (str_starts_with($digits, '98') && strlen($digits) === 12) {
+            $digits = '0'.substr($digits, 2);
+        }
+        if (str_starts_with($digits, '9') && strlen($digits) === 10) {
+            $digits = '0'.$digits;
         }
 
-        return $query->where('mobile', $mobile)->first();
+        return $query->where('mobile', $digits)->first();
     }
 
-    /**
-     * Normalize Iranian mobile to 09xxxxxxxxx (11 digits).
-     * Accepts ASCII/Persian digits, +98, 98, 0, or bare 9xxxxxxxxx.
-     */
-    private function normalizeIranMobile(string $raw): ?string
+    private function registerFailedLogin(UserCredential $credential): void
     {
-        $persian = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-        $arabic  = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-        $ascii   = ['0','1','2','3','4','5','6','7','8','9'];
-
-        $s = str_replace($persian, $ascii, $raw);
-        $s = str_replace($arabic, $ascii, $s);
-        $s = preg_replace('/\D+/', '', $s) ?? '';
-
-        if ($s === '') {
-            return null;
-        }
-
-        if (str_starts_with($s, '0098')) {
-            $s = substr($s, 4);
-        } elseif (str_starts_with($s, '98') && strlen($s) >= 12) {
-            $s = substr($s, 2);
-        }
-
-        if (str_starts_with($s, '9') && strlen($s) === 10) {
-            $s = '0'.$s;
-        }
-
-        if (preg_match('/^09\d{9}$/', $s) !== 1) {
-            return null;
-        }
-
-        return $s;
-    }
-
-    public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
-    {
-        $tokenName = null;
-        $current = $user->currentAccessToken();
-
-        if ($current instanceof PersonalAccessToken) {
-            $tokenName = $current->name;
-            $current->delete();
-        } else {
-            $tokenName = $user->tokens()->value('name');
-            $user->tokens()->delete();
-        }
-
-        LoadUserScopesMiddleware::forget($tenantId, $user->user_id);
-
-        $this->writeOutboxEvent(
-            tenantId: $tenantId,
-            aggregateId: $user->user_id,
-            eventType: 'identity.user.logged_out.v1',
-            payload: [
-                'user_id'        => $user->user_id,
-                'tenant_id'      => $tenantId,
-                'tenant_user_id' => $tenantUserId,
-                'token_name'     => $tokenName,
-                'occurred_at'    => now()->toIso8601String(),
-            ]
-        );
-    }
-
-    public function register(UserRegistrationDTO $dto): User
-    {
-        return DB::transaction(function () use ($dto) {
-            $user = User::create([
-                'first_name' => $dto->firstName,
-                'last_name'  => $dto->lastName,
-                'mobile'     => $dto->mobile,
-                'email'      => $dto->email,
-                'user_kind'  => $dto->userKind,
-                'status'     => $dto->status,
-            ]);
-
-            UserCredential::create([
-                'user_id'             => $user->user_id,
-                'password_hash'       => Hash::make($dto->password),
-                'authentication_type' => 1,
-                'is_verified'         => false,
-                'two_factor_enabled'  => false,
-            ]);
-
-            return $user;
-        });
-    }
-
-    private function registerFailedLoginAttempt(UserCredential $credential): void
-    {
-        $maxAttempts = 5;
-        $lockMinutes = 15;
         $count = (int) $credential->failed_login_count + 1;
         $credential->failed_login_count = $count;
-        if ($count >= $maxAttempts) {
-            $credential->locked_until = now()->addMinutes($lockMinutes);
+        if ($count >= 5) {
+            $credential->locked_until = now()->addMinutes(15);
             $credential->failed_login_count = 0;
         }
         $credential->save();
     }
 
-    private function clearFailedLoginAttempts(UserCredential $credential): void
+    private function clearFailedLogin(UserCredential $credential): void
     {
         if ((int) $credential->failed_login_count !== 0 || $credential->locked_until !== null) {
             $credential->failed_login_count = 0;
             $credential->locked_until = null;
             $credential->save();
         }
-    }
-
-    private function writeOutboxEvent(
-        string $tenantId,
-        string $aggregateId,
-        string $eventType,
-        array $payload
-    ): void {
-        DB::table('event_outbox')->insert([
-            'event_id'       => (string) Str::uuid(),
-            'tenant_id'      => $tenantId,
-            'aggregate_type' => 'users',
-            'aggregate_id'   => $aggregateId,
-            'event_type'     => $eventType,
-            'payload'        => json_encode($payload),
-            'status'         => 1,
-            'retry_count'    => 0,
-            'created_at'     => now(),
-        ]);
     }
 }
