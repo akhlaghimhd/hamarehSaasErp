@@ -9,6 +9,7 @@ readonly class UpdateTenantUserDTO
         public ?string $firstName = null,
         public ?string $lastName = null,
         public ?string $mobile = null,
+        public ?string $emailLocalPart = null,
         public ?bool $isOwner = null,
         public ?int $status = null,
     ) {}
@@ -20,6 +21,11 @@ readonly class UpdateTenantUserDTO
             firstName: $validatedData['first_name'] ?? null,
             lastName: $validatedData['last_name'] ?? null,
             mobile: $validatedData['mobile'] ?? null,
+            emailLocalPart: array_key_exists('email_local_part', $validatedData)
+                ? (isset($validatedData['email_local_part'])
+                    ? (string) $validatedData['email_local_part']
+                    : null)
+                : null,
             isOwner: array_key_exists('is_owner', $validatedData)
                 ? (bool) $validatedData['is_owner']
                 : null,
