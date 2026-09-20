@@ -7,8 +7,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Reactivate demo memberships that were bulk-deactivated or soft-deleted by mistake.
- * Safe: only touches known @demo.local accounts + restores is_owner for owner@demo.local.
+ * Reactivate demo memberships without violating uq_tenant_users (tenant_id, user_id).
+ *
+ * Rule per (tenant_id, user_id):
+ * - If an active row exists → only force status=1 (and is_owner for owner email); leave soft-deleted rows deleted.
+ * - If only soft-deleted rows exist → restore the newest one to status=1, keep other deleted.
  */
 class ReactivateDemoMembershipsSeeder extends Seeder
 {
@@ -42,22 +45,79 @@ class ReactivateDemoMembershipsSeeder extends Seeder
             ->whereNull('deleted_at')
             ->pluck('user_id', 'email');
 
-        $n = 0;
-        foreach ($userIds as $email => $userId) {
-            DB::table('users')->where('user_id', $userId)->update(['status' => 1, 'updated_at' => now()]);
+        $touched = 0;
 
-            $updated = DB::table('tenant_users')->where('user_id', $userId)->update([
+        foreach ($userIds as $email => $userId) {
+            DB::table('users')->where('user_id', $userId)->update([
                 'status'     => 1,
-                'deleted_at' => null,
                 'updated_at' => now(),
             ]);
-            $n += (int) $updated;
 
-            if ($email === 'owner@demo.local') {
-                DB::table('tenant_users')
-                    ->where('user_id', $userId)
-                    ->whereNull('deleted_at')
-                    ->update(['is_owner' => true, 'status' => 1, 'updated_at' => now()]);
+            $rows = DB::table('tenant_users')
+                ->where('user_id', $userId)
+                ->orderByDesc('is_owner')
+                ->orderByDesc('updated_at')
+                ->orderByDesc('created_at')
+                ->get([
+                    'tenant_user_id',
+                    'tenant_id',
+                    'user_id',
+                    'status',
+                    'is_owner',
+                    'deleted_at',
+                ]);
+
+            // Group by tenant
+            $byTenant = $rows->groupBy('tenant_id');
+
+            foreach ($byTenant as $tenantId => $group) {
+                $active = $group->first(fn ($r) => $r->deleted_at === null);
+                $deleted = $group->filter(fn ($r) => $r->deleted_at !== null)->values();
+
+                if ($active) {
+                    // Keep existing active row; do NOT undelete siblings (unique constraint).
+                    DB::table('tenant_users')
+                        ->where('tenant_user_id', $active->tenant_user_id)
+                        ->update([
+                            'status'     => 1,
+                            'is_owner'   => $email === 'owner@demo.local' ? true : (bool) $active->is_owner,
+                            'updated_at' => now(),
+                        ]);
+                    $touched++;
+
+                    // Ensure soft-deleted duplicates stay inactive/non-owner
+                    foreach ($deleted as $d) {
+                        DB::table('tenant_users')
+                            ->where('tenant_user_id', $d->tenant_user_id)
+                            ->update([
+                                'status'     => 0,
+                                'is_owner'   => false,
+                                'updated_at' => now(),
+                            ]);
+                    }
+                } elseif ($deleted->isNotEmpty()) {
+                    // No active row: restore only the newest deleted membership
+                    $restore = $deleted->first();
+                    DB::table('tenant_users')
+                        ->where('tenant_user_id', $restore->tenant_user_id)
+                        ->update([
+                            'status'     => 1,
+                            'is_owner'   => $email === 'owner@demo.local',
+                            'deleted_at' => null,
+                            'updated_at' => now(),
+                        ]);
+                    $touched++;
+
+                    foreach ($deleted->skip(1) as $d) {
+                        DB::table('tenant_users')
+                            ->where('tenant_user_id', $d->tenant_user_id)
+                            ->update([
+                                'status'     => 0,
+                                'is_owner'   => false,
+                                'updated_at' => now(),
+                            ]);
+                    }
+                }
             }
         }
 
@@ -68,7 +128,7 @@ class ReactivateDemoMembershipsSeeder extends Seeder
             ]);
         }
 
-        $this->command?->info("ReactivateDemoMemberships: membership rows touched={$n}, users=".count($userIds));
+        $this->command?->info("ReactivateDemoMemberships: membership rows touched={$touched}, users=".count($userIds));
         $this->command?->info('Login: owner@demo.local / Owner123!  |  staff *@demo.local / Staff123!');
     }
 }
