@@ -205,6 +205,7 @@ class AuthenticationService
             $permissions = array_values(array_unique(array_merge($permissions, $ownerPerms)));
         }
 
+        // Column on tenant_scopes is reference_id (not resource_id)
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantIdToLogin)
@@ -213,12 +214,12 @@ class AuthenticationService
             ->get([
                 'tenant_scopes.scope_id',
                 'tenant_scopes.scope_type',
-                'tenant_scopes.resource_id',
+                'tenant_scopes.reference_id',
             ])
             ->map(fn ($s) => [
-                'scope_id'    => $s->scope_id,
-                'scope_type'  => $s->scope_type,
-                'resource_id' => $s->resource_id,
+                'scope_id'     => $s->scope_id,
+                'scope_type'   => $s->scope_type,
+                'reference_id' => $s->reference_id,
             ])
             ->values()
             ->all();
