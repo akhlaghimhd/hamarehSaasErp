@@ -134,6 +134,24 @@ class OtpLoginService
      */
     public function verifyOtp(string $mobile, string $code, ?string $tenantId = null): array
     {
+        $user = $this->consumeValidOtp($mobile, $code);
+
+        return $this->authenticationService->completeLoginForUser($user, $tenantId);
+    }
+
+    /**
+     * Verify + consume OTP and return the User (no session). Used by forgot-password confirm.
+     */
+    public function verifyOtpForPasswordReset(string $mobile, string $code): User
+    {
+        return $this->consumeValidOtp($mobile, $code);
+    }
+
+    /**
+     * Shared OTP verification + consume. Returns the active User.
+     */
+    private function consumeValidOtp(string $mobile, string $code): User
+    {
         $mobile = $this->normalizeMobile($mobile);
         $code = trim($code);
 
@@ -175,7 +193,7 @@ class OtpLoginService
             throw new HttpException(401, 'امکان ورود با این شماره وجود ندارد.');
         }
 
-        return $this->authenticationService->completeLoginForUser($user, $tenantId);
+        return $user;
     }
 
     private function assertNotAbuseLocked(string $mobile): void
