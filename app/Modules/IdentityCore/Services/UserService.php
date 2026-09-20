@@ -325,6 +325,12 @@ class UserService
             }
 
             $previousStatus = $tenantUser->status;
+            $userId = (string) $tenantUser->user_id;
+
+            $tenantUser->forceFill([
+                'status'   => 0,
+                'is_owner' => false,
+            ])->save();
 
             $this->membershipHistoryService->recordChange(
                 $tenantUserId,
@@ -337,12 +343,14 @@ class UserService
 
             $tenantUser->delete();
 
+            $this->revokeUserAccessTokens($userId);
+
             $this->logEventOutbox(
                 $tenantId,
                 'tenant_users',
                 $tenantUserId,
                 'identity.tenant_user.deleted.v1',
-                ['tenant_user_id' => $tenantUserId]
+                ['tenant_user_id' => $tenantUserId, 'user_id' => $userId]
             );
         });
     }
@@ -361,6 +369,7 @@ class UserService
 
             $tenantUser->update([
                 'status'      => 0,
+                'is_owner'    => false,
                 'row_version' => ((int) ($tenantUser->row_version ?? 1)) + 1,
             ]);
 
@@ -445,6 +454,23 @@ class UserService
         }
 
         return (string) ($user->user_id ?? $user->getAuthIdentifier());
+    }
+
+    private function revokeUserAccessTokens(string $userId): void
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('personal_access_tokens')) {
+                return;
+            }
+            DB::table('personal_access_tokens')
+                ->where('tokenable_id', $userId)
+                ->delete();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('token revoke failed', [
+                'user_id' => $userId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function getTenantId(): string
