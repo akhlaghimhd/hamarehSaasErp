@@ -7,7 +7,6 @@ use App\Modules\IdentityCore\DTOs\UserRegistrationDTO;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\UserCredential;
 use App\Modules\IdentityCore\Models\TenantUser;
-use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
@@ -67,7 +66,18 @@ class AuthenticationService
         if ($tenantIdToLogin) {
             $allowed = $memberships->firstWhere('tenant_id', $tenantIdToLogin);
             if (!$allowed) {
-                throw new HttpException(401, 'اطلاعات ورود نادرست است.');
+                $any = TenantUser::withoutGlobalScopes()
+                    ->where('user_id', $user->user_id)
+                    ->where('tenant_id', $tenantIdToLogin)
+                    ->orderByDesc('updated_at')
+                    ->first(['status', 'deleted_at']);
+                if ($any && $any->deleted_at) {
+                    throw new HttpException(403, 'عضویت شما در این سازمان حذف شده است.');
+                }
+                if ($any && (int) $any->status !== 1) {
+                    throw new HttpException(403, 'عضویت شما در این سازمان غیرفعال است.');
+                }
+                throw new HttpException(403, 'شما عضو این سازمان نیستید.');
             }
         } elseif ($memberships->count() === 1) {
             $tenantIdToLogin = $memberships->first()->tenant_id;
@@ -343,11 +353,10 @@ class AuthenticationService
 
     private function registerFailedLoginAttempt(UserCredential $credential): void
     {
-        $lockMinutes = 15;
         $count = (int) $credential->failed_login_count + 1;
         $credential->failed_login_count = $count;
         if ($count >= 5) {
-            $credential->locked_until = now()->addMinutes($lockMinutes);
+            $credential->locked_until = now()->addMinutes(15);
             $credential->failed_login_count = 0;
         }
         $credential->save();
