@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\DTOs\LoginDTO;
+use App\Modules\IdentityCore\DTOs\UserRegistrationDTO;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\UserCredential;
 use App\Modules\IdentityCore\Models\TenantUser;
@@ -22,18 +23,20 @@ class AuthenticationService
     {
         $user = $this->findUserByIdentifier($dto->identifier);
 
-        if (!$user || !$user->credential) {
+        if (!$user) {
             throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
         $credential = $user->credential;
 
-        if ($credential->locked_until && now()->lt($credential->locked_until)) {
+        if ($credential && $credential->locked_until && $credential->locked_until->isFuture()) {
             throw new HttpException(423, 'حساب موقتاً قفل شده است. کمی بعد تلاش کنید.');
         }
 
-        if (!$credential->password_hash || !Hash::check($dto->password, $credential->password_hash)) {
-            $this->registerFailedLogin($credential);
+        if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
+            if ($credential) {
+                $this->registerFailedLoginAttempt($credential);
+            }
             throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
@@ -41,14 +44,13 @@ class AuthenticationService
             throw new HttpException(403, 'حساب کاربری غیرفعال است.');
         }
 
-        $this->clearFailedLogin($credential);
+        $this->clearFailedLoginAttempts($credential);
 
         return $this->completeLoginForUser($user, $dto->tenantId);
     }
 
     public function completeLoginForUser(User $user, ?string $requestedTenantId = null): array
     {
-        // Soft-deleted or inactive memberships must never issue a session.
         $memberships = TenantUser::withoutGlobalScopes()
             ->where('user_id', $user->user_id)
             ->where('status', 1)
@@ -57,11 +59,11 @@ class AuthenticationService
             ->orderByDesc('updated_at')
             ->get(['tenant_user_id', 'tenant_id', 'user_id', 'status', 'is_owner']);
 
-        // Data integrity: at most one active membership per tenant (keep newest/owner).
+        // One active membership per tenant
         $memberships = $memberships->unique('tenant_id')->values();
 
         if ($memberships->isEmpty()) {
-            throw new HttpException(403, 'عضویت فعالی در هیچ سازمانی برای این حساب وجود ندارد.');
+            throw new HttpException(403, 'عضویت فعالی در هیچ سازمانی برای این کاربر یافت نشد.');
         }
 
         $tenantIdToLogin = $requestedTenantId;
@@ -117,7 +119,6 @@ class AuthenticationService
     {
         $tenantIdToLogin = $tenantUser->tenant_id;
 
-        // Re-read membership from DB (ignore stale in-memory / duplicate rows).
         $fresh = TenantUser::withoutGlobalScopes()
             ->where('tenant_user_id', $tenantUser->tenant_user_id)
             ->where('tenant_id', $tenantIdToLogin)
@@ -195,14 +196,16 @@ class AuthenticationService
                 'tenant_scopes.resource_id',
             ])
             ->map(fn ($s) => [
-                'scope_id'     => $s->scope_id,
-                'scope_type'   => $s->scope_type,
-                'resource_id'  => $s->resource_id,
+                'scope_id'    => $s->scope_id,
+                'scope_type'  => $s->scope_type,
+                'resource_id' => $s->resource_id,
             ])
             ->values()
             ->all();
 
-        $token = $user->createToken('tenant_session')->plainTextToken;
+        $tokenName = 'tenant_session';
+        $tokenResult = $user->createToken($tokenName, ['*', 'tenant:'.$tenantIdToLogin]);
+        $token = $tokenResult->plainTextToken;
 
         DB::table('users')
             ->where('user_id', $user->user_id)
@@ -246,7 +249,7 @@ class AuthenticationService
         ];
     }
 
-    private function findUserByIdentifier(string $identifier): ?User
+    public function findUserByIdentifier(string $identifier): ?User
     {
         $identifier = trim($identifier);
         $query = User::query()->whereNull('deleted_at')->with('credential');
@@ -255,34 +258,112 @@ class AuthenticationService
             return $query->where('email', $identifier)->first();
         }
 
-        $digits = preg_replace('/\D+/', '', $identifier) ?? '';
+        $mobile = $this->normalizeIranMobile($identifier);
+        if ($mobile === null) {
+            return null;
+        }
+
+        return $query->where('mobile', $mobile)->first();
+    }
+
+    private function normalizeIranMobile(string $raw): ?string
+    {
+        $digits = preg_replace('/\D+/', '', $raw) ?? '';
         if (str_starts_with($digits, '98') && strlen($digits) === 12) {
             $digits = '0'.substr($digits, 2);
         }
         if (str_starts_with($digits, '9') && strlen($digits) === 10) {
             $digits = '0'.$digits;
         }
+        if (strlen($digits) !== 11 || !str_starts_with($digits, '09')) {
+            return null;
+        }
 
-        return $query->where('mobile', $digits)->first();
+        return $digits;
     }
 
-    private function registerFailedLogin(UserCredential $credential): void
+    public function logout(User $user, string $tenantId, ?string $tenantUserId = null): void
     {
+        $token = $user->currentAccessToken();
+        if ($token) {
+            $token->delete();
+        }
+
+        Cache::forget(sprintf('sec_ctx:%s:%s', $tenantId, $user->user_id));
+    }
+
+    public function register(UserRegistrationDTO $dto): User
+    {
+        return DB::transaction(function () use ($dto) {
+            $user = User::create([
+                'first_name' => $dto->firstName,
+                'last_name'  => $dto->lastName,
+                'email'      => $dto->email,
+                'mobile'     => $dto->mobile,
+                'user_kind'  => 1,
+                'status'     => 1,
+            ]);
+
+            UserCredential::create([
+                'credential_id'       => (string) Str::uuid(),
+                'user_id'             => $user->user_id,
+                'password_hash'       => Hash::make($dto->password),
+                'must_set_password'   => false,
+                'authentication_type' => 1,
+                'is_verified'         => false,
+                'two_factor_enabled'  => false,
+                'failed_login_count'  => 0,
+            ]);
+
+            return $user;
+        });
+    }
+
+    private function registerFailedLoginAttempt(UserCredential $credential): void
+    {
+        $lockMinutes = 15;
         $count = (int) $credential->failed_login_count + 1;
         $credential->failed_login_count = $count;
         if ($count >= 5) {
-            $credential->locked_until = now()->addMinutes(15);
+            $credential->locked_until = now()->addMinutes($lockMinutes);
             $credential->failed_login_count = 0;
         }
         $credential->save();
     }
 
-    private function clearFailedLogin(UserCredential $credential): void
+    private function clearFailedLoginAttempts(UserCredential $credential): void
     {
         if ((int) $credential->failed_login_count !== 0 || $credential->locked_until !== null) {
             $credential->failed_login_count = 0;
             $credential->locked_until = null;
             $credential->save();
+        }
+    }
+
+    private function writeOutboxEvent(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('event_outbox')) {
+                return;
+            }
+            DB::table('event_outbox')->insert([
+                'event_id'       => (string) Str::uuid(),
+                'tenant_id'      => $tenantId,
+                'aggregate_type' => $aggregateType,
+                'aggregate_id'   => $aggregateId,
+                'event_type'     => $eventType,
+                'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                'status'         => 1,
+                'retry_count'    => 0,
+                'created_at'     => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // ignore
         }
     }
 }
