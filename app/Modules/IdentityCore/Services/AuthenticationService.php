@@ -15,6 +15,11 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthenticationService
 {
+    public function __construct(
+        private readonly PasswordPolicyService $passwordPolicy,
+    ) {
+    }
+
     public function login(LoginDTO $dto): array
     {
         $user = $this->findUserByIdentifier($dto->identifier);
@@ -29,10 +34,16 @@ class AuthenticationService
             throw new HttpException(423, 'حساب موقتاً قفل شده است. کمی بعد تلاش کنید.');
         }
 
-        if (!$credential || !Hash::check($dto->password, $credential->password_hash)) {
-            if ($credential) {
-                $this->registerFailedLoginAttempt($credential);
-            }
+        // New users (must_set_password / no hash) cannot use password login — OTP only
+        if (!$credential || $credential->password_hash === null || $credential->must_set_password) {
+            throw new HttpException(
+                401,
+                'برای اولین ورود از کد یکبارمصرف (OTP) استفاده کنید و سپس رمز عبور را تعیین نمایید.'
+            );
+        }
+
+        if (!Hash::check($dto->password, $credential->password_hash)) {
+            $this->registerFailedLoginAttempt($credential);
             throw new HttpException(401, 'اطلاعات ورود نادرست است.');
         }
 
@@ -47,6 +58,12 @@ class AuthenticationService
 
     public function completeLoginForUser(User $user, ?string $requestedTenantId = null): array
     {
+        // Force set-password path for first login / must_set_password
+        $credential = $user->credential;
+        if ($credential && (bool) $credential->must_set_password) {
+            return $this->issueSetPasswordSession($user);
+        }
+
         $memberships = TenantUser::withoutGlobalScopes()
             ->where('user_id', $user->user_id)
             ->where('status', 1)
@@ -133,6 +150,37 @@ class AuthenticationService
     public function selectTenant(User $user, string $tenantId): array
     {
         return $this->completeLoginForUser($user, $tenantId);
+    }
+
+    /**
+     * Limited session used only to set password (first login / after OTP when must_set_password).
+     */
+    private function issueSetPasswordSession(User $user): array
+    {
+        // Revoke any previous set-password tokens for cleanliness
+        try {
+            $user->tokens()->where('name', 'set_password')->delete();
+        } catch (\Throwable) {
+            // ignore
+        }
+
+        $tokenResult = $user->createToken('set_password', ['set-password']);
+
+        return [
+            'must_set_password' => true,
+            'access_token'      => $tokenResult->plainTextToken,
+            'token'             => $tokenResult->plainTextToken,
+            'token_type'        => 'Bearer',
+            'requires_tenant_selection' => false,
+            'user' => [
+                'user_id'    => $user->user_id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'mobile'     => $user->mobile,
+            ],
+            'message' => 'لطفاً رمز عبور خود را تعیین کنید.',
+        ];
     }
 
     private function issueTenantSession(User $user, object $tenantUser): array
@@ -263,6 +311,7 @@ class AuthenticationService
             'token_type'                => 'Bearer',
             'expires_in'                => null,
             'requires_tenant_selection' => false,
+            'must_set_password'         => false,
             'user' => [
                 'user_id'        => $user->user_id,
                 'first_name'     => $user->first_name,
@@ -280,6 +329,99 @@ class AuthenticationService
             ],
             'security_context' => $securityContext,
         ];
+    }
+
+    /**
+     * First-login / limited-token set password. Clears must_set_password and revokes the token.
+     * Caller must ensure the request is authenticated with set-password ability (or equivalent).
+     */
+    public function setPassword(User $user, string $newPassword): void
+    {
+        $credential = $user->credential;
+        if (!$credential) {
+            throw new HttpException(400, 'اطلاعات امنیتی کاربر یافت نشد.');
+        }
+
+        $this->passwordPolicy->assertValid($newPassword, $user);
+
+        $credential->password_hash = Hash::make($newPassword);
+        $credential->must_set_password = false;
+        $credential->authentication_type = 1;
+        $credential->last_password_change_at = now();
+        $credential->failed_login_count = 0;
+        $credential->locked_until = null;
+        $credential->save();
+
+        // Force re-login: delete current + any set_password tokens
+        try {
+            $user->tokens()->delete();
+        } catch (\Throwable) {
+            // ignore
+        }
+    }
+
+    /**
+     * Authenticated change-password (profile). Requires current password.
+     */
+    public function changePassword(User $user, string $currentPassword, string $newPassword): void
+    {
+        $credential = $user->credential;
+        if (!$credential || $credential->password_hash === null) {
+            throw new HttpException(400, 'هنوز رمزی برای این حساب تعیین نشده است.');
+        }
+
+        if (!Hash::check($currentPassword, $credential->password_hash)) {
+            throw new HttpException(401, 'رمز عبور فعلی نادرست است.');
+        }
+
+        $this->passwordPolicy->assertValid($newPassword, $user);
+
+        if (Hash::check($newPassword, $credential->password_hash)) {
+            throw new HttpException(422, 'رمز عبور جدید نباید با رمز فعلی یکسان باشد.');
+        }
+
+        $credential->password_hash = Hash::make($newPassword);
+        $credential->must_set_password = false;
+        $credential->last_password_change_at = now();
+        $credential->save();
+    }
+
+    /**
+     * Forgot-password: set new password after OTP was verified by OtpLoginService (or dedicated confirm).
+     * Does not require prior session; used by forgot-password confirm endpoint.
+     */
+    public function resetPasswordByUser(User $user, string $newPassword): void
+    {
+        $credential = $user->credential;
+        if (!$credential) {
+            // Create credential if missing (should be rare)
+            $credential = UserCredential::create([
+                'credential_id'       => (string) Str::uuid(),
+                'user_id'             => $user->user_id,
+                'password_hash'       => null,
+                'must_set_password'   => true,
+                'authentication_type' => 1,
+                'is_verified'         => false,
+                'two_factor_enabled'  => false,
+                'failed_login_count'  => 0,
+            ]);
+        }
+
+        $this->passwordPolicy->assertValid($newPassword, $user);
+
+        $credential->password_hash = Hash::make($newPassword);
+        $credential->must_set_password = false;
+        $credential->authentication_type = 1;
+        $credential->last_password_change_at = now();
+        $credential->failed_login_count = 0;
+        $credential->locked_until = null;
+        $credential->save();
+
+        try {
+            $user->tokens()->delete();
+        } catch (\Throwable) {
+            // ignore
+        }
     }
 
     public function findUserByIdentifier(string $identifier): ?User
