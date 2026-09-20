@@ -53,6 +53,7 @@ class UserManagementTest extends TestCase
             'tenant_id' => $this->tenant->tenant_id,
             'user_id'   => $this->adminUser->user_id,
             'status'    => 1,
+            'is_owner'  => true,
         ]);
 
         $this->role = TenantRole::factory()->create([
@@ -176,8 +177,10 @@ class UserManagementTest extends TestCase
     }
 
     #[Test]
-    public function create_tenant_user_blocked_when_email_host_not_configured(): void
+    public function create_tenant_user_falls_back_to_slug_when_email_suffix_missing(): void
     {
+        // Product rule: if email_domain_suffix is unset, OrganizationalEmailService
+        // falls back to tenant.slug so create is not blocked.
         TenantSetting::query()
             ->where('tenant_id', $this->tenant->tenant_id)
             ->where('setting_key', OrganizationalEmailService::SETTING_EMAIL_DOMAIN_SUFFIX)
@@ -190,8 +193,12 @@ class UserManagementTest extends TestCase
                 'mobile'     => '09129998877',
             ]);
 
-        $response->assertStatus(400)
-            ->assertJsonPath('status', 'error');
+        $response->assertStatus(201)
+            ->assertJsonPath('status', 'success');
+
+        $email = $response->json('data.user.email');
+        $this->assertNotEmpty($email);
+        $this->assertStringEndsWith('@usermgmt.erp.ir', $email);
     }
 
     #[Test]
@@ -277,6 +284,7 @@ class UserManagementTest extends TestCase
             ->where('user_id', $this->adminUser->user_id)
             ->first();
 
+        // Actor is owner (setUp); can keep/set is_owner and update identity fields
         $response = $this->withHeaders($this->authHeaders())
             ->putJson('/api/v1/identity-core/identity/users/' . $membership->tenant_user_id, [
                 'first_name' => 'Updated',
@@ -306,6 +314,49 @@ class UserManagementTest extends TestCase
             'event_type'     => 'identity.tenant_user.updated.v1',
             'status'         => 1,
         ]);
+    }
+
+    #[Test]
+    public function non_owner_cannot_set_is_owner_on_update(): void
+    {
+        $memberUser = User::factory()->create(['status' => 1]);
+        $memberMembership = TenantUser::factory()->create([
+            'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => $memberUser->user_id,
+            'status'    => 1,
+            'is_owner'  => false,
+        ]);
+
+        // Grant update permission via same role
+        TenantUserRole::create([
+            'tenant_user_role_id' => (string) Str::uuid(),
+            'tenant_id'           => $this->tenant->tenant_id,
+            'user_id'             => $memberUser->user_id,
+            'tenant_role_id'      => $this->role->tenant_role_id,
+        ]);
+
+        $token = $memberUser->createToken(
+            'test-token-member',
+            ['tenant:' . $this->tenant->tenant_id]
+        )->plainTextToken;
+
+        $target = TenantUser::factory()->create([
+            'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => User::factory()->create(['status' => 1])->user_id,
+            'status'    => 1,
+            'is_owner'  => false,
+        ]);
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+            'X-Tenant-ID'   => $this->tenant->tenant_id,
+            'Accept'        => 'application/json',
+        ])->putJson('/api/v1/identity-core/identity/users/' . $target->tenant_user_id, [
+            'is_owner' => true,
+        ]);
+
+        $response->assertStatus(400)
+            ->assertJsonPath('status', 'error');
     }
 
     #[Test]
