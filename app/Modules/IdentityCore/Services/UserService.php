@@ -35,7 +35,43 @@ class UserService
             $query->orderByDesc('created_at');
         }
 
-        return $query->get();
+        $users = $query->get();
+
+        // Attach assigned roles (for members list primary-role column)
+        $userIds = $users->pluck('user_id')->filter()->unique()->values()->all();
+        $rolesByUser = [];
+        if ($userIds !== []) {
+            $roleRows = DB::table('tenant_user_roles')
+                ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
+                ->where('tenant_user_roles.tenant_id', $tenantId)
+                ->whereIn('tenant_user_roles.user_id', $userIds)
+                ->whereNull('tenant_roles.deleted_at')
+                ->where('tenant_roles.status', 1)
+                ->get([
+                    'tenant_user_roles.user_id',
+                    'tenant_roles.tenant_role_id',
+                    'tenant_roles.name',
+                    'tenant_roles.code',
+                    'tenant_roles.parent_role_id',
+                ]);
+
+            foreach ($roleRows as $row) {
+                $uid = (string) $row->user_id;
+                $rolesByUser[$uid][] = [
+                    'tenant_role_id' => $row->tenant_role_id,
+                    'name'           => $row->name,
+                    'code'           => $row->code,
+                    'parent_role_id' => $row->parent_role_id,
+                ];
+            }
+        }
+
+        foreach ($users as $tu) {
+            $uid = (string) $tu->user_id;
+            $tu->setAttribute('roles', $rolesByUser[$uid] ?? []);
+        }
+
+        return $users;
     }
 
     public function getTenantUser(string $tenantUserId): TenantUser
