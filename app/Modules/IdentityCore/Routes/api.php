@@ -16,8 +16,14 @@ Route::prefix('identity')->group(function () {
     Route::post('/auth/otp/request', [AuthController::class, 'requestOtp']);
     Route::post('/auth/otp/verify', [AuthController::class, 'verifyOtp']);
 
+    // Forgot-password (OTP reuse + confirm with new password)
+    Route::post('/auth/forgot-password/request', [AuthController::class, 'forgotPasswordRequest']);
+    Route::post('/auth/forgot-password/confirm', [AuthController::class, 'forgotPasswordConfirm']);
+
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/auth/select-tenant', [AuthController::class, 'selectTenant']);
+        // First-login set password (limited token with set-password ability)
+        Route::post('/auth/set-password', [AuthController::class, 'setPassword']);
     });
 
     Route::middleware([TenantContextMiddleware::class])->group(function () {
@@ -27,6 +33,7 @@ Route::prefix('identity')->group(function () {
     Route::middleware([TenantContextMiddleware::class, 'auth:sanctum', 'load.scopes'])->group(function () {
 
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+        Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
 
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
