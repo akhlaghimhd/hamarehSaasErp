@@ -12,14 +12,12 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class OtpLoginService
 {
     /**
-     * How long each issued OTP remains valid for login.
-     * Aligned with resend cooldown so the user is never stuck without a usable code.
+     * How long each issued OTP remains valid for login (multi-use until expiry or new code).
      */
     public const TTL_SECONDS = 600; // 10 minutes
 
     /**
      * Hard minimum gap between issuing two NEW codes for the same mobile.
-     * If the user requests again sooner, they are told the recent code is still usable.
      */
     public const RESEND_COOLDOWN_SECONDS = 600; // 10 minutes
 
@@ -36,13 +34,9 @@ class OtpLoginService
     /**
      * Request OTP for an existing active user mobile.
      *
-     * Behaviour:
-     * - If any unconsumed, non-expired OTP already exists and forceResend=false:
-     *   do NOT send SMS; tell the user the previous code is still valid.
-     * - If forceResend=true (or no active code) but last send was < 10 minutes ago:
-     *   block with the fixed 10-minute message (no new SMS).
-     * - Otherwise issue a NEW code without invalidating previous valid codes
-     *   so the user can still use any recently generated code.
+     * - Active valid code + no force → do not send; tell user to use existing code.
+     * - Force / no active but last send < 10 min → block with 10-minute message.
+     * - Otherwise issue NEW code and invalidate all previous codes for this mobile.
      *
      * @return array{expires_in:int, code_still_valid?:bool, resend_available_in:int, debug_code?:string}
      */
@@ -55,7 +49,6 @@ class OtpLoginService
             ->whereNull('deleted_at')
             ->first();
 
-        // Generic message to reduce user enumeration
         if (!$user || (int) $user->status !== 1) {
             throw new HttpException(422, 'در صورت صحت شماره، کد تأیید ارسال می‌شود.');
         }
@@ -82,7 +75,7 @@ class OtpLoginService
         $withinCooldown = $secondsSinceLastSend !== null
             && $secondsSinceLastSend < self::RESEND_COOLDOWN_SECONDS;
 
-        // Case A: user already has a valid code and is not forcing a new one
+        // Case A: valid code exists and user is not asking for a new one
         if ($hasActiveCode && !$forceResend) {
             throw new HttpException(
                 429,
@@ -90,7 +83,7 @@ class OtpLoginService
             );
         }
 
-        // Case B: wants a new code but still inside the 10-minute window since last send
+        // Case B: wants a new code but still inside the 10-minute window
         if ($withinCooldown) {
             throw new HttpException(
                 429,
@@ -98,7 +91,12 @@ class OtpLoginService
             );
         }
 
-        // Case C: issue a new code — do NOT consume/invalidate previous valid OTPs
+        // Case C: issue a new code — invalidate ALL previous codes for this mobile
+        IdentityLoginOtp::query()
+            ->where('mobile', $mobile)
+            ->whereNull('consumed_at')
+            ->update(['consumed_at' => now()]);
+
         $plainCode = $this->generateCode();
 
         IdentityLoginOtp::create([
@@ -119,7 +117,6 @@ class OtpLoginService
 
         $payload = [
             'expires_in'          => self::TTL_SECONDS,
-            // Hint only: full cooldown until another NEW code may be issued
             'resend_available_in' => self::RESEND_COOLDOWN_SECONDS,
             'code_still_valid'    => false,
         ];
@@ -133,27 +130,29 @@ class OtpLoginService
 
     /**
      * Verify OTP and complete login (same session shape as password login).
+     * Successful verify does NOT burn the code — multi-use until expiry or new code request.
      */
     public function verifyOtp(string $mobile, string $code, ?string $tenantId = null): array
     {
-        $user = $this->consumeValidOtp($mobile, $code);
+        $user = $this->assertValidOtp($mobile, $code);
 
         return $this->authenticationService->completeLoginForUser($user, $tenantId);
     }
 
     /**
-     * Verify + consume OTP and return the User (no session). Used by forgot-password confirm.
+     * Verify OTP and return the User (no session). Used by forgot-password confirm.
+     * Does not burn the code (same multi-use policy).
      */
     public function verifyOtpForPasswordReset(string $mobile, string $code): User
     {
-        return $this->consumeValidOtp($mobile, $code);
+        return $this->assertValidOtp($mobile, $code);
     }
 
     /**
-     * Accept ANY recently issued, unconsumed, non-expired OTP whose hash matches.
-     * Only the matched row is consumed; sibling valid codes remain usable until expiry.
+     * Accept any unconsumed, non-expired OTP whose hash matches.
+     * Does NOT set consumed_at on success — code remains reusable until TTL or a new code is issued.
      */
-    private function consumeValidOtp(string $mobile, string $code): User
+    private function assertValidOtp(string $mobile, string $code): User
     {
         $mobile = $this->normalizeMobile($mobile);
         $code = trim($code);
@@ -198,7 +197,6 @@ class OtpLoginService
         }
 
         if ($matched === null) {
-            // Wrong code: increment attempt on the latest candidate only (rate-limit brute force)
             $latest = $candidates->first();
             $latest->attempt_count = (int) $latest->attempt_count + 1;
             $latest->save();
@@ -212,8 +210,7 @@ class OtpLoginService
             throw new HttpException(401, 'کد وارد شده نادرست است.');
         }
 
-        $matched->consumed_at = now();
-        $matched->save();
+        // Multi-use: do not set consumed_at on successful match
 
         $user = User::query()
             ->where('mobile', $mobile)
