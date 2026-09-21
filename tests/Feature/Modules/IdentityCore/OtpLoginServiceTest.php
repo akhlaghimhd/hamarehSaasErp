@@ -101,7 +101,6 @@ class OtpLoginServiceTest extends TestCase
             $this->assertStringContainsString('۱۰ دقیقه', $e->getMessage());
         }
 
-        // Previous code must remain unconsumed
         $this->assertSame(
             1,
             IdentityLoginOtp::where('mobile', $user->mobile)->whereNull('consumed_at')->count()
@@ -110,29 +109,17 @@ class OtpLoginServiceTest extends TestCase
     }
 
     #[Test]
-    public function any_recent_valid_code_can_be_verified(): void
+    public function same_code_can_be_used_multiple_times_until_expiry(): void
     {
         $user = $this->makeActiveUser('09121112233');
-        $plainOld = '111111';
-        $plainNew = '222222';
+        $plain = '123456';
 
         IdentityLoginOtp::create([
             'otp_id'        => (string) Str::uuid(),
             'mobile'        => $user->mobile,
-            'code_hash'     => Hash::make($plainOld),
+            'code_hash'     => Hash::make($plain),
             'expires_at'    => now()->addMinutes(10),
-            'last_sent_at'  => now()->subMinutes(2),
-            'consumed_at'   => null,
-            'attempt_count' => 0,
-            'request_ip'    => '127.0.0.1',
-        ]);
-
-        IdentityLoginOtp::create([
-            'otp_id'        => (string) Str::uuid(),
-            'mobile'        => $user->mobile,
-            'code_hash'     => Hash::make($plainNew),
-            'expires_at'    => now()->addMinutes(10),
-            'last_sent_at'  => now()->subMinute(),
+            'last_sent_at'  => now(),
             'consumed_at'   => null,
             'attempt_count' => 0,
             'request_ip'    => '127.0.0.1',
@@ -140,13 +127,41 @@ class OtpLoginServiceTest extends TestCase
 
         $svc = $this->service();
 
-        // Older code must still work
-        $resetUser = $svc->verifyOtpForPasswordReset($user->mobile, $plainOld);
-        $this->assertSame($user->user_id, $resetUser->user_id);
+        $first = $svc->verifyOtpForPasswordReset($user->mobile, $plain);
+        $this->assertSame($user->user_id, $first->user_id);
+
+        // Same code still works (multi-use)
+        $second = $svc->verifyOtpForPasswordReset($user->mobile, $plain);
+        $this->assertSame($user->user_id, $second->user_id);
 
         $this->assertSame(
             1,
             IdentityLoginOtp::where('mobile', $user->mobile)->whereNull('consumed_at')->count()
         );
+    }
+
+    #[Test]
+    public function issuing_new_code_invalidates_previous_codes(): void
+    {
+        $user = $this->makeActiveUser('09123334455');
+        $svc = $this->service();
+
+        $svc->requestOtp($user->mobile, '127.0.0.1', false);
+        $oldId = IdentityLoginOtp::where('mobile', $user->mobile)->whereNull('consumed_at')->value('otp_id');
+        $this->assertNotNull($oldId);
+
+        // Travel past cooldown
+        $this->travel(OtpLoginService::RESEND_COOLDOWN_SECONDS + 1)->seconds();
+
+        $svc->requestOtp($user->mobile, '127.0.0.1', true);
+
+        $old = IdentityLoginOtp::find($oldId);
+        $this->assertNotNull($old->consumed_at);
+
+        $this->assertSame(
+            1,
+            IdentityLoginOtp::where('mobile', $user->mobile)->whereNull('consumed_at')->count()
+        );
+        $this->assertCount(2, $this->smsFake->sent);
     }
 }
