@@ -12,11 +12,14 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class OtpLoginService
 {
-    /** Code validity (and resend-block while active). Internal only — not exposed to user. */
+    /** Code validity window. Internal — not shown as a countdown to force-wait for resend. */
     public const TTL_SECONDS = 300; // 5 minutes
 
     public const MAX_ATTEMPTS = 5;
     public const CODE_LENGTH = 6;
+
+    /** Soft UX hint for clients: minimum gap before another SMS (not a hard ban). */
+    public const RESEND_MIN_SECONDS = 30;
 
     /** After this many force-resend attempts while a code is still trusted → short lock. */
     public const MAX_FORCE_RESENDS = 2;
@@ -37,7 +40,10 @@ class OtpLoginService
      * the user is told the last code is still valid (no duration disclosed).
      * forceResend=true may issue a new code, subject to abuse lock after MAX_FORCE_RESENDS.
      *
-     * @return array{expires_in:int, resend_available_in:int, code_still_valid?:bool, debug_code?:string}
+     * After a successful login the previous OTP is consumed — the next request issues a NEW code
+     * immediately (no forced 5-minute wait).
+     *
+     * @return array{expires_in:int, resend_available_in:int, debug_code?:string}
      */
     public function requestOtp(string $mobile, ?string $requestIp = null, bool $forceResend = false): array
     {
@@ -63,8 +69,6 @@ class OtpLoginService
             ->first();
 
         if ($active && !$forceResend) {
-            $remaining = max(0, $active->expires_at->getTimestamp() - now()->getTimestamp());
-
             // Soft message — do not reveal how long the code remains valid
             throw new HttpException(
                 429,
@@ -118,7 +122,8 @@ class OtpLoginService
 
         $payload = [
             'expires_in'          => self::TTL_SECONDS,
-            'resend_available_in' => self::TTL_SECONDS,
+            // Clients must NOT treat this as a 5-minute ban on the resend button
+            'resend_available_in' => self::RESEND_MIN_SECONDS,
         ];
 
         // Local/dev aid only — never enable in production
@@ -161,8 +166,21 @@ class OtpLoginService
             ->orderByDesc('last_sent_at')
             ->first();
 
-        if (!$otp || $otp->isExpired()) {
-            throw new HttpException(401, 'کد منقضی شده یا یافت نشد. دوباره درخواست کنید.');
+        if (!$otp) {
+            // Usually: already used after a successful login, or never requested
+            throw new HttpException(
+                401,
+                'این کد دیگر قابل استفاده نیست. برای دریافت کد جدید روی «ارسال مجدد» بزنید.'
+            );
+        }
+
+        if ($otp->isExpired()) {
+            $otp->consumed_at = now();
+            $otp->save();
+            throw new HttpException(
+                401,
+                'این کد منقضی شده است. برای دریافت کد جدید روی «ارسال مجدد» بزنید.'
+            );
         }
 
         if ((int) $otp->attempt_count >= self::MAX_ATTEMPTS) {
