@@ -12,9 +12,8 @@ use Illuminate\Support\Str;
  *
  * Strategy:
  * 1) Prefer cloning from the tenant that already has the most permission rows.
- * 2) If none exist, fall back to Database\Seeders\PermissionCatalogBootstrap (inline minimal identity set)
- *    and then expand via LocalizeAllPermissionsSeeder / module seeders as needed.
- * 3) Always ensure organization.* catalog rows exist (Foundation FE-ORG).
+ * 2) If none exist, fall back to minimal identity set + organization catalog.
+ * 3) Always ensure organization.* catalog rows exist (Foundation + P0–P6 resources).
  */
 class PermissionSeeder extends Seeder
 {
@@ -44,7 +43,6 @@ class PermissionSeeder extends Seeder
             $sourceTenantId = (string) $sourceTenantId;
         }
 
-        // Ensure organization + identity core codes exist on the source tenant before clone.
         $this->ensureOrganizationCatalog($sourceTenantId);
 
         $sourcePerms = DB::table('tenant_permissions')
@@ -65,7 +63,6 @@ class PermissionSeeder extends Seeder
             DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
             $this->ensureOrganizationCatalog($tenantId);
             $map = $this->syncPermissions($tenantId, $sourcePerms);
-            // Re-merge org codes that may have been inserted after source snapshot
             $map = array_merge($map, $this->mapCodes($tenantId, array_column($this->organizationCatalog(), 'code')));
             $adminRoleId = $this->ensureAdminRole($tenantId, array_values($map));
             $this->assignAdminToOwners($tenantId, $adminRoleId);
@@ -78,6 +75,7 @@ class PermissionSeeder extends Seeder
     private function organizationCatalog(): array
     {
         return [
+            // Core company / branch / department
             ['code' => 'organization.company.view', 'name' => 'مشاهده شرکت‌ها', 'module_name' => 'سازمان', 'action_type' => 'READ'],
             ['code' => 'organization.company.create', 'name' => 'ایجاد شرکت', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
             ['code' => 'organization.company.update', 'name' => 'ویرایش شرکت', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
@@ -90,6 +88,41 @@ class PermissionSeeder extends Seeder
             ['code' => 'organization.department.create', 'name' => 'ایجاد واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
             ['code' => 'organization.department.update', 'name' => 'ویرایش واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
             ['code' => 'organization.department.delete', 'name' => 'حذف واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'DELETE'],
+
+            // P1 ownership / group
+            ['code' => 'organization.ownership.view', 'name' => 'مشاهده مالکیت شرکت', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.ownership.manage', 'name' => 'مدیریت مالکیت شرکت', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+
+            // P2 financial attrs / fiscal
+            ['code' => 'organization.fiscal.view', 'name' => 'مشاهده انتساب دوره مالی', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.fiscal.manage', 'name' => 'مدیریت انتساب دوره مالی', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+
+            // P3 bank / officers
+            ['code' => 'organization.bank.view', 'name' => 'مشاهده حساب‌های بانکی شرکت', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.bank.manage', 'name' => 'مدیریت حساب‌های بانکی شرکت', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.officer.view', 'name' => 'مشاهده مقامات شرکت', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.officer.manage', 'name' => 'مدیریت مقامات شرکت', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+
+            // P4 BU / cost center / hierarchy
+            ['code' => 'organization.business_unit.view', 'name' => 'مشاهده واحد کسب‌وکار', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.business_unit.manage', 'name' => 'مدیریت واحد کسب‌وکار', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.cost_center.view', 'name' => 'مشاهده مراکز هزینه', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.cost_center.manage', 'name' => 'مدیریت مراکز هزینه', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.hierarchy.view', 'name' => 'مشاهده سلسله‌مراتب سازمانی', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.hierarchy.manage', 'name' => 'مدیریت سلسله‌مراتب سازمانی', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+
+            // P5 sales/purch / IC
+            ['code' => 'organization.sales_org.view', 'name' => 'مشاهده سازمان فروش', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.sales_org.manage', 'name' => 'مدیریت سازمان فروش', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.purch_org.view', 'name' => 'مشاهده سازمان خرید', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.purch_org.manage', 'name' => 'مدیریت سازمان خرید', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.intercompany.view', 'name' => 'مشاهده نقشه بین‌شرکتی', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.intercompany.manage', 'name' => 'مدیریت نقشه و قوانین بین‌شرکتی', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+
+            // P6 consolidation / ESC
+            ['code' => 'organization.consolidation.view', 'name' => 'مشاهده اجرای تلفیق', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.consolidation.manage', 'name' => 'مدیریت اجرای تلفیق', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
+            ['code' => 'organization.structure.configure', 'name' => 'پیکربندی ساختار سازمانی (ESC)', 'module_name' => 'سازمان', 'action_type' => 'EXECUTE'],
         ];
     }
 
