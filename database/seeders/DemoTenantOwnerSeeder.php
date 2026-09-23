@@ -83,7 +83,6 @@ class DemoTenantOwnerSeeder extends Seeder
             return self::DEMO_TENANT_ID;
         }
 
-        // Fallback: first tenant (still may lack seeded permissions)
         return DB::table('tenants')->orderBy('created_at')->value('tenant_id');
     }
 
@@ -239,9 +238,8 @@ class DemoTenantOwnerSeeder extends Seeder
     }
 
     /**
-     * Primary company = legal entity registered at tenant onboarding.
-     * Idempotent: if any active company exists, reuse the oldest (HQ).
-     * If none, create code=HQ from tenant_name.
+     * Primary company = legal entity registered at tenant onboarding (ORG-P1-06).
+     * Idempotent: promote oldest active company to primary; else create HQ OPERATING.
      */
     private function ensurePrimaryCompany(string $tenantId): ?string
     {
@@ -251,6 +249,10 @@ class DemoTenantOwnerSeeder extends Seeder
             return null;
         }
 
+        $hasIsPrimary = Schema::hasColumn('erp_companies', 'is_primary');
+        $hasEntityKind = Schema::hasColumn('erp_companies', 'entity_kind');
+        $hasLegalName = Schema::hasColumn('erp_companies', 'legal_name');
+
         $existing = DB::table('erp_companies')
             ->where('tenant_id', $tenantId)
             ->whereNull('deleted_at')
@@ -258,13 +260,31 @@ class DemoTenantOwnerSeeder extends Seeder
             ->first();
 
         if ($existing) {
+            $update = ['updated_at' => now()];
+            if ($hasIsPrimary) {
+                // Clear other primaries then set this one
+                DB::table('erp_companies')
+                    ->where('tenant_id', $tenantId)
+                    ->whereNull('deleted_at')
+                    ->where('company_id', '!=', $existing->company_id)
+                    ->update(['is_primary' => false]);
+                $update['is_primary'] = true;
+            }
+            if ($hasEntityKind && empty($existing->entity_kind)) {
+                $update['entity_kind'] = 'OPERATING';
+            }
+            if ($hasLegalName && empty($existing->legal_name)) {
+                $update['legal_name'] = $existing->name;
+            }
+            DB::table('erp_companies')->where('company_id', $existing->company_id)->update($update);
+
             return (string) $existing->company_id;
         }
 
         $tenantName = (string) (DB::table('tenants')->where('tenant_id', $tenantId)->value('tenant_name') ?? 'شرکت اصلی');
         $companyId = (string) Str::uuid();
 
-        DB::table('erp_companies')->insert([
+        $row = [
             'company_id' => $companyId,
             'tenant_id' => $tenantId,
             'code' => 'HQ',
@@ -275,7 +295,22 @@ class DemoTenantOwnerSeeder extends Seeder
             'created_at' => now(),
             'updated_at' => now(),
             'row_version' => 1,
-        ]);
+        ];
+
+        if ($hasLegalName) {
+            $row['legal_name'] = $tenantName;
+        }
+        if ($hasIsPrimary) {
+            $row['is_primary'] = true;
+        }
+        if ($hasEntityKind) {
+            $row['entity_kind'] = 'OPERATING';
+        }
+        if (Schema::hasColumn('erp_companies', 'status')) {
+            $row['status'] = 1;
+        }
+
+        DB::table('erp_companies')->insert($row);
 
         $this->command?->info("Primary company seeded: {$tenantName} (HQ / {$companyId})");
 
