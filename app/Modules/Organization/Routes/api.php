@@ -4,20 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Modules\Organization\Controllers\CompanyController;
 use App\Modules\Organization\Controllers\BranchController;
 use App\Modules\Organization\Controllers\DepartmentController;
-
-/*
-|--------------------------------------------------------------------------
-| Organization API Routes
-|--------------------------------------------------------------------------
-| Loaded by ModuleServiceProvider with prefix: /api/organization
-| Middleware 'api' is already applied by the provider.
-|
-| F3 — Validate Scope on actions:
-| - show / update / destroy of a concrete resource → scope:TYPE,param
-| - nested store under company → scope:COMPANY,company
-| - index remains permission + ScopeScoped (list filter only)
-| Must run after auth:sanctum, tenant.context, load.scopes.
-*/
+use App\Modules\Organization\Controllers\EntityAddressController;
+use App\Modules\Organization\Controllers\EntityContactPointController;
 
 Route::middleware([
     'auth:sanctum',
@@ -25,7 +13,6 @@ Route::middleware([
     'load.scopes'
 ])->group(function () {
 
-    // Companies
     Route::get('/companies', [CompanyController::class, 'index'])
         ->middleware('permission:organization.company.view')
         ->name('organization.companies.index');
@@ -55,7 +42,6 @@ Route::middleware([
         ])
         ->name('organization.companies.delete');
 
-    // Branches
     Route::get('/companies/{company}/branches', [BranchController::class, 'index'])
         ->middleware([
             'permission:organization.branch.view',
@@ -91,7 +77,6 @@ Route::middleware([
         ])
         ->name('organization.branches.delete');
 
-    // Departments
     Route::get('/companies/{company}/departments', [DepartmentController::class, 'index'])
         ->middleware([
             'permission:organization.department.view',
@@ -126,5 +111,29 @@ Route::middleware([
             'scope:DEPARTMENT,department',
         ])
         ->name('organization.departments.delete');
+
+    Route::get('/entities/{entityType}/{entityId}/addresses', [EntityAddressController::class, 'index'])
+        ->middleware('permission:organization.company.view')
+        ->name('organization.entity-addresses.index');
+
+    Route::post('/entity-addresses', [EntityAddressController::class, 'store'])
+        ->middleware('permission:organization.company.update')
+        ->name('organization.entity-addresses.store');
+
+    Route::delete('/entity-addresses/{entityAddressId}', [EntityAddressController::class, 'destroy'])
+        ->middleware('permission:organization.company.update')
+        ->name('organization.entity-addresses.destroy');
+
+    Route::get('/entities/{entityType}/{entityId}/contact-points', [EntityContactPointController::class, 'index'])
+        ->middleware('permission:organization.company.view')
+        ->name('organization.entity-contact-points.index');
+
+    Route::post('/entity-contact-points', [EntityContactPointController::class, 'store'])
+        ->middleware('permission:organization.company.update')
+        ->name('organization.entity-contact-points.store');
+
+    Route::delete('/entity-contact-points/{entityContactPointId}', [EntityContactPointController::class, 'destroy'])
+        ->middleware('permission:organization.company.update')
+        ->name('organization.entity-contact-points.destroy');
 
 });
