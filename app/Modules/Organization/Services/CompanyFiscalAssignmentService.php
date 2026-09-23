@@ -6,13 +6,14 @@ use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Models\CompanyFiscalAssignment;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
  * ORG-P2-02 — Company ↔ fiscal period contract at Organization boundary.
  *
- * Does NOT load Accounting models (avoids tight coupling). Validates period_id
- * existence only if fin_fiscal_periods is queryable via DB facade same tenant.
+ * Does NOT import Accounting models. Validates period_id via DB against
+ * fin_fiscal_periods for the same tenant (logical ref, Law 2.2).
  */
 class CompanyFiscalAssignmentService
 {
@@ -23,7 +24,7 @@ class CompanyFiscalAssignmentService
     ): CompanyFiscalAssignment {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        $company = Company::where('tenant_id', $tenantId)
+        Company::where('tenant_id', $tenantId)
             ->where('company_id', $companyId)
             ->firstOrFail();
 
@@ -109,14 +110,9 @@ class CompanyFiscalAssignmentService
         $row->delete();
     }
 
-    /**
-     * Boundary check: period must exist for same tenant in Accounting table.
-     * Uses DB only — no Accounting module import (Law 2.5 in-memory preference still holds;
-     * cross-module read of shared DB is acceptable for validation at Modular Monolith phase).
-     */
     private function assertPeriodBelongsToTenant(string $tenantId, string $periodId): void
     {
-        if (!SchemaHasTable('fin_fiscal_periods')) {
+        if (!Schema::hasTable('fin_fiscal_periods')) {
             throw new \Exception('جدول دوره‌های مالی در دسترس نیست.');
         }
 
@@ -130,12 +126,4 @@ class CompanyFiscalAssignmentService
             throw new \Exception('دوره مالی در این سازمان یافت نشد.');
         }
     }
-}
-
-/**
- * Local helper to avoid importing Schema facade name collision in service file clarity.
- */
-function SchemaHasTable(string $table): bool
-{
-    return \Illuminate\Support\Facades\Schema::hasTable($table);
 }
