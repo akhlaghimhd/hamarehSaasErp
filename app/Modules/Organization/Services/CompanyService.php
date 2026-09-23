@@ -4,6 +4,7 @@ namespace App\Modules\Organization\Services;
 
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
+use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Services\ScopeAccessGuard;
 
@@ -19,27 +20,30 @@ class CompanyService
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         if (Company::where('tenant_id', $tenantId)->where('code', $dto->code)->exists()) {
-            throw new \Exception("کد شرکت وارد شده قبلاً در سیستم ثبت شده است.");
+            throw new \Exception('کد شرکت وارد شده قبلاً در سیستم ثبت شده است.');
         }
 
         return Company::create([
-            'tenant_id'            => $tenantId,
-            'code'                 => $dto->code,
-            'name'                 => $dto->name,
-            'registration_number'  => $dto->registrationNumber,
-            'economic_code'        => $dto->economicCode,
-            'is_active'            => $dto->isActive,
-            'row_version'          => 1,
+            'tenant_id'                 => $tenantId,
+            'code'                      => $dto->code,
+            'name'                      => $dto->name,
+            'legal_name'                => $dto->legalName ?? $dto->name,
+            'trade_name'                => $dto->tradeName,
+            'company_type'              => $dto->companyType,
+            'registration_number'       => $dto->registrationNumber,
+            'registration_date'         => $dto->registrationDate,
+            'registration_place'        => $dto->registrationPlace,
+            'incorporation_country_id'  => $dto->incorporationCountryId,
+            'economic_code'             => $dto->economicCode,
+            'tax_identifier'            => $dto->taxIdentifier,
+            'national_id'               => $dto->nationalId,
+            'vat_registration'          => $dto->vatRegistration,
+            'is_active'                 => $dto->isActive,
+            'status'                    => $dto->status,
+            'row_version'               => 1,
         ]);
     }
 
-    /**
-     * List companies for the current tenant.
-     * Scope isolation is applied by Company::ScopeScoped global scope.
-     * Tenant owner is not filtered (see ScopeScoped owner bypass).
-     * Do NOT re-apply ScopeContext filters here — double filtering hid
-     * companies that existed in DB but were outside a partial COMPANY scope.
-     */
     public function getAllCompanies()
     {
         return Company::query()
@@ -47,7 +51,7 @@ class CompanyService
             ->get();
     }
 
-    public function updateCompany(string $companyId, \App\Modules\Organization\DTOs\UpdateCompanyDTO $dto): Company
+    public function updateCompany(string $companyId, UpdateCompanyDTO $dto): Company
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
@@ -59,17 +63,27 @@ class CompanyService
 
         if ($company->code !== $dto->code) {
             if (Company::where('tenant_id', $tenantId)->where('code', $dto->code)->exists()) {
-                throw new \Exception("کد شرکت وارد شده قبلاً در سیستم ثبت شده است.");
+                throw new \Exception('کد شرکت وارد شده قبلاً در سیستم ثبت شده است.');
             }
         }
 
         $company->update([
-            'code'                 => $dto->code,
-            'name'                 => $dto->name,
-            'registration_number'  => $dto->registrationNumber,
-            'economic_code'        => $dto->economicCode,
-            'is_active'            => $dto->isActive,
-            'row_version'          => ((int) ($company->row_version ?? 1)) + 1,
+            'code'                      => $dto->code,
+            'name'                      => $dto->name,
+            'legal_name'                => $dto->legalName ?? $dto->name,
+            'trade_name'                => $dto->tradeName,
+            'company_type'              => $dto->companyType,
+            'registration_number'       => $dto->registrationNumber,
+            'registration_date'         => $dto->registrationDate,
+            'registration_place'        => $dto->registrationPlace,
+            'incorporation_country_id'  => $dto->incorporationCountryId,
+            'economic_code'             => $dto->economicCode,
+            'tax_identifier'            => $dto->taxIdentifier,
+            'national_id'               => $dto->nationalId,
+            'vat_registration'          => $dto->vatRegistration,
+            'is_active'                 => $dto->isActive,
+            'status'                    => $dto->status,
+            'row_version'               => ((int) ($company->row_version ?? 1)) + 1,
         ]);
 
         return $company->fresh();
@@ -86,7 +100,7 @@ class CompanyService
         $this->scopeAccessGuard->assertAccess('COMPANY', $companyId);
 
         if ($company->branches()->exists()) {
-            throw new \Exception("این شرکت دارای شعبه‌های زیرمجموعه است و قابل حذف نیست.");
+            throw new \Exception('این شرکت دارای شعبه‌های زیرمجموعه است و قابل حذف نیست.');
         }
 
         $company->delete();
