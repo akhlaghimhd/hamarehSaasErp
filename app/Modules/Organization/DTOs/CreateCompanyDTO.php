@@ -23,6 +23,9 @@ readonly class CreateCompanyDTO
         public bool $isPrimary = false,
         public ?string $parentCompanyId = null,
         public ?string $entityKind = null,
+        public ?string $baseCurrencyId = null,
+        public ?string $chartOfAccountsId = null,
+        public ?string $defaultConsolRateType = null,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -51,6 +54,11 @@ readonly class CreateCompanyDTO
             isPrimary: (bool) ($validatedData['is_primary'] ?? false),
             parentCompanyId: $validatedData['parent_company_id'] ?? null,
             entityKind: $validatedData['entity_kind'] ?? null,
+            baseCurrencyId: $validatedData['base_currency_id'] ?? null,
+            chartOfAccountsId: $validatedData['chart_of_accounts_id'] ?? null,
+            defaultConsolRateType: isset($validatedData['default_consol_rate_type'])
+                ? strtoupper((string) $validatedData['default_consol_rate_type'])
+                : null,
         );
     }
 }
