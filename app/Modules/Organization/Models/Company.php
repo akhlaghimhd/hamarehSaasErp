@@ -14,15 +14,24 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * erp_companies — Organization core (Owner: Organization / Layer 5)
  * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
  *
- * P0 enrichment (ORG-P0-01…06): legal_name, trade_name, company_type,
- * tax_identifier, national_id, vat_registration, registration_date,
- * registration_place, incorporation_country_id, status
+ * P0 enrichment: legal_name, trade_name, company_type, tax_*, status, …
+ * P1 group spine: is_primary, parent_company_id, entity_kind (ADR-ORG-01)
  *
  * Address/contact: reuse MasterData polymorphic tables (Law 5.1 SoT).
  */
 class Company extends Model
 {
     use HasUuids, TenantScoped, ScopeScoped, SoftDeletes;
+
+    public const ENTITY_KIND_OPERATING = 'OPERATING';
+    public const ENTITY_KIND_CONSOLIDATION = 'CONSOLIDATION';
+    public const ENTITY_KIND_ELIMINATION = 'ELIMINATION';
+
+    public const ENTITY_KINDS = [
+        self::ENTITY_KIND_OPERATING,
+        self::ENTITY_KIND_CONSOLIDATION,
+        self::ENTITY_KIND_ELIMINATION,
+    ];
 
     protected $table = 'erp_companies';
 
@@ -52,6 +61,9 @@ class Company extends Model
         'vat_registration',
         'is_active',
         'status',
+        'is_primary',
+        'parent_company_id',
+        'entity_kind',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -62,6 +74,7 @@ class Company extends Model
     {
         return [
             'is_active'          => 'boolean',
+            'is_primary'         => 'boolean',
             'company_type'       => 'integer',
             'status'             => 'integer',
             'registration_date'  => 'date',
@@ -73,7 +86,7 @@ class Company extends Model
     }
 
     /**
-     * Domain defaults for P0 NOT NULL columns when callers omit them
+     * Domain defaults for NOT NULL / spine columns when callers omit them
      * (tests, seeders, legacy create paths). Does not drop constraints.
      */
     protected static function booted(): void
@@ -90,12 +103,35 @@ class Company extends Model
             if ($company->row_version === null) {
                 $company->row_version = 1;
             }
+
+            if ($company->is_primary === null) {
+                $company->is_primary = false;
+            }
+
+            if (blank($company->entity_kind)) {
+                $company->entity_kind = self::ENTITY_KIND_OPERATING;
+            }
         });
     }
 
     public function branches()
     {
         return $this->hasMany(Branch::class, 'company_id', 'company_id');
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(self::class, 'parent_company_id', 'company_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(self::class, 'parent_company_id', 'company_id');
+    }
+
+    public function ownerships()
+    {
+        return $this->hasMany(CompanyOwnership::class, 'company_id', 'company_id');
     }
 
     /** Polymorphic addresses owned by MasterData module */
