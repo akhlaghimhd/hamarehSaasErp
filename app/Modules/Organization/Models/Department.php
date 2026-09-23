@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * erp_departments — Organization core (Owner: Organization / Layer 5)
- * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
+ * erp_departments — Organization core
+ * P4: company_id aligned from branch (ORG-P4-03); branch_id kept for BC/Scope
  */
 class Department extends Model
 {
@@ -20,9 +20,6 @@ class Department extends Model
 
     protected $primaryKey = 'department_id';
 
-    /**
-     * Scope type and column for Resource-level filtering (Law 4.2 / 4.3)
-     */
     protected static string $scopeType = 'DEPARTMENT';
     protected static string $scopeColumn = 'department_id';
 
@@ -32,6 +29,7 @@ class Department extends Model
 
     protected $fillable = [
         'tenant_id',
+        'company_id',
         'branch_id',
         'parent_department_id',
         'code',
@@ -53,6 +51,11 @@ class Department extends Model
             'updated_at'  => 'datetime',
             'deleted_at'  => 'datetime',
         ];
+    }
+
+    public function company()
+    {
+        return $this->belongsTo(Company::class, 'company_id', 'company_id');
     }
 
     public function branch()
