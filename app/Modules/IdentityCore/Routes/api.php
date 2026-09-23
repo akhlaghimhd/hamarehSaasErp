@@ -58,6 +58,8 @@ Route::prefix('identity')->group(function () {
             Route::post('/me/mobile/request', [ProfileController::class, 'requestMobileChange']);
             Route::post('/me/mobile/verify', [ProfileController::class, 'verifyMobileChange']);
 
+            Route::get('/{userId}/avatar', [ProfileController::class, 'streamAvatar'])
+                ->middleware('permission:identity.profile.view');
             Route::get('/{userId}', [ProfileController::class, 'show'])
                 ->middleware('permission:identity.profile.view');
             Route::put('/{userId}', [ProfileController::class, 'upsert'])
