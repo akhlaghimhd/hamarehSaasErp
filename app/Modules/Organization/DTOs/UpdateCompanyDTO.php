@@ -20,9 +20,12 @@ readonly class UpdateCompanyDTO
         public ?string $vatRegistration = null,
         public bool $isActive = true,
         public int $status = 1,
-        public bool $isPrimary = false,
+        /** null = leave unchanged */
+        public ?bool $isPrimary = null,
         public ?string $parentCompanyId = null,
+        /** null = leave unchanged */
         public ?string $entityKind = null,
+        public bool $parentCompanyIdProvided = false,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -31,6 +34,12 @@ readonly class UpdateCompanyDTO
         $status = isset($validatedData['status'])
             ? (int) $validatedData['status']
             : ($isActive ? 1 : 2);
+
+        $isPrimary = array_key_exists('is_primary', $validatedData)
+            ? (bool) $validatedData['is_primary']
+            : null;
+
+        $parentProvided = array_key_exists('parent_company_id', $validatedData);
 
         return new self(
             code: $validatedData['code'],
@@ -48,9 +57,10 @@ readonly class UpdateCompanyDTO
             vatRegistration: $validatedData['vat_registration'] ?? null,
             isActive: $isActive,
             status: $status,
-            isPrimary: (bool) ($validatedData['is_primary'] ?? false),
+            isPrimary: $isPrimary,
             parentCompanyId: $validatedData['parent_company_id'] ?? null,
             entityKind: $validatedData['entity_kind'] ?? null,
+            parentCompanyIdProvided: $parentProvided,
         );
     }
 }
