@@ -72,6 +72,27 @@ class Company extends Model
         ];
     }
 
+    /**
+     * Domain defaults for P0 NOT NULL columns when callers omit them
+     * (tests, seeders, legacy create paths). Does not drop constraints.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Company $company) {
+            if (blank($company->legal_name) && filled($company->name)) {
+                $company->legal_name = $company->name;
+            }
+
+            if ($company->status === null) {
+                $company->status = ($company->is_active === false) ? 2 : 1;
+            }
+
+            if ($company->row_version === null) {
+                $company->row_version = 1;
+            }
+        });
+    }
+
     public function branches()
     {
         return $this->hasMany(Branch::class, 'company_id', 'company_id');
