@@ -63,7 +63,6 @@ class OrgP6ScopeConsolEscTest extends TestCase
         $types = config('scope.registered_scope_types', []);
         $this->assertContains('BUSINESS_UNIT', $types);
 
-        // gradual: no BU scopes → canAccess still true
         $guard = new ScopeAccessGuard();
         $this->assertTrue($guard->canAccess('BUSINESS_UNIT', (string) Str::uuid()));
     }
@@ -117,11 +116,6 @@ class OrgP6ScopeConsolEscTest extends TestCase
     #[Test]
     public function elimination_event_can_be_published(): void
     {
-        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
-            code: 'EL6', name: 'Elim Co', entityKind: 'ELIMINATION'
-        ));
-
-        // ELIMINATION requires parent — create parent first path
         $parent = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
             code: 'PAR6', name: 'Parent'
         ));
