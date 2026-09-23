@@ -12,12 +12,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * erp_companies — Organization core (Owner: Organization / Layer 5)
- * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
  *
- * P0 enrichment: legal_name, trade_name, company_type, tax_*, status, …
- * P1 group spine: is_primary, parent_company_id, entity_kind (ADR-ORG-01)
+ * P0: legal master enrichment
+ * P1: group spine (is_primary, parent, entity_kind)
+ * P2: financial attrs (base_currency_id, chart_of_accounts_id, default_consol_rate_type)
  *
- * Address/contact: reuse MasterData polymorphic tables (Law 5.1 SoT).
+ * Address/contact: MasterData SoT (Law 5.1).
+ * Currency/CoA: logical UUID only — no physical FK across modules.
  */
 class Company extends Model
 {
@@ -31,6 +32,17 @@ class Company extends Model
         self::ENTITY_KIND_OPERATING,
         self::ENTITY_KIND_CONSOLIDATION,
         self::ENTITY_KIND_ELIMINATION,
+    ];
+
+    /** ORG-P2-04 consolidation rate type hooks for Accounting */
+    public const RATE_TYPE_CURRENT = 'CURRENT';
+    public const RATE_TYPE_AVERAGE = 'AVERAGE';
+    public const RATE_TYPE_HISTORICAL = 'HISTORICAL';
+
+    public const CONSOL_RATE_TYPES = [
+        self::RATE_TYPE_CURRENT,
+        self::RATE_TYPE_AVERAGE,
+        self::RATE_TYPE_HISTORICAL,
     ];
 
     protected $table = 'erp_companies';
@@ -64,6 +76,9 @@ class Company extends Model
         'is_primary',
         'parent_company_id',
         'entity_kind',
+        'base_currency_id',
+        'chart_of_accounts_id',
+        'default_consol_rate_type',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -85,10 +100,6 @@ class Company extends Model
         ];
     }
 
-    /**
-     * Domain defaults for NOT NULL / spine columns when callers omit them
-     * (tests, seeders, legacy create paths). Does not drop constraints.
-     */
     protected static function booted(): void
     {
         static::creating(function (Company $company) {
@@ -134,14 +145,17 @@ class Company extends Model
         return $this->hasMany(CompanyOwnership::class, 'company_id', 'company_id');
     }
 
-    /** Polymorphic addresses owned by MasterData module */
+    public function fiscalAssignments()
+    {
+        return $this->hasMany(CompanyFiscalAssignment::class, 'company_id', 'company_id');
+    }
+
     public function addresses()
     {
         return $this->hasMany(EntityAddress::class, 'entity_id', 'company_id')
             ->where('entity_type', 'COMPANY');
     }
 
-    /** Polymorphic contact points owned by MasterData module */
     public function contactPoints()
     {
         return $this->hasMany(EntityContactPoint::class, 'entity_id', 'company_id')
