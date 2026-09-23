@@ -11,6 +11,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * erp_companies — Organization core (Owner: Organization / Layer 5)
  * SoftDeletes + full audit fields required by Architecture Rules 1.4 & 3.5
+ *
+ * P0 enrichment (ORG-P0-01…06): legal_name, trade_name, company_type,
+ * tax_identifier, national_id, vat_registration, registration_date,
+ * registration_place, incorporation_country_id, status
  */
 class Company extends Model
 {
@@ -34,9 +38,19 @@ class Company extends Model
         'tenant_id',
         'code',
         'name',
+        'legal_name',
+        'trade_name',
+        'company_type',
         'registration_number',
+        'registration_date',
+        'registration_place',
+        'incorporation_country_id',
         'economic_code',
+        'tax_identifier',
+        'national_id',
+        'vat_registration',
         'is_active',
+        'status',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -46,16 +60,31 @@ class Company extends Model
     protected function casts(): array
     {
         return [
-            'is_active'   => 'boolean',
-            'row_version' => 'integer',
-            'created_at'  => 'datetime',
-            'updated_at'  => 'datetime',
-            'deleted_at'  => 'datetime',
+            'is_active'          => 'boolean',
+            'company_type'       => 'integer',
+            'status'             => 'integer',
+            'registration_date'  => 'date',
+            'row_version'        => 'integer',
+            'created_at'         => 'datetime',
+            'updated_at'         => 'datetime',
+            'deleted_at'         => 'datetime',
         ];
     }
 
     public function branches()
     {
         return $this->hasMany(Branch::class, 'company_id', 'company_id');
+    }
+
+    public function addresses()
+    {
+        return $this->hasMany(EntityAddress::class, 'entity_id', 'company_id')
+            ->where('entity_type', 'COMPANY');
+    }
+
+    public function contactPoints()
+    {
+        return $this->hasMany(EntityContactPoint::class, 'entity_id', 'company_id')
+            ->where('entity_type', 'COMPANY');
     }
 }
