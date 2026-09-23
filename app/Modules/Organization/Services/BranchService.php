@@ -27,7 +27,7 @@ class BranchService
             ->exists();
 
         if (!$companyExists) {
-            throw new Exception("شرکت نامعتبر است یا شما دسترسی به آن ندارید.");
+            throw new Exception('شرکت نامعتبر است یا شما دسترسی به آن ندارید.');
         }
 
         $this->scopeAccessGuard->assertAccess('COMPANY', $dto->companyId);
@@ -35,29 +35,29 @@ class BranchService
         if (Branch::where('tenant_id', $tenantId)
                   ->where('company_id', $dto->companyId)
                   ->where('code', $dto->code)->exists()) {
-            throw new Exception("کد شعبه وارد شده برای این شرکت قبلاً ثبت شده است.");
+            throw new Exception('کد شعبه وارد شده برای این شرکت قبلاً ثبت شده است.');
         }
 
+        $branchKind = $this->normalizeBranchKind($dto->branchKind);
+        $this->assertParentValid($tenantId, $dto->companyId, $dto->parentBranchId, null);
+
         return Branch::create([
-            'tenant_id'   => $tenantId,
-            'company_id'  => $dto->companyId,
-            'code'        => $dto->code,
-            'name'        => $dto->name,
-            'address'     => $dto->address,
-            'is_active'   => $dto->isActive,
-            'row_version' => 1,
+            'tenant_id'              => $tenantId,
+            'company_id'             => $dto->companyId,
+            'code'                   => $dto->code,
+            'name'                   => $dto->name,
+            'address'                => $dto->address,
+            'branch_kind'            => $branchKind,
+            'parent_branch_id'       => $dto->parentBranchId,
+            'default_warehouse_id'   => $dto->defaultWarehouseId,
+            'supports_shipping'      => $dto->supportsShipping,
+            'supports_receiving'     => $dto->supportsReceiving,
+            'is_manufacturing_site'  => $dto->isManufacturingSite,
+            'is_active'              => $dto->isActive,
+            'row_version'            => 1,
         ]);
     }
 
-    /**
-     * List branches for current tenant, filtered by:
-     * 1. ScopeScoped global scope (BRANCH reference_ids when present)
-     * 2. Explicit BRANCH scopes from ScopeContext (defense in depth)
-     * 3. Fallback: COMPANY scopes → filter by company_id
-     * 4. Optional route company filter (nested /companies/{company}/branches)
-     *
-     * @param  string|null  $companyId  Optional company filter from route
-     */
     public function getAllBranches(?string $companyId = null)
     {
         $this->ensureScopeContextHydrated();
@@ -73,7 +73,6 @@ class BranchService
         if (!empty($branchReferenceIds)) {
             $query->whereIn('branch_id', $branchReferenceIds);
         } else {
-            // No BRANCH scopes: fall back to COMPANY scopes (gradual-friendly)
             $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
             if (!empty($companyReferenceIds)) {
                 $query->whereIn('company_id', $companyReferenceIds);
@@ -101,7 +100,7 @@ class BranchService
                 ->exists();
 
             if (!$companyExists) {
-                throw new Exception("شرکت انتخاب شده نامعتبر است.");
+                throw new Exception('شرکت انتخاب شده نامعتبر است.');
             }
 
             $this->scopeAccessGuard->assertAccess('COMPANY', $targetCompanyId);
@@ -113,17 +112,43 @@ class BranchService
                       ->where('code', $dto->code)
                       ->where('branch_id', '!=', $branchId)
                       ->exists()) {
-                throw new Exception("کد شعبه وارد شده برای این شرکت قبلاً ثبت شده است.");
+                throw new Exception('کد شعبه وارد شده برای این شرکت قبلاً ثبت شده است.');
             }
         }
 
+        $branchKind = $dto->branchKindProvided
+            ? $this->normalizeBranchKind($dto->branchKind)
+            : $branch->branch_kind;
+
+        $parentId = $dto->parentBranchIdProvided
+            ? $dto->parentBranchId
+            : $branch->parent_branch_id;
+
+        $defaultWh = $dto->defaultWarehouseIdProvided
+            ? $dto->defaultWarehouseId
+            : $branch->default_warehouse_id;
+
+        $this->assertParentValid($tenantId, $targetCompanyId, $parentId, $branchId);
+
         $branch->update([
-            'company_id'  => $targetCompanyId,
-            'code'        => $dto->code,
-            'name'        => $dto->name,
-            'address'     => $dto->address,
-            'is_active'   => $dto->isActive,
-            'row_version' => ((int) ($branch->row_version ?? 1)) + 1,
+            'company_id'             => $targetCompanyId,
+            'code'                   => $dto->code,
+            'name'                   => $dto->name,
+            'address'                => $dto->address,
+            'branch_kind'            => $branchKind,
+            'parent_branch_id'       => $parentId,
+            'default_warehouse_id'   => $defaultWh,
+            'supports_shipping'      => $dto->supportsShipping !== null
+                ? $dto->supportsShipping
+                : (bool) $branch->supports_shipping,
+            'supports_receiving'     => $dto->supportsReceiving !== null
+                ? $dto->supportsReceiving
+                : (bool) $branch->supports_receiving,
+            'is_manufacturing_site'  => $dto->isManufacturingSite !== null
+                ? $dto->isManufacturingSite
+                : (bool) $branch->is_manufacturing_site,
+            'is_active'              => $dto->isActive,
+            'row_version'            => ((int) ($branch->row_version ?? 1)) + 1,
         ]);
 
         return $branch->fresh();
@@ -140,16 +165,67 @@ class BranchService
         $this->scopeAccessGuard->assertAccess('BRANCH', $branchId);
 
         if ($branch->departments()->exists()) {
-            throw new Exception("این شعبه دارای دپارتمان‌های زیرمجموعه است و قابل حذف نیست.");
+            throw new Exception('این شعبه دارای دپارتمان‌های زیرمجموعه است و قابل حذف نیست.');
+        }
+
+        if ($branch->children()->exists()) {
+            throw new Exception('این شعبه دارای شعبه‌های زیرمجموعه است و قابل حذف نیست.');
         }
 
         $branch->delete();
     }
 
-    /**
-     * If ScopeContext was reset/cleared but middleware already bound scopes
-     * on the container, re-hydrate so list filters still apply.
-     */
+    private function normalizeBranchKind(?string $kind): string
+    {
+        $kind = $kind ? strtoupper(trim($kind)) : Branch::KIND_OFFICE;
+        if (!in_array($kind, Branch::BRANCH_KINDS, true)) {
+            throw new Exception('نوع شعبه نامعتبر است. مقادیر مجاز: OFFICE, PLANT, WAREHOUSE_SITE, DISTRIBUTION, MIXED');
+        }
+
+        return $kind;
+    }
+
+    private function assertParentValid(
+        string $tenantId,
+        string $companyId,
+        ?string $parentId,
+        ?string $selfId
+    ): void {
+        if ($parentId === null || $parentId === '') {
+            return;
+        }
+
+        if ($selfId !== null && $parentId === $selfId) {
+            throw new Exception('شعبه نمی‌تواند والد خودش باشد.');
+        }
+
+        $parent = Branch::where('tenant_id', $tenantId)
+            ->where('branch_id', $parentId)
+            ->first();
+
+        if (!$parent) {
+            throw new Exception('شعبه والد یافت نشد.');
+        }
+
+        if ($parent->company_id !== $companyId) {
+            throw new Exception('شعبه والد باید متعلق به همان شرکت باشد.');
+        }
+
+        if ($selfId !== null) {
+            $cursor = $parentId;
+            $guard = 0;
+            while ($cursor !== null && $guard < 50) {
+                if ($cursor === $selfId) {
+                    throw new Exception('ساختار سلسله‌مراتبی شعبه‌ها نمی‌تواند حلقه (cycle) داشته باشد.');
+                }
+                $cursor = Branch::where('tenant_id', $tenantId)
+                    ->where('branch_id', $cursor)
+                    ->value('parent_branch_id');
+                $guard++;
+            }
+        }
+    }
+
     private function ensureScopeContextHydrated(): void
     {
         $ctx = ScopeContext::getInstance();
