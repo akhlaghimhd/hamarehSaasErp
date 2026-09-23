@@ -30,6 +30,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * - strict (Policy A): for types in config('scope.strict_scope_types'),
  *   missing scopes of that type → zero rows (fail-closed).
  *
+ * Owner exception (aligned with RequirePermission):
+ * - Active tenant owner (is_owner) is never filtered by Scope — sees full tenant data.
+ *
  * Shared rules:
  * - User has scopes of this type → filter to allowed reference_ids.
  * - Scopes of type exist but reference_ids empty → zero rows.
@@ -52,6 +55,11 @@ trait ScopeScoped
     protected static function bootScopeScoped(): void
     {
         static::addGlobalScope('scope_isolation', function (Builder $builder) {
+            // Tenant owner: full access within tenant (same policy as RequirePermission).
+            if (static::currentUserIsTenantOwner()) {
+                return;
+            }
+
             $scopeType = static::getScopeType();
             $scopeColumn = static::getScopeColumn();
 
@@ -79,6 +87,26 @@ trait ScopeScoped
             $table = $builder->getModel()->getTable();
             $builder->whereIn($table . '.' . $scopeColumn, $allowedReferenceIds);
         });
+    }
+
+    /**
+     * Active tenant owner from security_context loaded by LoadUserScopesMiddleware.
+     */
+    protected static function currentUserIsTenantOwner(): bool
+    {
+        $ctx = Context::get('security_context');
+        if (is_array($ctx) && !empty($ctx['is_owner'])) {
+            return true;
+        }
+
+        if (app()->bound('current_security_context')) {
+            $bound = app('current_security_context');
+            if (is_array($bound) && !empty($bound['is_owner'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -153,10 +181,14 @@ trait ScopeScoped
 
     /**
      * Whether the current user may access a specific reference_id (soft check).
-     * Aligns with F2 gradual/strict policy.
+     * Aligns with F2 gradual/strict policy + owner bypass.
      */
     public static function currentUserHasAccessTo(string $referenceId): bool
     {
+        if (static::currentUserIsTenantOwner()) {
+            return true;
+        }
+
         $scopeType = static::getScopeType();
         if (empty($scopeType)) {
             return true;

@@ -3,6 +3,7 @@
 namespace App\Base\Services;
 
 use App\Base\Context\ScopeContext;
+use Illuminate\Support\Facades\Context;
 use RuntimeException;
 
 /**
@@ -10,6 +11,8 @@ use RuntimeException;
  *
  * Law 4.2 flow: ... → Validate Scope → Execute Action
  * Aligns with F2 enforcement_mode (gradual | strict) in config/scope.php.
+ *
+ * Tenant owner (is_owner) always passes — same policy as RequirePermission.
  *
  * Replaces duplicated private ensureScopeAccess() in module services.
  */
@@ -38,6 +41,10 @@ class ScopeAccessGuard
      */
     public function canAccess(string $scopeType, string $referenceId): bool
     {
+        if ($this->currentUserIsTenantOwner()) {
+            return true;
+        }
+
         $scopesOfType = $this->scopeContext->getScopesByType($scopeType);
         $referenceIds = $this->scopeContext->getReferenceIdsByType($scopeType);
 
@@ -58,6 +65,23 @@ class ScopeAccessGuard
         }
 
         return true;
+    }
+
+    protected function currentUserIsTenantOwner(): bool
+    {
+        $ctx = Context::get('security_context');
+        if (is_array($ctx) && !empty($ctx['is_owner'])) {
+            return true;
+        }
+
+        if (app()->bound('current_security_context')) {
+            $bound = app('current_security_context');
+            if (is_array($bound) && !empty($bound['is_owner'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function isStrictModeFor(string $scopeType): bool

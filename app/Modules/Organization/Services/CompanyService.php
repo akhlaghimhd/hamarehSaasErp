@@ -5,7 +5,6 @@ namespace App\Modules\Organization\Services;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Base\Context\TenantContext;
-use App\Base\Context\ScopeContext;
 use App\Base\Services\ScopeAccessGuard;
 
 class CompanyService
@@ -34,17 +33,18 @@ class CompanyService
         ]);
     }
 
+    /**
+     * List companies for the current tenant.
+     * Scope isolation is applied by Company::ScopeScoped global scope.
+     * Tenant owner is not filtered (see ScopeScoped owner bypass).
+     * Do NOT re-apply ScopeContext filters here — double filtering hid
+     * companies that existed in DB but were outside a partial COMPANY scope.
+     */
     public function getAllCompanies()
     {
-        $query = Company::query()->orderBy('created_at', 'desc');
-
-        $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
-
-        if (!empty($companyReferenceIds)) {
-            $query->whereIn('company_id', $companyReferenceIds);
-        }
-
-        return $query->get();
+        return Company::query()
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 
     public function updateCompany(string $companyId, \App\Modules\Organization\DTOs\UpdateCompanyDTO $dto): Company
