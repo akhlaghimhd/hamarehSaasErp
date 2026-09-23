@@ -8,7 +8,6 @@ use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Services\ScopeAccessGuard;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class CompanyService
 {
@@ -32,7 +31,6 @@ class CompanyService
         $this->assertParentValid($tenantId, $parentId, null);
         $this->assertEntityKindRules($entityKind, $parentId);
 
-        // First company in tenant becomes primary if none flagged
         $hasPrimary = Company::where('tenant_id', $tenantId)->where('is_primary', true)->exists();
         if (!$hasPrimary) {
             $isPrimary = true;
@@ -92,18 +90,23 @@ class CompanyService
             }
         }
 
-        $entityKind = $this->normalizeEntityKind($dto->entityKind ?? $company->entity_kind);
-        $parentId = array_key_exists('parentCompanyId', get_object_vars($dto))
+        $entityKind = $this->normalizeEntityKind(
+            $dto->entityKind !== null && $dto->entityKind !== ''
+                ? $dto->entityKind
+                : $company->entity_kind
+        );
+
+        $parentId = $dto->parentCompanyIdProvided
             ? $dto->parentCompanyId
             : $company->parent_company_id;
-        // DTO always carries parentCompanyId (nullable)
-        $parentId = $dto->parentCompanyId;
-        $isPrimary = $dto->isPrimary;
+
+        $isPrimary = $dto->isPrimary !== null
+            ? (bool) $dto->isPrimary
+            : (bool) $company->is_primary;
 
         $this->assertParentValid($tenantId, $parentId, $companyId);
         $this->assertEntityKindRules($entityKind, $parentId);
 
-        // Cannot leave tenant without any primary when demoting the only primary
         if ($company->is_primary && $isPrimary === false) {
             $otherPrimary = Company::where('tenant_id', $tenantId)
                 ->where('company_id', '!=', $companyId)
@@ -177,7 +180,6 @@ class CompanyService
 
     /**
      * ORG-P1-06 — Ensure HQ/primary operating company exists for a tenant (onboarding parity).
-     * Idempotent. Does not require HTTP context; sets TenantContext briefly.
      */
     public function ensurePrimaryCompanyForTenant(string $tenantId, ?string $name = null, string $code = 'HQ'): Company
     {
@@ -249,9 +251,6 @@ class CompanyService
         return $kind;
     }
 
-    /**
-     * Parent must be same tenant, not self, and must not introduce a cycle.
-     */
     private function assertParentValid(string $tenantId, ?string $parentId, ?string $selfId): void
     {
         if ($parentId === null || $parentId === '') {
@@ -285,9 +284,6 @@ class CompanyService
         }
     }
 
-    /**
-     * ORG-P1-05 — Elimination entities must sit under a parent legal entity.
-     */
     private function assertEntityKindRules(string $entityKind, ?string $parentId): void
     {
         if ($entityKind === Company::ENTITY_KIND_ELIMINATION && ($parentId === null || $parentId === '')) {
