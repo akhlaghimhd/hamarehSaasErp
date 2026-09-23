@@ -20,12 +20,16 @@ readonly class UpdateCompanyDTO
         public ?string $vatRegistration = null,
         public bool $isActive = true,
         public int $status = 1,
-        /** null = leave unchanged */
         public ?bool $isPrimary = null,
         public ?string $parentCompanyId = null,
-        /** null = leave unchanged */
         public ?string $entityKind = null,
         public bool $parentCompanyIdProvided = false,
+        public ?string $baseCurrencyId = null,
+        public bool $baseCurrencyIdProvided = false,
+        public ?string $chartOfAccountsId = null,
+        public bool $chartOfAccountsIdProvided = false,
+        public ?string $defaultConsolRateType = null,
+        public bool $defaultConsolRateTypeProvided = false,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -38,8 +42,6 @@ readonly class UpdateCompanyDTO
         $isPrimary = array_key_exists('is_primary', $validatedData)
             ? (bool) $validatedData['is_primary']
             : null;
-
-        $parentProvided = array_key_exists('parent_company_id', $validatedData);
 
         return new self(
             code: $validatedData['code'],
@@ -60,7 +62,15 @@ readonly class UpdateCompanyDTO
             isPrimary: $isPrimary,
             parentCompanyId: $validatedData['parent_company_id'] ?? null,
             entityKind: $validatedData['entity_kind'] ?? null,
-            parentCompanyIdProvided: $parentProvided,
+            parentCompanyIdProvided: array_key_exists('parent_company_id', $validatedData),
+            baseCurrencyId: $validatedData['base_currency_id'] ?? null,
+            baseCurrencyIdProvided: array_key_exists('base_currency_id', $validatedData),
+            chartOfAccountsId: $validatedData['chart_of_accounts_id'] ?? null,
+            chartOfAccountsIdProvided: array_key_exists('chart_of_accounts_id', $validatedData),
+            defaultConsolRateType: isset($validatedData['default_consol_rate_type'])
+                ? strtoupper((string) $validatedData['default_consol_rate_type'])
+                : null,
+            defaultConsolRateTypeProvided: array_key_exists('default_consol_rate_type', $validatedData),
         );
     }
 }
