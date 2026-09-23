@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
  * 1) Prefer cloning from the tenant that already has the most permission rows.
  * 2) If none exist, fall back to Database\Seeders\PermissionCatalogBootstrap (inline minimal identity set)
  *    and then expand via LocalizeAllPermissionsSeeder / module seeders as needed.
+ * 3) Always ensure organization.* catalog rows exist (Foundation FE-ORG).
  */
 class PermissionSeeder extends Seeder
 {
@@ -43,6 +44,9 @@ class PermissionSeeder extends Seeder
             $sourceTenantId = (string) $sourceTenantId;
         }
 
+        // Ensure organization + identity core codes exist on the source tenant before clone.
+        $this->ensureOrganizationCatalog($sourceTenantId);
+
         $sourcePerms = DB::table('tenant_permissions')
             ->where('tenant_id', $sourceTenantId)
             ->whereNull('deleted_at')
@@ -50,6 +54,7 @@ class PermissionSeeder extends Seeder
 
         if ($sourcePerms->isEmpty()) {
             $this->bootstrapMinimalCatalog($sourceTenantId);
+            $this->ensureOrganizationCatalog($sourceTenantId);
             $sourcePerms = DB::table('tenant_permissions')
                 ->where('tenant_id', $sourceTenantId)
                 ->whereNull('deleted_at')
@@ -58,12 +63,77 @@ class PermissionSeeder extends Seeder
 
         foreach ($tenantIds as $tenantId) {
             DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+            $this->ensureOrganizationCatalog($tenantId);
             $map = $this->syncPermissions($tenantId, $sourcePerms);
+            // Re-merge org codes that may have been inserted after source snapshot
+            $map = array_merge($map, $this->mapCodes($tenantId, array_column($this->organizationCatalog(), 'code')));
             $adminRoleId = $this->ensureAdminRole($tenantId, array_values($map));
             $this->assignAdminToOwners($tenantId, $adminRoleId);
             $this->seedDemoRoles($tenantId, $map);
             $this->command?->info("Tenant {$tenantId}: ".count($map).' permissions, admin role ready');
         }
+    }
+
+    /** @return list<array{code:string,name:string,module_name:string,action_type:string}> */
+    private function organizationCatalog(): array
+    {
+        return [
+            ['code' => 'organization.company.view', 'name' => 'مشاهده شرکت‌ها', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.company.create', 'name' => 'ایجاد شرکت', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
+            ['code' => 'organization.company.update', 'name' => 'ویرایش شرکت', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
+            ['code' => 'organization.company.delete', 'name' => 'حذف شرکت', 'module_name' => 'سازمان', 'action_type' => 'DELETE'],
+            ['code' => 'organization.branch.view', 'name' => 'مشاهده شعب', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.branch.create', 'name' => 'ایجاد شعبه', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
+            ['code' => 'organization.branch.update', 'name' => 'ویرایش شعبه', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
+            ['code' => 'organization.branch.delete', 'name' => 'حذف شعبه', 'module_name' => 'سازمان', 'action_type' => 'DELETE'],
+            ['code' => 'organization.department.view', 'name' => 'مشاهده واحدها', 'module_name' => 'سازمان', 'action_type' => 'READ'],
+            ['code' => 'organization.department.create', 'name' => 'ایجاد واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
+            ['code' => 'organization.department.update', 'name' => 'ویرایش واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
+            ['code' => 'organization.department.delete', 'name' => 'حذف واحد سازمانی', 'module_name' => 'سازمان', 'action_type' => 'DELETE'],
+        ];
+    }
+
+    private function ensureOrganizationCatalog(string $tenantId): void
+    {
+        foreach ($this->organizationCatalog() as $perm) {
+            $exists = DB::table('tenant_permissions')
+                ->where('tenant_id', $tenantId)
+                ->where('code', $perm['code'])
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+            DB::table('tenant_permissions')->insert([
+                'tenant_permission_id' => (string) Str::uuid(),
+                'tenant_id' => $tenantId,
+                'code' => $perm['code'],
+                'name' => $perm['name'],
+                'module_name' => $perm['module_name'],
+                'action_type' => $perm['action_type'],
+                'description' => $perm['name'],
+                'status' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<string>  $codes
+     * @return array<string, string>
+     */
+    private function mapCodes(string $tenantId, array $codes): array
+    {
+        $map = [];
+        $rows = DB::table('tenant_permissions')
+            ->where('tenant_id', $tenantId)
+            ->whereIn('code', $codes)
+            ->whereNull('deleted_at')
+            ->get(['code', 'tenant_permission_id']);
+        foreach ($rows as $row) {
+            $map[$row->code] = $row->tenant_permission_id;
+        }
+        return $map;
     }
 
     private function bootstrapMinimalCatalog(string $tenantId): void
@@ -90,7 +160,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'identity.membership_history.view', 'name' => 'مشاهده تاریخچه عضویت', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
         ];
 
-        foreach ($minimal as $perm) {
+        foreach (array_merge($minimal, $this->organizationCatalog()) as $perm) {
             $exists = DB::table('tenant_permissions')
                 ->where('tenant_id', $tenantId)
                 ->where('code', $perm['code'])
@@ -185,7 +255,12 @@ class PermissionSeeder extends Seeder
 
         DB::table('tenant_role_permissions')->where('tenant_id', $tenantId)->where('tenant_role_id', $roleId)->delete();
         $rows = [];
+        $seen = [];
         foreach ($permissionIds as $pid) {
+            if (isset($seen[$pid])) {
+                continue;
+            }
+            $seen[$pid] = true;
             $rows[] = [
                 'tenant_role_permission_id' => (string) Str::uuid(),
                 'tenant_id' => $tenantId,
@@ -260,7 +335,7 @@ class PermissionSeeder extends Seeder
                 DB::table('tenant_roles')->insert([
                     'tenant_role_id' => $roleId,
                     'tenant_id' => $tenantId,
-                    'code' => $def['code'],
+                    'code' => 'tenant-admin' === $def['code'] ? 'tenant-admin' : $def['code'],
                     'name' => $def['name'],
                     'description' => $def['description'],
                     'status' => 1,
