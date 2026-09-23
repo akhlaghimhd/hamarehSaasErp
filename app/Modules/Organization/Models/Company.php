@@ -4,6 +4,8 @@ namespace App\Modules\Organization\Models;
 
 use App\Base\Traits\ScopeScoped;
 use App\Base\Traits\TenantScoped;
+use App\Modules\MasterData\Models\EntityAddress;
+use App\Modules\MasterData\Models\EntityContactPoint;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -15,6 +17,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * P0 enrichment (ORG-P0-01…06): legal_name, trade_name, company_type,
  * tax_identifier, national_id, vat_registration, registration_date,
  * registration_place, incorporation_country_id, status
+ *
+ * Address/contact: reuse MasterData polymorphic tables (Law 5.1 SoT).
  */
 class Company extends Model
 {
@@ -24,9 +28,6 @@ class Company extends Model
 
     protected $primaryKey = 'company_id';
 
-    /**
-     * Scope type and column for Resource-level filtering (Law 4.2 / 4.3)
-     */
     protected static string $scopeType = 'COMPANY';
     protected static string $scopeColumn = 'company_id';
 
@@ -76,12 +77,14 @@ class Company extends Model
         return $this->hasMany(Branch::class, 'company_id', 'company_id');
     }
 
+    /** Polymorphic addresses owned by MasterData module */
     public function addresses()
     {
         return $this->hasMany(EntityAddress::class, 'entity_id', 'company_id')
             ->where('entity_type', 'COMPANY');
     }
 
+    /** Polymorphic contact points owned by MasterData module */
     public function contactPoints()
     {
         return $this->hasMany(EntityContactPoint::class, 'entity_id', 'company_id')
