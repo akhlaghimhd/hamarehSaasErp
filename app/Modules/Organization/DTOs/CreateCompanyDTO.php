@@ -20,6 +20,9 @@ readonly class CreateCompanyDTO
         public ?string $vatRegistration = null,
         public bool $isActive = true,
         public int $status = 1,
+        public bool $isPrimary = false,
+        public ?string $parentCompanyId = null,
+        public ?string $entityKind = null,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -45,6 +48,9 @@ readonly class CreateCompanyDTO
             vatRegistration: $validatedData['vat_registration'] ?? null,
             isActive: $isActive,
             status: $status,
+            isPrimary: (bool) ($validatedData['is_primary'] ?? false),
+            parentCompanyId: $validatedData['parent_company_id'] ?? null,
+            entityKind: $validatedData['entity_kind'] ?? null,
         );
     }
 }
