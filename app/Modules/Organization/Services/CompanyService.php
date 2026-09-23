@@ -27,16 +27,18 @@ class CompanyService
         $entityKind = $this->normalizeEntityKind($dto->entityKind);
         $parentId = $dto->parentCompanyId;
         $isPrimary = (bool) $dto->isPrimary;
+        $rateType = $this->normalizeRateType($dto->defaultConsolRateType);
 
         $this->assertParentValid($tenantId, $parentId, null);
         $this->assertEntityKindRules($entityKind, $parentId);
+        $this->assertEliminationCurrency($tenantId, $entityKind, $parentId, $dto->baseCurrencyId);
 
         $hasPrimary = Company::where('tenant_id', $tenantId)->where('is_primary', true)->exists();
         if (!$hasPrimary) {
             $isPrimary = true;
         }
 
-        return DB::transaction(function () use ($tenantId, $dto, $entityKind, $parentId, $isPrimary) {
+        return DB::transaction(function () use ($tenantId, $dto, $entityKind, $parentId, $isPrimary, $rateType) {
             if ($isPrimary) {
                 $this->clearPrimaryFlags($tenantId);
             }
@@ -61,6 +63,9 @@ class CompanyService
                 'is_primary'                => $isPrimary,
                 'parent_company_id'         => $parentId,
                 'entity_kind'               => $entityKind,
+                'base_currency_id'          => $dto->baseCurrencyId,
+                'chart_of_accounts_id'      => $dto->chartOfAccountsId,
+                'default_consol_rate_type'  => $rateType,
                 'row_version'               => 1,
             ]);
         });
@@ -104,8 +109,25 @@ class CompanyService
             ? (bool) $dto->isPrimary
             : (bool) $company->is_primary;
 
+        $baseCurrencyId = $dto->baseCurrencyIdProvided
+            ? $dto->baseCurrencyId
+            : $company->base_currency_id;
+
+        $chartOfAccountsId = $dto->chartOfAccountsIdProvided
+            ? $dto->chartOfAccountsId
+            : $company->chart_of_accounts_id;
+
+        $rateType = $dto->defaultConsolRateTypeProvided
+            ? $this->normalizeRateType($dto->defaultConsolRateType)
+            : $company->default_consol_rate_type;
+
+        if ($dto->defaultConsolRateTypeProvided) {
+            $rateType = $this->normalizeRateType($dto->defaultConsolRateType);
+        }
+
         $this->assertParentValid($tenantId, $parentId, $companyId);
         $this->assertEntityKindRules($entityKind, $parentId);
+        $this->assertEliminationCurrency($tenantId, $entityKind, $parentId, $baseCurrencyId);
 
         if ($company->is_primary && $isPrimary === false) {
             $otherPrimary = Company::where('tenant_id', $tenantId)
@@ -117,7 +139,17 @@ class CompanyService
             }
         }
 
-        return DB::transaction(function () use ($company, $tenantId, $dto, $entityKind, $parentId, $isPrimary) {
+        return DB::transaction(function () use (
+            $company,
+            $tenantId,
+            $dto,
+            $entityKind,
+            $parentId,
+            $isPrimary,
+            $baseCurrencyId,
+            $chartOfAccountsId,
+            $rateType
+        ) {
             if ($isPrimary === true) {
                 $this->clearPrimaryFlags($tenantId, $company->company_id);
             }
@@ -141,6 +173,9 @@ class CompanyService
                 'is_primary'                => $isPrimary,
                 'parent_company_id'         => $parentId,
                 'entity_kind'               => $entityKind,
+                'base_currency_id'          => $baseCurrencyId,
+                'chart_of_accounts_id'      => $chartOfAccountsId,
+                'default_consol_rate_type'  => $rateType,
                 'row_version'               => ((int) ($company->row_version ?? 1)) + 1,
             ]);
 
@@ -178,9 +213,6 @@ class CompanyService
         $company->delete();
     }
 
-    /**
-     * ORG-P1-06 — Ensure HQ/primary operating company exists for a tenant (onboarding parity).
-     */
     public function ensurePrimaryCompanyForTenant(string $tenantId, ?string $name = null, string $code = 'HQ'): Company
     {
         $previous = TenantContext::getInstance()->getTenantId();
@@ -251,6 +283,20 @@ class CompanyService
         return $kind;
     }
 
+    private function normalizeRateType(?string $type): ?string
+    {
+        if ($type === null || $type === '') {
+            return null;
+        }
+
+        $type = strtoupper(trim($type));
+        if (!in_array($type, Company::CONSOL_RATE_TYPES, true)) {
+            throw new \Exception('نوع نرخ تسعیر نامعتبر است. مقادیر مجاز: CURRENT, AVERAGE, HISTORICAL');
+        }
+
+        return $type;
+    }
+
     private function assertParentValid(string $tenantId, ?string $parentId, ?string $selfId): void
     {
         if ($parentId === null || $parentId === '') {
@@ -288,6 +334,28 @@ class CompanyService
     {
         if ($entityKind === Company::ENTITY_KIND_ELIMINATION && ($parentId === null || $parentId === '')) {
             throw new \Exception('شرکت از نوع ELIMINATION باید شرکت والد داشته باشد.');
+        }
+    }
+
+    /**
+     * ORG-P1-05 extension: elimination entity currency should match parent when both set.
+     */
+    private function assertEliminationCurrency(
+        string $tenantId,
+        string $entityKind,
+        ?string $parentId,
+        ?string $baseCurrencyId
+    ): void {
+        if ($entityKind !== Company::ENTITY_KIND_ELIMINATION || $parentId === null || $baseCurrencyId === null) {
+            return;
+        }
+
+        $parentCurrency = Company::where('tenant_id', $tenantId)
+            ->where('company_id', $parentId)
+            ->value('base_currency_id');
+
+        if ($parentCurrency !== null && $parentCurrency !== $baseCurrencyId) {
+            throw new \Exception('ارز پایه شرکت ELIMINATION باید با شرکت والد یکسان باشد.');
         }
     }
 }
