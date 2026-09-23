@@ -27,11 +27,25 @@ return [
     |--------------------------------------------------------------------------
     | Scope types subject to strict denial when mode is strict
     |--------------------------------------------------------------------------
+    | BUSINESS_UNIT is recognized by Organization (ORG-P6-02) but NOT forced
+    | into strict list yet — keep gradual until Identity assigns BU scopes.
     */
     'strict_scope_types' => [
         'COMPANY',
         'BRANCH',
         'WAREHOUSE',
+    ],
+
+    /*
+    | Registered scope types (documentation + helpers). Free-string in DB;
+    | this list is the platform catalog for UI/seeders.
+    */
+    'registered_scope_types' => [
+        'COMPANY',
+        'BRANCH',
+        'DEPARTMENT',
+        'WAREHOUSE',
+        'BUSINESS_UNIT',
     ],
 
 ];
