@@ -33,6 +33,9 @@ class CreateCompanyRequest extends FormRequest
             'is_primary'                => ['boolean'],
             'parent_company_id'         => ['nullable', 'uuid'],
             'entity_kind'               => ['nullable', 'string', Rule::in(['OPERATING', 'CONSOLIDATION', 'ELIMINATION'])],
+            'base_currency_id'          => ['nullable', 'uuid'],
+            'chart_of_accounts_id'      => ['nullable', 'uuid'],
+            'default_consol_rate_type'  => ['nullable', 'string', Rule::in(['CURRENT', 'AVERAGE', 'HISTORICAL'])],
         ];
     }
 }
