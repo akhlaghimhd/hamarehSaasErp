@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateCompanyRequest extends FormRequest
 {
@@ -29,6 +30,9 @@ class UpdateCompanyRequest extends FormRequest
             'vat_registration'          => ['nullable', 'string', 'max:100'],
             'is_active'                 => ['boolean'],
             'status'                    => ['nullable', 'integer', 'in:1,2,3,4'],
+            'is_primary'                => ['boolean'],
+            'parent_company_id'         => ['nullable', 'uuid'],
+            'entity_kind'               => ['nullable', 'string', Rule::in(['OPERATING', 'CONSOLIDATION', 'ELIMINATION'])],
         ];
     }
 }
