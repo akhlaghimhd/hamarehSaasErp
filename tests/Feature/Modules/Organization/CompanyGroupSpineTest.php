@@ -124,10 +124,10 @@ class CompanyGroupSpineTest extends TestCase
             ->assertJsonPath('data.entity_kind', 'OPERATING');
 
         $this->assertDatabaseHas('erp_companies', [
-            'tenant_id'  => $this->tenant->tenant_id,
-            'code'       => 'HQ',
-            'is_primary' => true,
-            'entity_kind'=> 'OPERATING',
+            'tenant_id'   => $this->tenant->tenant_id,
+            'code'        => 'HQ',
+            'is_primary'  => true,
+            'entity_kind' => 'OPERATING',
         ]);
     }
 
@@ -186,6 +186,7 @@ class CompanyGroupSpineTest extends TestCase
             name: 'Parent',
             isPrimary: true,
             parentCompanyId: $child->company_id,
+            parentCompanyIdProvided: true,
         ));
     }
 
