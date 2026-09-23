@@ -7,6 +7,8 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 use App\Base\Http\Middleware\RequirePermission;
 use App\Base\Http\Middleware\LoadUserScopesMiddleware;
 use App\Base\Http\Middleware\RequireScope;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
@@ -48,6 +50,23 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($e instanceof ValidationException) {
                 return null; // default Laravel validation JSON
+            }
+
+            // Unauthenticated must be 401 (not swallowed as 422 by the generic handler)
+            if ($e instanceof AuthenticationException) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'احراز هویت لازم است.',
+                ], 401);
+            }
+
+            // Forbidden must be 403
+            if ($e instanceof AuthorizationException) {
+                $msg = $e->getMessage();
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => ($msg !== '' ? $msg : 'دسترسی مجاز نیست.'),
+                ], 403);
             }
 
             if ($e instanceof ModelNotFoundException) {
