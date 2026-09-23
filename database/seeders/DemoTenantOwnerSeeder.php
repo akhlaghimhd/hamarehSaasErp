@@ -5,11 +5,16 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
  * Creates a tenant owner for local QA on the same demo tenant as PermissionSeeder.
  * Email: owner@demo.local  Password: Owner123!
+ *
+ * Also ensures the primary organization company exists (onboarding parity):
+ * when a customer becomes a platform tenant, their legal company should already
+ * appear under Organization — not require a second "create company" step.
  *
  * Usage:
  *   docker compose exec app php artisan db:seed --class=PermissionSeeder
@@ -17,7 +22,7 @@ use Illuminate\Support\Str;
  */
 class DemoTenantOwnerSeeder extends Seeder
 {
-    /** Must match PermissionSeeder demo tenant. */
+    /** Must match PermissionSeeder / TenantSeeder demo tenant. */
     private const DEMO_TENANT_ID = '3ab77cac-1343-4b13-8e14-0d887aad132a';
 
     private const EMAIL = 'owner@demo.local';
@@ -53,12 +58,14 @@ class DemoTenantOwnerSeeder extends Seeder
         $this->upsertTenantMembership($tenantId, $userId);
         $roleId = $this->ensureTenantAdminRole($tenantId);
         $this->assignRole($tenantId, $userId, $roleId);
+        $companyId = $this->ensurePrimaryCompany($tenantId);
 
         $this->command?->info('Demo tenant owner ready:');
         $this->command?->info('  email:       '.self::EMAIL);
         $this->command?->info('  password:    '.self::PASSWORD);
         $this->command?->info('  tenant_id:   '.$tenantId);
         $this->command?->info('  user_id:     '.$userId);
+        $this->command?->info('  company_id:  '.($companyId ?? 'n/a'));
         $this->command?->info('  permissions: '.$permCount.' active codes on tenant');
         $this->command?->info('Re-login is required after seed so the token picks up permissions.');
     }
@@ -229,5 +236,49 @@ class DemoTenantOwnerSeeder extends Seeder
             'updated_at' => now(),
             'row_version' => 1,
         ]);
+    }
+
+    /**
+     * Primary company = legal entity registered at tenant onboarding.
+     * Idempotent: if any active company exists, reuse the oldest (HQ).
+     * If none, create code=HQ from tenant_name.
+     */
+    private function ensurePrimaryCompany(string $tenantId): ?string
+    {
+        if (!Schema::hasTable('erp_companies')) {
+            $this->command?->warn('erp_companies table missing — skip primary company seed.');
+
+            return null;
+        }
+
+        $existing = DB::table('erp_companies')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->first();
+
+        if ($existing) {
+            return (string) $existing->company_id;
+        }
+
+        $tenantName = (string) (DB::table('tenants')->where('tenant_id', $tenantId)->value('tenant_name') ?? 'شرکت اصلی');
+        $companyId = (string) Str::uuid();
+
+        DB::table('erp_companies')->insert([
+            'company_id' => $companyId,
+            'tenant_id' => $tenantId,
+            'code' => 'HQ',
+            'name' => $tenantName,
+            'registration_number' => null,
+            'economic_code' => null,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+            'row_version' => 1,
+        ]);
+
+        $this->command?->info("Primary company seeded: {$tenantName} (HQ / {$companyId})");
+
+        return $companyId;
     }
 }
