@@ -10,15 +10,12 @@ use App\Modules\Organization\Controllers\IntercompanyController;
 use App\Modules\Organization\Controllers\CompanyBankAccountController;
 use App\Modules\Organization\Controllers\CompanyOfficerController;
 use App\Modules\Organization\Controllers\CostCenterController;
-
-/*
-|--------------------------------------------------------------------------
-| Organization API Routes
-|--------------------------------------------------------------------------
-| Loaded by ModuleServiceProvider with prefix: /api/organization
-|
-| Address/contact for COMPANY → MasterData SoT (Law 5.1).
-*/
+use App\Modules\Organization\Controllers\CompanyOwnershipController;
+use App\Modules\Organization\Controllers\CompanyFiscalAssignmentController;
+use App\Modules\Organization\Controllers\SalesOrganizationController;
+use App\Modules\Organization\Controllers\PurchasingOrganizationController;
+use App\Modules\Organization\Controllers\ConsolidationRunController;
+use App\Modules\Organization\Controllers\EnterpriseStructureController;
 
 Route::middleware([
     'auth:sanctum',
@@ -26,7 +23,6 @@ Route::middleware([
     'load.scopes'
 ])->group(function () {
 
-    // Companies
     Route::get('/companies', [CompanyController::class, 'index'])
         ->middleware('permission:organization.company.view');
     Route::post('/companies', [CompanyController::class, 'store'])
@@ -38,7 +34,6 @@ Route::middleware([
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])
         ->middleware(['permission:organization.company.delete', 'scope:COMPANY,company']);
 
-    // Branches
     Route::get('/companies/{company}/branches', [BranchController::class, 'index'])
         ->middleware(['permission:organization.branch.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/branches', [BranchController::class, 'store'])
@@ -50,7 +45,6 @@ Route::middleware([
     Route::delete('/branches/{branch}', [BranchController::class, 'destroy'])
         ->middleware(['permission:organization.branch.delete', 'scope:BRANCH,branch']);
 
-    // Departments
     Route::get('/companies/{company}/departments', [DepartmentController::class, 'index'])
         ->middleware(['permission:organization.department.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/departments', [DepartmentController::class, 'store'])
@@ -62,7 +56,6 @@ Route::middleware([
     Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
         ->middleware(['permission:organization.department.delete', 'scope:DEPARTMENT,department']);
 
-    // Bank accounts (nested under company)
     Route::get('/companies/{company}/bank-accounts', [CompanyBankAccountController::class, 'index'])
         ->middleware(['permission:organization.bank.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/bank-accounts', [CompanyBankAccountController::class, 'store'])
@@ -70,7 +63,6 @@ Route::middleware([
     Route::delete('/bank-accounts/{bankAccount}', [CompanyBankAccountController::class, 'destroy'])
         ->middleware('permission:organization.bank.manage');
 
-    // Officers
     Route::get('/companies/{company}/officers', [CompanyOfficerController::class, 'index'])
         ->middleware(['permission:organization.officer.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/officers', [CompanyOfficerController::class, 'store'])
@@ -78,13 +70,25 @@ Route::middleware([
     Route::delete('/officers/{officer}', [CompanyOfficerController::class, 'destroy'])
         ->middleware('permission:organization.officer.manage');
 
-    // Cost centers
     Route::get('/companies/{company}/cost-centers', [CostCenterController::class, 'index'])
         ->middleware(['permission:organization.cost_center.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/cost-centers', [CostCenterController::class, 'store'])
         ->middleware(['permission:organization.cost_center.manage', 'scope:COMPANY,company']);
 
-    // Business units
+    Route::get('/companies/{company}/ownerships', [CompanyOwnershipController::class, 'index'])
+        ->middleware(['permission:organization.ownership.view', 'scope:COMPANY,company']);
+    Route::post('/companies/{company}/ownerships', [CompanyOwnershipController::class, 'store'])
+        ->middleware(['permission:organization.ownership.manage', 'scope:COMPANY,company']);
+    Route::delete('/ownerships/{ownership}', [CompanyOwnershipController::class, 'destroy'])
+        ->middleware('permission:organization.ownership.manage');
+
+    Route::get('/companies/{company}/fiscal-assignments', [CompanyFiscalAssignmentController::class, 'index'])
+        ->middleware(['permission:organization.fiscal.view', 'scope:COMPANY,company']);
+    Route::post('/companies/{company}/fiscal-assignments', [CompanyFiscalAssignmentController::class, 'store'])
+        ->middleware(['permission:organization.fiscal.manage', 'scope:COMPANY,company']);
+    Route::delete('/fiscal-assignments/{assignment}', [CompanyFiscalAssignmentController::class, 'destroy'])
+        ->middleware('permission:organization.fiscal.manage');
+
     Route::get('/business-units', [BusinessUnitController::class, 'index'])
         ->middleware('permission:organization.business_unit.view');
     Route::post('/business-units', [BusinessUnitController::class, 'store'])
@@ -92,7 +96,6 @@ Route::middleware([
     Route::post('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'assignCompany'])
         ->middleware('permission:organization.business_unit.manage');
 
-    // Hierarchies
     Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies', [OrgHierarchyController::class, 'store'])
@@ -102,7 +105,6 @@ Route::middleware([
     Route::post('/hierarchies/{hierarchy}/nodes', [OrgHierarchyController::class, 'addNode'])
         ->middleware('permission:organization.hierarchy.manage');
 
-    // Intercompany
     Route::get('/intercompany/partners', [IntercompanyController::class, 'partners'])
         ->middleware('permission:organization.intercompany.view');
     Route::post('/intercompany/partners', [IntercompanyController::class, 'storePartner'])
@@ -111,4 +113,28 @@ Route::middleware([
         ->middleware('permission:organization.intercompany.view');
     Route::post('/intercompany/rules', [IntercompanyController::class, 'storeRule'])
         ->middleware('permission:organization.intercompany.manage');
+
+    Route::get('/sales-organizations', [SalesOrganizationController::class, 'index'])
+        ->middleware('permission:organization.sales_org.view');
+    Route::post('/sales-organizations', [SalesOrganizationController::class, 'store'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::post('/sales-organizations/{salesOrg}/assignments', [SalesOrganizationController::class, 'assign'])
+        ->middleware('permission:organization.sales_org.manage');
+
+    Route::get('/purchasing-organizations', [PurchasingOrganizationController::class, 'index'])
+        ->middleware('permission:organization.purch_org.view');
+    Route::post('/purchasing-organizations', [PurchasingOrganizationController::class, 'store'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::post('/purchasing-organizations/{purchOrg}/assignments', [PurchasingOrganizationController::class, 'assign'])
+        ->middleware('permission:organization.purch_org.manage');
+
+    Route::get('/consolidation-runs', [ConsolidationRunController::class, 'index'])
+        ->middleware('permission:organization.consolidation.view');
+    Route::post('/consolidation-runs', [ConsolidationRunController::class, 'store'])
+        ->middleware('permission:organization.consolidation.manage');
+    Route::post('/consolidation-runs/{consolRun}/snapshot', [ConsolidationRunController::class, 'snapshot'])
+        ->middleware('permission:organization.consolidation.manage');
+
+    Route::post('/structure/apply-template', [EnterpriseStructureController::class, 'applyTemplate'])
+        ->middleware('permission:organization.structure.configure');
 });
