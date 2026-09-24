@@ -363,21 +363,27 @@ class AriaSanatDemoOrgSeeder extends Seeder
             return;
         }
 
+        // PK is assignment_id (ORG-P4 migration)
         $row = [
+            'assignment_id'    => (string) Str::uuid(),
             'tenant_id'        => $tenantId,
             'business_unit_id' => $buId,
             'company_id'       => $companyId,
+            'is_primary'       => true,
+            'is_active'        => true,
             'created_at'       => now(),
             'updated_at'       => now(),
             'row_version'      => 1,
         ];
-        if (Schema::hasColumn('erp_business_unit_companies', 'bu_company_id')) {
-            $row['bu_company_id'] = (string) Str::uuid();
-        } elseif (Schema::hasColumn('erp_business_unit_companies', 'id')) {
-            $row['id'] = (string) Str::uuid();
-        }
-        if (Schema::hasColumn('erp_business_unit_companies', 'is_primary')) {
-            $row['is_primary'] = true;
+
+        // Drop columns that do not exist (defensive)
+        foreach (array_keys($row) as $col) {
+            if ($col === 'tenant_id') {
+                continue;
+            }
+            if (!Schema::hasColumn('erp_business_unit_companies', $col)) {
+                unset($row[$col]);
+            }
         }
 
         DB::table('erp_business_unit_companies')->insert($row);
