@@ -9,9 +9,18 @@ use Illuminate\Database\Eloquent\Collection;
 
 class EntityAddressService
 {
-    public function getAll(): Collection
+    public function getAll(?string $entityType = null, ?string $entityId = null): Collection
     {
-        return EntityAddress::all();
+        $q = EntityAddress::query();
+
+        if ($entityType) {
+            $q->where('entity_type', $entityType);
+        }
+        if ($entityId) {
+            $q->where('entity_id', $entityId);
+        }
+
+        return $q->orderByDesc('is_primary')->orderBy('created_at')->get();
     }
 
     public function getById(string $id): EntityAddress
@@ -27,9 +36,10 @@ class EntityAddressService
     public function update(string $id, UpdateEntityAddressDTO $dto): EntityAddress
     {
         $address = $this->getById($id);
-        $data = array_filter((array) $dto, fn($value) => $value !== null);
-        
+        $data = array_filter((array) $dto, fn ($value) => $value !== null);
+
         $address->update($data);
+
         return $address;
     }
 

@@ -4,6 +4,7 @@ namespace App\Modules\MasterData\Controllers;
 
 use App\Base\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use App\Modules\MasterData\Services\EntityContactPointService;
 use App\Modules\MasterData\Requests\CreateEntityContactPointRequest;
 use App\Modules\MasterData\Requests\UpdateEntityContactPointRequest;
@@ -16,15 +17,20 @@ class EntityContactPointController extends Controller
     {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $contacts = $this->contactService->getAll();
+        $contacts = $this->contactService->getAll(
+            $request->query('entity_type'),
+            $request->query('entity_id'),
+        );
+
         return response()->json(['data' => $contacts]);
     }
 
     public function show(string $id): JsonResponse
     {
         $contact = $this->contactService->getById($id);
+
         return response()->json(['data' => $contact]);
     }
 
@@ -32,7 +38,7 @@ class EntityContactPointController extends Controller
     {
         $dto = CreateEntityContactPointDTO::fromRequest($request);
         $contact = $this->contactService->create($dto);
-        
+
         return response()->json(['data' => $contact, 'message' => 'Contact Point created successfully.'], 201);
     }
 
@@ -40,13 +46,14 @@ class EntityContactPointController extends Controller
     {
         $dto = UpdateEntityContactPointDTO::fromRequest($request);
         $contact = $this->contactService->update($id, $dto);
-        
+
         return response()->json(['data' => $contact, 'message' => 'Contact Point updated successfully.']);
     }
 
     public function destroy(string $id): JsonResponse
     {
         $this->contactService->delete($id);
+
         return response()->json(['message' => 'Contact Point deleted successfully.']);
     }
 }

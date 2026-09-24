@@ -4,6 +4,7 @@ namespace App\Modules\MasterData\Controllers;
 
 use App\Base\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use App\Modules\MasterData\Services\EntityAddressService;
 use App\Modules\MasterData\Requests\CreateEntityAddressRequest;
 use App\Modules\MasterData\Requests\UpdateEntityAddressRequest;
@@ -16,15 +17,20 @@ class EntityAddressController extends Controller
     {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $addresses = $this->addressService->getAll();
+        $addresses = $this->addressService->getAll(
+            $request->query('entity_type'),
+            $request->query('entity_id'),
+        );
+
         return response()->json(['data' => $addresses]);
     }
 
     public function show(string $id): JsonResponse
     {
         $address = $this->addressService->getById($id);
+
         return response()->json(['data' => $address]);
     }
 
@@ -32,7 +38,7 @@ class EntityAddressController extends Controller
     {
         $dto = CreateEntityAddressDTO::fromRequest($request);
         $address = $this->addressService->create($dto);
-        
+
         return response()->json(['data' => $address, 'message' => 'Entity Address created successfully.'], 201);
     }
 
@@ -40,13 +46,14 @@ class EntityAddressController extends Controller
     {
         $dto = UpdateEntityAddressDTO::fromRequest($request);
         $address = $this->addressService->update($id, $dto);
-        
+
         return response()->json(['data' => $address, 'message' => 'Entity Address updated successfully.']);
     }
 
     public function destroy(string $id): JsonResponse
     {
         $this->addressService->delete($id);
+
         return response()->json(['message' => 'Entity Address deleted successfully.']);
     }
 }
