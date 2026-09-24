@@ -11,12 +11,8 @@ use Illuminate\Support\Str;
  * Sample multi-company group for local/QA: «گروه آریا صنعت».
  *
  * Idempotent on demo tenant (same resolution as DemoTenantOwnerSeeder).
- * Does NOT create users — run DemoTenantOwnerSeeder + PermissionSeeder first.
- *
- * Structure:
- *   HQ (ARYA-HQ) — primary OPERATING
- *   Subsidiary (ARYA-SUB) — OPERATING, parent = HQ, 80% equity ownership
- *   Branch under HQ, Business Unit, LEGAL hierarchy with both companies as nodes
+ * Adopts the existing primary company (code may be HQ) and renames to ARYA-HQ
+ * so uq_erp_companies_primary is never violated.
  *
  * Usage:
  *   docker compose exec app php artisan db:seed --class=AriaSanatDemoOrgSeeder
@@ -42,44 +38,22 @@ class AriaSanatDemoOrgSeeder extends Seeder
 
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
-        $hqId = $this->upsertCompany($tenantId, [
-            'code'                 => 'ARYA-HQ',
-            'name'                 => 'آریا صنعت',
-            'legal_name'           => 'شرکت آریا صنعت (سهامی خاص)',
-            'trade_name'           => 'آریا صنعت',
-            'registration_number'  => '123456',
-            'economic_code'        => '41111111111',
-            'tax_identifier'       => '14001234567',
-            'entity_kind'          => 'OPERATING',
-            'is_primary'           => true,
-            'parent_company_id'    => null,
-            'is_active'            => true,
-            'status'               => 1,
-        ]);
+        $hqId = $this->ensureAriaHq($tenantId);
 
         $subId = $this->upsertCompany($tenantId, [
-            'code'                 => 'ARYA-SUB',
-            'name'                 => 'آریا پخش',
-            'legal_name'           => 'شرکت آریا پخش',
-            'trade_name'           => 'آریا پخش',
-            'registration_number'  => '654321',
-            'economic_code'        => '42222222222',
-            'tax_identifier'       => '14007654321',
-            'entity_kind'          => 'OPERATING',
-            'is_primary'           => false,
-            'parent_company_id'    => $hqId,
-            'is_active'            => true,
-            'status'               => 1,
-        ]);
-
-        // Only one primary
-        if (Schema::hasColumn('erp_companies', 'is_primary')) {
-            DB::table('erp_companies')
-                ->where('tenant_id', $tenantId)
-                ->where('company_id', '!=', $hqId)
-                ->whereNull('deleted_at')
-                ->update(['is_primary' => false]);
-        }
+            'code'                => 'ARYA-SUB',
+            'name'                => 'آریا پخش',
+            'legal_name'          => 'شرکت آریا پخش',
+            'trade_name'          => 'آریا پخش',
+            'registration_number' => '654321',
+            'economic_code'       => '42222222222',
+            'tax_identifier'      => '14007654321',
+            'entity_kind'         => 'OPERATING',
+            'is_primary'          => false,
+            'parent_company_id'   => $hqId,
+            'is_active'           => true,
+            'status'              => 1,
+        ], adoptPrimary: false);
 
         $this->upsertOwnership($tenantId, $subId, $hqId, 80.0);
         $branchId = $this->upsertBranch($tenantId, $hqId);
@@ -111,9 +85,79 @@ class AriaSanatDemoOrgSeeder extends Seeder
     }
 
     /**
+     * Prefer existing primary (or first company), else insert ARYA-HQ.
+     * Clears is_primary on siblings before setting HQ primary.
+     */
+    private function ensureAriaHq(string $tenantId): string
+    {
+        $attrs = [
+            'code'                => 'ARYA-HQ',
+            'name'                => 'آریا صنعت',
+            'legal_name'          => 'شرکت آریا صنعت (سهامی خاص)',
+            'trade_name'          => 'آریا صنعت',
+            'registration_number' => '123456',
+            'economic_code'       => '41111111111',
+            'tax_identifier'      => '14001234567',
+            'entity_kind'         => 'OPERATING',
+            'is_primary'          => true,
+            'parent_company_id'   => null,
+            'is_active'           => true,
+            'status'              => 1,
+        ];
+
+        // 1) by code ARYA-HQ
+        $byCode = DB::table('erp_companies')
+            ->where('tenant_id', $tenantId)
+            ->where('code', 'ARYA-HQ')
+            ->whereNull('deleted_at')
+            ->first();
+
+        // 2) current primary
+        $primary = null;
+        if (Schema::hasColumn('erp_companies', 'is_primary')) {
+            $primary = DB::table('erp_companies')
+                ->where('tenant_id', $tenantId)
+                ->where('is_primary', true)
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        // 3) earliest company (DemoTenantOwner often used code HQ)
+        $first = DB::table('erp_companies')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->first();
+
+        $target = $byCode ?? $primary ?? $first;
+
+        if ($target) {
+            // Clear other primaries first (partial unique index)
+            if (Schema::hasColumn('erp_companies', 'is_primary')) {
+                DB::table('erp_companies')
+                    ->where('tenant_id', $tenantId)
+                    ->where('company_id', '!=', $target->company_id)
+                    ->whereNull('deleted_at')
+                    ->update(['is_primary' => false, 'updated_at' => now()]);
+            }
+
+            $row = $this->filterCompanyColumns(array_merge($attrs, [
+                'tenant_id'  => $tenantId,
+                'updated_at' => now(),
+            ]));
+
+            DB::table('erp_companies')->where('company_id', $target->company_id)->update($row);
+
+            return (string) $target->company_id;
+        }
+
+        return $this->upsertCompany($tenantId, $attrs, adoptPrimary: true);
+    }
+
+    /**
      * @param  array<string, mixed>  $attrs
      */
-    private function upsertCompany(string $tenantId, array $attrs): string
+    private function upsertCompany(string $tenantId, array $attrs, bool $adoptPrimary = false): string
     {
         $existing = DB::table('erp_companies')
             ->where('tenant_id', $tenantId)
@@ -121,25 +165,39 @@ class AriaSanatDemoOrgSeeder extends Seeder
             ->whereNull('deleted_at')
             ->first();
 
-        $row = array_merge($attrs, [
+        $row = $this->filterCompanyColumns(array_merge($attrs, [
             'tenant_id'  => $tenantId,
             'updated_at' => now(),
-        ]);
-
-        // Drop columns that may not exist yet
-        foreach (array_keys($row) as $col) {
-            if ($col === 'tenant_id') {
-                continue;
-            }
-            if (!Schema::hasColumn('erp_companies', $col)) {
-                unset($row[$col]);
-            }
-        }
+        ]));
 
         if ($existing) {
+            if (!empty($attrs['is_primary']) && Schema::hasColumn('erp_companies', 'is_primary')) {
+                DB::table('erp_companies')
+                    ->where('tenant_id', $tenantId)
+                    ->where('company_id', '!=', $existing->company_id)
+                    ->whereNull('deleted_at')
+                    ->update(['is_primary' => false, 'updated_at' => now()]);
+            }
             DB::table('erp_companies')->where('company_id', $existing->company_id)->update($row);
 
             return (string) $existing->company_id;
+        }
+
+        // Never insert a second primary: force false if any primary exists
+        if (!empty($attrs['is_primary']) && Schema::hasColumn('erp_companies', 'is_primary')) {
+            $hasPrimary = DB::table('erp_companies')
+                ->where('tenant_id', $tenantId)
+                ->where('is_primary', true)
+                ->whereNull('deleted_at')
+                ->exists();
+            if ($hasPrimary && !$adoptPrimary) {
+                $row['is_primary'] = false;
+            } elseif ($hasPrimary && $adoptPrimary) {
+                DB::table('erp_companies')
+                    ->where('tenant_id', $tenantId)
+                    ->whereNull('deleted_at')
+                    ->update(['is_primary' => false, 'updated_at' => now()]);
+            }
         }
 
         $id = (string) Str::uuid();
@@ -149,6 +207,24 @@ class AriaSanatDemoOrgSeeder extends Seeder
         DB::table('erp_companies')->insert($row);
 
         return $id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function filterCompanyColumns(array $row): array
+    {
+        foreach (array_keys($row) as $col) {
+            if ($col === 'tenant_id') {
+                continue;
+            }
+            if (!Schema::hasColumn('erp_companies', $col)) {
+                unset($row[$col]);
+            }
+        }
+
+        return $row;
     }
 
     private function upsertOwnership(
@@ -369,16 +445,16 @@ class AriaSanatDemoOrgSeeder extends Seeder
         }
 
         DB::table('erp_org_hierarchy_nodes')->insert([
-            'node_id'         => (string) Str::uuid(),
-            'tenant_id'       => $tenantId,
-            'hierarchy_id'    => $hierarchyId,
-            'parent_node_id'  => $parentNodeId,
-            'entity_type'     => $entityType,
-            'entity_id'       => $entityId,
-            'sort_order'      => $sortOrder,
-            'created_at'      => now(),
-            'updated_at'      => now(),
-            'row_version'     => 1,
+            'node_id'        => (string) Str::uuid(),
+            'tenant_id'      => $tenantId,
+            'hierarchy_id'   => $hierarchyId,
+            'parent_node_id' => $parentNodeId,
+            'entity_type'    => $entityType,
+            'entity_id'      => $entityId,
+            'sort_order'     => $sortOrder,
+            'created_at'     => now(),
+            'updated_at'     => now(),
+            'row_version'    => 1,
         ]);
     }
 }
