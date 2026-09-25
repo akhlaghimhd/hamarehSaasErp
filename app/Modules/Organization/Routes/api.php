@@ -59,6 +59,8 @@ Route::middleware([
         ->middleware(['permission:organization.department.update', 'scope:DEPARTMENT,department']);
     Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])
         ->middleware(['permission:organization.department.delete', 'scope:DEPARTMENT,department']);
+    Route::post('/departments/{department}/restore', [DepartmentController::class, 'restore'])
+        ->middleware('permission:organization.department.update');
 
     Route::get('/companies/{company}/bank-accounts', [CompanyBankAccountController::class, 'index'])
         ->middleware(['permission:organization.bank.view', 'scope:COMPANY,company']);
