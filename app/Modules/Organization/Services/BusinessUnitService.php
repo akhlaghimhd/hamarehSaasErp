@@ -212,7 +212,22 @@ class BusinessUnitService
             throw new Exception('این واحد به این شرکت متصل نیست.');
         }
 
+        $wasPrimary = (bool) $row->is_primary;
         $row->delete();
+
+        // اگر شرکت اصلی قطع شد و هنوز اتصال دیگری هست، اولین اتصال باقی‌مانده اصلی می‌شود
+        if ($wasPrimary) {
+            $next = BusinessUnitCompany::where('tenant_id', $tenantId)
+                ->where('business_unit_id', $businessUnitId)
+                ->orderBy('created_at')
+                ->first();
+            if ($next) {
+                $next->update([
+                    'is_primary'  => true,
+                    'row_version' => ((int) ($next->row_version ?? 1)) + 1,
+                ]);
+            }
+        }
     }
 
     /**
@@ -300,6 +315,19 @@ class BusinessUnitService
                     ->where('business_unit_id', $businessUnitId)
                     ->where('company_id', $primaryCompanyId)
                     ->update(['is_primary' => true]);
+            } else {
+                // اگر اصلی مشخص نشد ولی اتصالی مانده و هیچ اصلی‌ای نیست → اولین را اصلی کن
+                $still = BusinessUnitCompany::where('tenant_id', $tenantId)
+                    ->where('business_unit_id', $businessUnitId)
+                    ->orderBy('created_at')
+                    ->get();
+                if ($still->isNotEmpty() && !$still->contains(fn ($r) => (bool) $r->is_primary)) {
+                    $first = $still->first();
+                    $first->update([
+                        'is_primary'  => true,
+                        'row_version' => ((int) ($first->row_version ?? 1)) + 1,
+                    ]);
+                }
             }
 
             return ['attached' => $attached, 'detached' => $detached];
