@@ -8,9 +8,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Rich demo org data for the demo tenant (Aria Sanat group).
- * Idempotent upserts by (tenant_id, code) where applicable.
- * Target: at least 4 samples per major organization entity family.
+ * Rich demo org data — at least 5 samples for every major organization box.
+ * Idempotent by (tenant_id, code) / unique partner pairs.
  */
 class AriaSanatDemoOrgSeeder extends Seeder
 {
@@ -25,107 +24,142 @@ class AriaSanatDemoOrgSeeder extends Seeder
             return;
         }
 
-        // --- Companies (4+) ---
+        // ========== شرکت‌ها (۵) ==========
         $hqId = $this->ensureAriaHq($tenantId);
-        $cPakhsh = $this->upsertCompany($tenantId, [
-            'code' => 'ARYA-SUB', 'name' => 'آریا پخش', 'legal_name' => 'شرکت آریا پخش',
-            'trade_name' => 'آریا پخش', 'registration_number' => '654321',
-            'economic_code' => '42222222222', 'tax_identifier' => '14007654321',
-            'entity_kind' => 'OPERATING', 'is_primary' => false, 'parent_company_id' => $hqId,
-            'is_active' => true, 'status' => 1,
-        ], adoptPrimary: false);
-        $cService = $this->upsertCompany($tenantId, [
-            'code' => 'ARYA-SVC', 'name' => 'آریا خدمات', 'legal_name' => 'شرکت آریا خدمات فنی',
-            'trade_name' => 'آریا خدمات', 'registration_number' => '778899',
-            'economic_code' => '43333333333', 'tax_identifier' => '14008887766',
-            'entity_kind' => 'OPERATING', 'is_primary' => false, 'parent_company_id' => $hqId,
-            'is_active' => true, 'status' => 1,
-        ], adoptPrimary: false);
-        $cHold = $this->upsertCompany($tenantId, [
-            'code' => 'ARYA-HOLD', 'name' => 'آریا هلدینگ', 'legal_name' => 'شرکت آریا سرمایه‌گذاری',
-            'trade_name' => 'آریا هلدینگ', 'registration_number' => '112233',
-            'economic_code' => '44444444444', 'tax_identifier' => '14001112233',
-            'entity_kind' => 'CONSOLIDATION', 'is_primary' => false, 'parent_company_id' => $hqId,
-            'is_active' => true, 'status' => 1,
-        ], adoptPrimary: false);
+        $companies = [
+            $hqId,
+            $this->upsertCompany($tenantId, [
+                'code' => 'ARYA-SUB', 'name' => 'آریا پخش', 'legal_name' => 'شرکت آریا پخش',
+                'trade_name' => 'آریا پخش', 'registration_number' => '654321',
+                'economic_code' => '42222222222', 'tax_identifier' => '14007654321',
+                'entity_kind' => 'OPERATING', 'is_primary' => false, 'parent_company_id' => $hqId,
+                'is_active' => true, 'status' => 1,
+            ]),
+            $this->upsertCompany($tenantId, [
+                'code' => 'ARYA-SVC', 'name' => 'آریا خدمات', 'legal_name' => 'شرکت آریا خدمات فنی',
+                'trade_name' => 'آریا خدمات', 'registration_number' => '778899',
+                'economic_code' => '43333333333', 'tax_identifier' => '14008887766',
+                'entity_kind' => 'OPERATING', 'is_primary' => false, 'parent_company_id' => $hqId,
+                'is_active' => true, 'status' => 1,
+            ]),
+            $this->upsertCompany($tenantId, [
+                'code' => 'ARYA-HOLD', 'name' => 'آریا هلدینگ', 'legal_name' => 'شرکت آریا سرمایه‌گذاری',
+                'trade_name' => 'آریا هلدینگ', 'registration_number' => '112233',
+                'economic_code' => '44444444444', 'tax_identifier' => '14001112233',
+                'entity_kind' => 'CONSOLIDATION', 'is_primary' => false, 'parent_company_id' => $hqId,
+                'is_active' => true, 'status' => 1,
+            ]),
+            $this->upsertCompany($tenantId, [
+                'code' => 'ARYA-EXP', 'name' => 'آریا صادرات', 'legal_name' => 'شرکت آریا تجارت بین‌الملل',
+                'trade_name' => 'آریا صادرات', 'registration_number' => '998877',
+                'economic_code' => '45555555555', 'tax_identifier' => '14009998877',
+                'entity_kind' => 'OPERATING', 'is_primary' => false, 'parent_company_id' => $hqId,
+                'is_active' => true, 'status' => 1,
+            ]),
+        ];
+        [$hqId, $cPakhsh, $cService, $cHold, $cExport] = $companies;
 
         $this->upsertOwnership($tenantId, $cPakhsh, $hqId, 80.0);
         $this->upsertOwnership($tenantId, $cService, $hqId, 100.0);
         $this->upsertOwnership($tenantId, $cHold, $hqId, 60.0);
+        $this->upsertOwnership($tenantId, $cExport, $hqId, 70.0);
 
-        // --- Branches (4+) ---
+        // ========== شعب (۵) ==========
         $brHq = $this->upsertBranch($tenantId, $hqId, 'ARYA-HQ-BR1', 'دفتر مرکزی تهران', 'OFFICE');
         $brNorth = $this->upsertBranch($tenantId, $hqId, 'ARYA-HQ-BR2', 'شعبه شمال', 'BRANCH');
+        $brSouth = $this->upsertBranch($tenantId, $hqId, 'ARYA-HQ-BR3', 'شعبه جنوب', 'BRANCH');
         $brPakhsh = $this->upsertBranch($tenantId, $cPakhsh, 'ARYA-SUB-BR1', 'انبار پخش کرج', 'WAREHOUSE');
         $brSvc = $this->upsertBranch($tenantId, $cService, 'ARYA-SVC-BR1', 'مرکز خدمات اصفهان', 'BRANCH');
+        $brExp = $this->upsertBranch($tenantId, $cExport, 'ARYA-EXP-BR1', 'دفتر صادرات بندرعباس', 'OFFICE');
 
-        // --- Departments (4+) ---
+        // ========== واحدهای سازمانی (۵) ==========
         $depSales = $this->upsertDepartment($tenantId, $hqId, $brHq, 'DEP-SALES', 'فروش');
         $depFin = $this->upsertDepartment($tenantId, $hqId, $brHq, 'DEP-FIN', 'مالی');
         $depHr = $this->upsertDepartment($tenantId, $hqId, $brNorth, 'DEP-HR', 'منابع انسانی');
         $depOps = $this->upsertDepartment($tenantId, $cPakhsh, $brPakhsh, 'DEP-OPS', 'عملیات انبار');
+        $depQa = $this->upsertDepartment($tenantId, $hqId, $brSouth, 'DEP-QA', 'کنترل کیفیت');
+        $depSvc = $this->upsertDepartment($tenantId, $cService, $brSvc, 'DEP-SVC', 'پشتیبانی فنی');
 
-        // --- Business units (4+) ---
+        // ========== واحدهای کسب‌وکار (۵) ==========
         $buOps = $this->upsertBusinessUnit($tenantId, 'ARYA-BU-OPS', 'عملیات تولید و پخش', 'خط اصلی تولید و توزیع');
         $buHome = $this->upsertBusinessUnit($tenantId, 'ARYA-BU-HOME', 'لوازم خانگی', 'محصولات خانگی');
         $buInd = $this->upsertBusinessUnit($tenantId, 'ARYA-BU-IND', 'صنعتی', 'تجهیزات صنعتی');
         $buSvc = $this->upsertBusinessUnit($tenantId, 'ARYA-BU-SVC', 'خدمات پس از فروش', 'تعمیر و نگهداری');
+        $buExp = $this->upsertBusinessUnit($tenantId, 'ARYA-BU-EXP', 'صادرات', 'بازارهای خارجی');
+
         $this->assignCompanyToBu($tenantId, $buOps, $hqId, true);
+        $this->assignCompanyToBu($tenantId, $buOps, $cPakhsh, false);
         $this->assignCompanyToBu($tenantId, $buHome, $hqId, true);
         $this->assignCompanyToBu($tenantId, $buInd, $hqId, true);
         $this->assignCompanyToBu($tenantId, $buSvc, $cService, true);
-        $this->assignCompanyToBu($tenantId, $buOps, $cPakhsh, false);
+        $this->assignCompanyToBu($tenantId, $buExp, $cExport, true);
+        $this->assignCompanyToBu($tenantId, $buExp, $hqId, false);
 
-        // --- Cost centers (4+) ---
+        // ========== مراکز هزینه (۵) ==========
         $this->upsertCostCenter($tenantId, $hqId, $depSales, 'CC-SALES', 'مرکز هزینه فروش');
         $this->upsertCostCenter($tenantId, $hqId, $depFin, 'CC-FIN', 'مرکز هزینه مالی');
         $this->upsertCostCenter($tenantId, $hqId, $depHr, 'CC-HR', 'مرکز هزینه منابع انسانی');
         $this->upsertCostCenter($tenantId, $cPakhsh, $depOps, 'CC-WH', 'مرکز هزینه انبار');
+        $this->upsertCostCenter($tenantId, $hqId, $depQa, 'CC-QA', 'مرکز هزینه کیفیت');
+        $this->upsertCostCenter($tenantId, $cService, $depSvc, 'CC-SVC', 'مرکز هزینه خدمات');
 
-        // --- Hierarchies (4) ---
+        // ========== سلسله‌مراتب (۵) ==========
         $hLegal = $this->upsertHierarchy($tenantId, 'ARYA-LEGAL', 'ساختار حقوقی آریا صنعت', 'LEGAL');
         $hMgmt = $this->upsertHierarchy($tenantId, 'ARYA-MGMT', 'ساختار مدیریتی', 'MANAGEMENT');
         $hTax = $this->upsertHierarchy($tenantId, 'ARYA-TAX', 'گروه مالیاتی', 'TAX');
         $hEst = $this->upsertHierarchy($tenantId, 'ARYA-EST', 'استقرار شعب', 'ESTABLISHMENT');
+        $hCustom = $this->upsertHierarchy($tenantId, 'ARYA-PROD', 'درخت خطوط محصول', 'CUSTOM');
 
         $nHq = $this->upsertHierarchyNode($tenantId, $hLegal, 'COMPANY', $hqId, null, 10);
         $this->upsertHierarchyNode($tenantId, $hLegal, 'COMPANY', $cPakhsh, $nHq, 20);
         $this->upsertHierarchyNode($tenantId, $hLegal, 'COMPANY', $cService, $nHq, 30);
         $this->upsertHierarchyNode($tenantId, $hLegal, 'COMPANY', $cHold, $nHq, 40);
+        $this->upsertHierarchyNode($tenantId, $hLegal, 'COMPANY', $cExport, $nHq, 50);
 
-        $nMgmtRoot = $this->upsertHierarchyNode($tenantId, $hMgmt, 'COMPANY', $hqId, null, 10);
-        $this->upsertHierarchyNode($tenantId, $hMgmt, 'BUSINESS_UNIT', $buOps, $nMgmtRoot, 20);
-        $this->upsertHierarchyNode($tenantId, $hMgmt, 'BUSINESS_UNIT', $buHome, $nMgmtRoot, 30);
-        $this->upsertHierarchyNode($tenantId, $hMgmt, 'DEPARTMENT', $depSales, $nMgmtRoot, 40);
+        $nMgmt = $this->upsertHierarchyNode($tenantId, $hMgmt, 'COMPANY', $hqId, null, 10);
+        $this->upsertHierarchyNode($tenantId, $hMgmt, 'BUSINESS_UNIT', $buOps, $nMgmt, 20);
+        $this->upsertHierarchyNode($tenantId, $hMgmt, 'BUSINESS_UNIT', $buHome, $nMgmt, 30);
+        $this->upsertHierarchyNode($tenantId, $hMgmt, 'BUSINESS_UNIT', $buInd, $nMgmt, 40);
+        $this->upsertHierarchyNode($tenantId, $hMgmt, 'DEPARTMENT', $depSales, $nMgmt, 50);
 
         $this->upsertHierarchyNode($tenantId, $hTax, 'COMPANY', $hqId, null, 10);
         $this->upsertHierarchyNode($tenantId, $hTax, 'COMPANY', $cPakhsh, null, 20);
+        $this->upsertHierarchyNode($tenantId, $hTax, 'COMPANY', $cExport, null, 30);
 
         $nEst = $this->upsertHierarchyNode($tenantId, $hEst, 'COMPANY', $hqId, null, 10);
         $this->upsertHierarchyNode($tenantId, $hEst, 'BRANCH', $brHq, $nEst, 20);
         $this->upsertHierarchyNode($tenantId, $hEst, 'BRANCH', $brNorth, $nEst, 30);
-        $this->upsertHierarchyNode($tenantId, $hEst, 'BRANCH', $brPakhsh, $nEst, 40);
+        $this->upsertHierarchyNode($tenantId, $hEst, 'BRANCH', $brSouth, $nEst, 40);
+        $this->upsertHierarchyNode($tenantId, $hEst, 'BRANCH', $brPakhsh, $nEst, 50);
 
-        // --- Sales / Purchasing orgs (4 each) ---
+        $nProd = $this->upsertHierarchyNode($tenantId, $hCustom, 'BUSINESS_UNIT', $buHome, null, 10);
+        $this->upsertHierarchyNode($tenantId, $hCustom, 'BUSINESS_UNIT', $buInd, $nProd, 20);
+        $this->upsertHierarchyNode($tenantId, $hCustom, 'BUSINESS_UNIT', $buExp, $nProd, 30);
+
+        // ========== سازمان فروش (۵) ==========
         $this->upsertSalesOrg($tenantId, $hqId, 'SO-DOM', 'فروش داخلی');
         $this->upsertSalesOrg($tenantId, $hqId, 'SO-EXP', 'فروش صادرات');
         $this->upsertSalesOrg($tenantId, $cPakhsh, 'SO-DIST', 'توزیع پخش');
         $this->upsertSalesOrg($tenantId, $cService, 'SO-SVC', 'فروش خدمات');
+        $this->upsertSalesOrg($tenantId, $cExport, 'SO-INTL', 'بازار بین‌الملل');
 
+        // ========== سازمان خرید (۵) ==========
         $this->upsertPurchOrg($tenantId, $hqId, 'PO-RAW', 'خرید مواد');
         $this->upsertPurchOrg($tenantId, $hqId, 'PO-GEN', 'خرید عمومی');
         $this->upsertPurchOrg($tenantId, $cPakhsh, 'PO-DIST', 'خرید پخش');
         $this->upsertPurchOrg($tenantId, $cService, 'PO-SVC', 'خرید خدمات');
+        $this->upsertPurchOrg($tenantId, $cExport, 'PO-IMP', 'خرید وارداتی');
 
-        // --- Intercompany partners (pairs) ---
-        $this->upsertIcPartner($tenantId, $hqId, $cPakhsh);
-        $this->upsertIcPartner($tenantId, $hqId, $cService);
-        $this->upsertIcPartner($tenantId, $cPakhsh, $cService);
-        $this->upsertIcPartner($tenantId, $hqId, $cHold);
+        // ========== بین‌شرکتی (۵ جفت) ==========
+        $this->upsertIcPartner($tenantId, $hqId, $cPakhsh, 'HQ ↔ پخش');
+        $this->upsertIcPartner($tenantId, $hqId, $cService, 'HQ ↔ خدمات');
+        $this->upsertIcPartner($tenantId, $hqId, $cExport, 'HQ ↔ صادرات');
+        $this->upsertIcPartner($tenantId, $cPakhsh, $cService, 'پخش ↔ خدمات');
+        $this->upsertIcPartner($tenantId, $hqId, $cHold, 'HQ ↔ هلدینگ');
 
-        $this->command?->info('Aria Sanat demo org refreshed on tenant '.$tenantId);
-        $this->command?->info('  Companies: HQ + SUB + SVC + HOLD');
-        $this->command?->info('  Branches / Depts / BUs / CostCenters / Hierarchies / Sales / Purch / IC seeded (4+ each where applicable).');
+        $this->command?->info('Aria Sanat demo org RICH seed on tenant '.$tenantId);
+        $this->command?->info('  Companies ≥5 | Branches ≥5 | Depts ≥5 | BUs ≥5 | CostCenters ≥5');
+        $this->command?->info('  Hierarchies ≥5 | SalesOrg ≥5 | PurchOrg ≥5 | IC partners ≥5');
     }
 
     private function resolveTenantId(): ?string
@@ -161,9 +195,8 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $primary = DB::table('erp_companies')
             ->where('tenant_id', $tenantId)->where('is_primary', true)->whereNull('deleted_at')->first();
         if ($primary) {
-            $attrs['code'] = $primary->code ?? 'ARYA-HQ';
-
-            return $this->upsertCompany($tenantId, array_merge((array) $primary, $attrs), adoptPrimary: true);
+            // Keep existing primary code if not ARYA-HQ, but still enrich name fields when code matches later
+            return (string) $primary->company_id;
         }
 
         return $this->upsertCompany($tenantId, $attrs, adoptPrimary: true);
@@ -175,10 +208,7 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $existing = DB::table('erp_companies')
             ->where('tenant_id', $tenantId)->where('code', $code)->whereNull('deleted_at')->first();
 
-        $row = array_merge([
-            'tenant_id' => $tenantId,
-            'updated_at' => now(),
-        ], $attrs);
+        $row = array_merge(['tenant_id' => $tenantId, 'updated_at' => now()], $attrs);
 
         if ($adoptPrimary) {
             DB::table('erp_companies')->where('tenant_id', $tenantId)->where('is_primary', true)
@@ -198,9 +228,7 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $id = (string) Str::uuid();
         $row['company_id'] = $id;
         $row['created_at'] = now();
-        if (!isset($row['row_version'])) {
-            $row['row_version'] = 1;
-        }
+        $row['row_version'] = $row['row_version'] ?? 1;
         $row = $this->filterColumns('erp_companies', $row);
         DB::table('erp_companies')->insert($row);
 
@@ -209,6 +237,9 @@ class AriaSanatDemoOrgSeeder extends Seeder
 
     private function filterColumns(string $table, array $row): array
     {
+        if (!Schema::hasTable($table)) {
+            return [];
+        }
         foreach (array_keys($row) as $col) {
             if (!Schema::hasColumn($table, $col)) {
                 unset($row[$col]);
@@ -243,7 +274,9 @@ class AriaSanatDemoOrgSeeder extends Seeder
             'updated_at' => now(),
             'row_version' => 1,
         ]);
-        DB::table('erp_company_ownerships')->insert($row);
+        if ($row) {
+            DB::table('erp_company_ownerships')->insert($row);
+        }
     }
 
     private function upsertBranch(string $tenantId, string $companyId, string $code, string $name, string $kind): string
@@ -383,7 +416,9 @@ class AriaSanatDemoOrgSeeder extends Seeder
             'updated_at' => now(),
             'row_version' => 1,
         ]);
-        DB::table('erp_business_unit_companies')->insert($row);
+        if ($row) {
+            DB::table('erp_business_unit_companies')->insert($row);
+        }
     }
 
     private function upsertCostCenter(string $tenantId, string $companyId, string $departmentId, string $code, string $name): void
@@ -412,7 +447,9 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $row['created_at'] = now();
         $row['row_version'] = 1;
         $row = $this->filterColumns('erp_cost_centers', $row);
-        DB::table('erp_cost_centers')->insert($row);
+        if ($row) {
+            DB::table('erp_cost_centers')->insert($row);
+        }
     }
 
     private function upsertHierarchy(string $tenantId, string $code, string $name, string $purpose): string
@@ -458,13 +495,13 @@ class AriaSanatDemoOrgSeeder extends Seeder
         if (!Schema::hasTable('erp_org_hierarchy_nodes') || $hierarchyId === 'n/a' || $entityId === 'n/a') {
             return 'n/a';
         }
-        $q = DB::table('erp_org_hierarchy_nodes')
+        $existing = DB::table('erp_org_hierarchy_nodes')
             ->where('tenant_id', $tenantId)
             ->where('hierarchy_id', $hierarchyId)
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereNull('deleted_at');
-        $existing = $q->first();
+            ->whereNull('deleted_at')
+            ->first();
         $row = $this->filterColumns('erp_org_hierarchy_nodes', [
             'tenant_id' => $tenantId,
             'hierarchy_id' => $hierarchyId,
@@ -516,7 +553,9 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $row['created_at'] = now();
         $row['row_version'] = 1;
         $row = $this->filterColumns('erp_sales_organizations', $row);
-        DB::table('erp_sales_organizations')->insert($row);
+        if ($row) {
+            DB::table('erp_sales_organizations')->insert($row);
+        }
     }
 
     private function upsertPurchOrg(string $tenantId, string $companyId, string $code, string $name): void
@@ -544,15 +583,18 @@ class AriaSanatDemoOrgSeeder extends Seeder
         $row['created_at'] = now();
         $row['row_version'] = 1;
         $row = $this->filterColumns('erp_purchasing_organizations', $row);
-        DB::table('erp_purchasing_organizations')->insert($row);
+        if ($row) {
+            DB::table('erp_purchasing_organizations')->insert($row);
+        }
     }
 
-    private function upsertIcPartner(string $tenantId, string $fromCompanyId, string $toCompanyId): void
+    private function upsertIcPartner(string $tenantId, string $fromCompanyId, string $toCompanyId, ?string $notes = null): void
     {
-        if (!Schema::hasTable('erp_ic_partners')) {
+        // جدول واقعی مدل: erp_intercompany_partners
+        if (!Schema::hasTable('erp_intercompany_partners')) {
             return;
         }
-        $exists = DB::table('erp_ic_partners')
+        $exists = DB::table('erp_intercompany_partners')
             ->where('tenant_id', $tenantId)
             ->where('from_company_id', $fromCompanyId)
             ->where('to_company_id', $toCompanyId)
@@ -561,16 +603,19 @@ class AriaSanatDemoOrgSeeder extends Seeder
         if ($exists) {
             return;
         }
-        $row = $this->filterColumns('erp_ic_partners', [
+        $row = $this->filterColumns('erp_intercompany_partners', [
             'ic_partner_id' => (string) Str::uuid(),
             'tenant_id' => $tenantId,
             'from_company_id' => $fromCompanyId,
             'to_company_id' => $toCompanyId,
             'is_active' => true,
+            'notes' => $notes,
             'created_at' => now(),
             'updated_at' => now(),
             'row_version' => 1,
         ]);
-        DB::table('erp_ic_partners')->insert($row);
+        if ($row) {
+            DB::table('erp_intercompany_partners')->insert($row);
+        }
     }
 }
