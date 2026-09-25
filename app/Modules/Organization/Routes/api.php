@@ -114,6 +114,11 @@ Route::middleware([
     Route::delete('/business-units/{businessUnit}/companies/{company}', [BusinessUnitController::class, 'unassignCompany'])
         ->middleware('permission:organization.business_unit.manage');
 
+    // Static hierarchy paths BEFORE {hierarchy} parameter routes
+    Route::get('/hierarchies/health', [OrgHierarchyController::class, 'health'])
+        ->middleware('permission:organization.hierarchy.view');
+    Route::post('/hierarchies/rebuild', [OrgHierarchyController::class, 'rebuild'])
+        ->middleware('permission:organization.hierarchy.manage');
     Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies', [OrgHierarchyController::class, 'store'])
