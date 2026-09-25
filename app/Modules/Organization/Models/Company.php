@@ -130,6 +130,11 @@ class Company extends Model
         return $this->hasMany(Branch::class, 'company_id', 'company_id');
     }
 
+    public function departments()
+    {
+        return $this->hasMany(Department::class, 'company_id', 'company_id');
+    }
+
     public function parent()
     {
         return $this->belongsTo(self::class, 'parent_company_id', 'company_id');
