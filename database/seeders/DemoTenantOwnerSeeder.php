@@ -16,6 +16,9 @@ use Illuminate\Support\Str;
  * when a customer becomes a platform tenant, their legal company should already
  * appear under Organization — not require a second "create company" step.
  *
+ * Product law (§9): also ensures a default HQ branch under the primary company
+ * so single-site tenants can use departments without multi-branch setup.
+ *
  * Usage:
  *   docker compose exec app php artisan db:seed --class=PermissionSeeder
  *   docker compose exec app php artisan db:seed --class=DemoTenantOwnerSeeder
@@ -59,6 +62,7 @@ class DemoTenantOwnerSeeder extends Seeder
         $roleId = $this->ensureTenantAdminRole($tenantId);
         $this->assignRole($tenantId, $userId, $roleId);
         $companyId = $this->ensurePrimaryCompany($tenantId);
+        $branchId = $companyId ? $this->ensureDefaultHqBranch($tenantId, $companyId) : null;
 
         $this->command?->info('Demo tenant owner ready:');
         $this->command?->info('  email:       '.self::EMAIL);
@@ -66,6 +70,7 @@ class DemoTenantOwnerSeeder extends Seeder
         $this->command?->info('  tenant_id:   '.$tenantId);
         $this->command?->info('  user_id:     '.$userId);
         $this->command?->info('  company_id:  '.($companyId ?? 'n/a'));
+        $this->command?->info('  hq_branch:   '.($branchId ?? 'n/a'));
         $this->command?->info('  permissions: '.$permCount.' active codes on tenant');
         $this->command?->info('Re-login is required after seed so the token picks up permissions.');
     }
@@ -170,8 +175,8 @@ class DemoTenantOwnerSeeder extends Seeder
 
         DB::table('tenant_users')->insert([
             'tenant_user_id' => (string) Str::uuid(),
-            'tenant_id' => $tenantId,
             'user_id' => $userId,
+            'tenant_id' => $tenantId,
             'is_owner' => true,
             'status' => 1,
             'created_at' => now(),
@@ -210,7 +215,7 @@ class DemoTenantOwnerSeeder extends Seeder
             'row_version' => 1,
         ]);
 
-        return $roleId;
+            return $roleId;
     }
 
     private function assignRole(string $tenantId, string $userId, string $roleId): void
@@ -262,7 +267,6 @@ class DemoTenantOwnerSeeder extends Seeder
         if ($existing) {
             $update = ['updated_at' => now()];
             if ($hasIsPrimary) {
-                // Clear other primaries then set this one
                 DB::table('erp_companies')
                     ->where('tenant_id', $tenantId)
                     ->whereNull('deleted_at')
@@ -315,5 +319,49 @@ class DemoTenantOwnerSeeder extends Seeder
         $this->command?->info("Primary company seeded: {$tenantName} (HQ / {$companyId})");
 
         return $companyId;
+    }
+
+    /**
+     * Product law: primary company always has an implicit HQ branch (code HQ).
+     */
+    private function ensureDefaultHqBranch(string $tenantId, string $companyId): ?string
+    {
+        if (!Schema::hasTable('erp_branches')) {
+            $this->command?->warn('erp_branches table missing — skip default HQ branch seed.');
+
+            return null;
+        }
+
+        $existing = DB::table('erp_branches')
+            ->where('tenant_id', $tenantId)
+            ->where('company_id', $companyId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->first();
+
+        if ($existing) {
+            return (string) $existing->branch_id;
+        }
+
+        $branchId = (string) Str::uuid();
+        $row = [
+            'branch_id'  => $branchId,
+            'tenant_id'  => $tenantId,
+            'company_id' => $companyId,
+            'code'       => 'HQ',
+            'name'       => 'دفتر مرکزی',
+            'is_active'  => true,
+            'row_version'=> 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+        if (Schema::hasColumn('erp_branches', 'branch_kind')) {
+            $row['branch_kind'] = 'OFFICE';
+        }
+
+        DB::table('erp_branches')->insert($row);
+        $this->command?->info('Default HQ branch created for primary company.');
+
+        return $branchId;
     }
 }
