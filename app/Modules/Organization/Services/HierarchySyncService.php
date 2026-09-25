@@ -3,6 +3,8 @@
 namespace App\Modules\Organization\Services;
 
 use App\Modules\Organization\Models\Branch;
+use App\Modules\Organization\Models\BusinessUnit;
+use App\Modules\Organization\Models\BusinessUnitCompany;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Models\OrgHierarchy;
 use App\Modules\Organization\Models\OrgHierarchyNode;
@@ -11,26 +13,27 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 /**
- * Smart Hierarchy Product Law v1.0 — P1
+ * Smart Hierarchy Product Law v1.0 — P1 + P2(minimal) + P3 + P4
  *
- * Derives system trees from source entities (company / branch).
- * Must never throw out to callers of CompanyService / BranchService;
- * callers wrap with try/catch as well. Point-sync only; idempotent upsert.
+ * System trees are derived from source entities. Never throw to CRUD callers
+ * when used via safe(). Point-sync; idempotent upsert.
+ *
+ * P2 full feature-pack wiring is DEBT until SaaS Admin packs API exists.
+ * P5 report contracts and P6 manual node origin column are DEBT.
  */
 class HierarchySyncService
 {
     public const CODE_LEGAL = 'SYS-LEGAL';
     public const CODE_ESTABLISHMENT = 'SYS-ESTABLISHMENT';
+    public const CODE_PRODUCT = 'SYS-PRODUCT';
 
-    /**
-     * Upsert company into LEGAL (parent from parent_company_id) and ESTABLISHMENT (company as structural root).
-     */
+    public const STATUS_HEALTHY = 'healthy';
+    public const STATUS_NEEDS_SYNC = 'needs_sync';
+    public const STATUS_INCONSISTENT = 'inconsistent';
+
     public function syncCompany(Company $company): void
     {
-        $tenantId = (string) $company->tenant_id;
-        if ($tenantId === '') {
-            $tenantId = (string) (TenantContext::getInstance()->getTenantId() ?? '');
-        }
+        $tenantId = $this->resolveTenantId($company->tenant_id ?? null);
         if ($tenantId === '') {
             return;
         }
@@ -50,7 +53,6 @@ class HierarchySyncService
                 'COMPANY',
                 (string) $company->parent_company_id
             );
-            // Parent may not be synced yet — ensure parent node exists without forcing its parent chain fully
             if ($parentNodeId === null) {
                 $parent = Company::withTrashed()
                     ->where('tenant_id', $tenantId)
@@ -63,7 +65,7 @@ class HierarchySyncService
                         'COMPANY',
                         (string) $parent->company_id,
                         null,
-                        $parent->trashed() || $parent->is_active === false ? false : true
+                        !$parent->trashed() && $parent->is_active !== false
                     );
                 }
             }
@@ -98,10 +100,7 @@ class HierarchySyncService
 
     public function syncBranch(Branch $branch): void
     {
-        $tenantId = (string) $branch->tenant_id;
-        if ($tenantId === '') {
-            $tenantId = (string) (TenantContext::getInstance()->getTenantId() ?? '');
-        }
+        $tenantId = $this->resolveTenantId($branch->tenant_id ?? null);
         if ($tenantId === '' || empty($branch->company_id)) {
             return;
         }
@@ -113,7 +112,6 @@ class HierarchySyncService
             OrgHierarchy::PURPOSE_ESTABLISHMENT
         );
 
-        // Ensure company node exists under establishment
         $companyNodeId = $this->findNodeId($tenantId, $estId, 'COMPANY', (string) $branch->company_id);
         if ($companyNodeId === null) {
             $co = Company::withTrashed()
@@ -145,8 +143,8 @@ class HierarchySyncService
 
     public function syncBranchesForCompany(string $companyId): void
     {
-        $tenantId = TenantContext::getInstance()->getTenantId();
-        if (!$tenantId) {
+        $tenantId = $this->resolveTenantId(null);
+        if ($tenantId === '') {
             return;
         }
 
@@ -160,11 +158,80 @@ class HierarchySyncService
         }
     }
 
-    /** Soft-delete / deactivate all nodes for an entity across system hierarchies. */
+    /**
+     * P4 — place BU under primary company in SYS-PRODUCT (CUSTOM purpose).
+     * Only material when tenant has more than one active BU (product law threshold).
+     */
+    public function syncBusinessUnit(BusinessUnit $bu): void
+    {
+        $tenantId = $this->resolveTenantId($bu->tenant_id ?? null);
+        if ($tenantId === '') {
+            return;
+        }
+
+        $activeBuCount = BusinessUnit::where('tenant_id', $tenantId)->where('is_active', true)->count();
+        if ($activeBuCount <= 1 && !$bu->trashed()) {
+            // Keep single-BU tenants free of product-tree noise; still deactivate if leftover
+            $this->deactivateEntityNodes('BUSINESS_UNIT', (string) $bu->business_unit_id);
+
+            return;
+        }
+
+        $productId = $this->ensureSystemHierarchy(
+            $tenantId,
+            self::CODE_PRODUCT,
+            'خطوط محصول',
+            OrgHierarchy::PURPOSE_CUSTOM
+        );
+
+        $primaryCompanyId = BusinessUnitCompany::where('tenant_id', $tenantId)
+            ->where('business_unit_id', $bu->business_unit_id)
+            ->where('is_primary', true)
+            ->value('company_id');
+
+        if (!$primaryCompanyId) {
+            $primaryCompanyId = BusinessUnitCompany::where('tenant_id', $tenantId)
+                ->where('business_unit_id', $bu->business_unit_id)
+                ->orderBy('created_at')
+                ->value('company_id');
+        }
+
+        $parentNodeId = null;
+        if ($primaryCompanyId) {
+            $parentNodeId = $this->findNodeId($tenantId, $productId, 'COMPANY', (string) $primaryCompanyId);
+            if ($parentNodeId === null) {
+                $co = Company::withTrashed()
+                    ->where('tenant_id', $tenantId)
+                    ->where('company_id', $primaryCompanyId)
+                    ->first();
+                if ($co) {
+                    $parentNodeId = $this->upsertNode(
+                        $tenantId,
+                        $productId,
+                        'COMPANY',
+                        (string) $co->company_id,
+                        null,
+                        !$co->trashed() && $co->is_active !== false
+                    );
+                }
+            }
+        }
+
+        $active = !$bu->trashed() && $bu->is_active !== false;
+        $this->upsertNode(
+            $tenantId,
+            $productId,
+            'BUSINESS_UNIT',
+            (string) $bu->business_unit_id,
+            $parentNodeId,
+            $active
+        );
+    }
+
     public function deactivateEntityNodes(string $entityType, string $entityId): void
     {
-        $tenantId = TenantContext::getInstance()->getTenantId();
-        if (!$tenantId) {
+        $tenantId = $this->resolveTenantId(null);
+        if ($tenantId === '') {
             return;
         }
 
@@ -173,15 +240,15 @@ class HierarchySyncService
             ->where('entity_id', $entityId)
             ->whereNull('deleted_at')
             ->update([
-                'is_active'   => false,
-                'updated_at'  => now(),
+                'is_active'  => false,
+                'updated_at' => now(),
             ]);
     }
 
     public function reactivateEntityNodes(string $entityType, string $entityId): void
     {
-        $tenantId = TenantContext::getInstance()->getTenantId();
-        if (!$tenantId) {
+        $tenantId = $this->resolveTenantId(null);
+        if ($tenantId === '') {
             return;
         }
 
@@ -196,12 +263,190 @@ class HierarchySyncService
     }
 
     /**
-     * Rebuild system LEGAL + ESTABLISHMENT from current companies/branches (admin repair).
+     * P2 minimal — if structure is multi-entity, ensure system trees exist and are rebuilt.
+     * Full pack upgrade/downgrade hooks are DEBT (no SaaS feature-pack API yet).
+     *
+     * @return array{tier: string, rebuilt: bool, company_count: int, branch_count: int, bu_count: int}
      */
+    public function ensureStructuralTrees(?string $tenantId = null): array
+    {
+        $tenantId = $this->resolveTenantId($tenantId);
+        if ($tenantId === '') {
+            return [
+                'tier' => 'unknown',
+                'rebuilt' => false,
+                'company_count' => 0,
+                'branch_count' => 0,
+                'bu_count' => 0,
+            ];
+        }
+
+        $companyCount = Company::where('tenant_id', $tenantId)->count();
+        $branchCount = Branch::where('tenant_id', $tenantId)->count();
+        $buCount = BusinessUnit::where('tenant_id', $tenantId)->count();
+
+        $tier = 'simple';
+        if ($companyCount > 1 || $buCount > 1) {
+            $tier = 'advanced';
+        } elseif ($branchCount > 1 || $companyCount > 1) {
+            $tier = 'standard';
+        }
+
+        $rebuilt = false;
+        if ($companyCount >= 1) {
+            // Always keep LEGAL/EST shells when any company exists (cheap ensure)
+            $this->ensureSystemHierarchy($tenantId, self::CODE_LEGAL, 'ساختار حقوقی', OrgHierarchy::PURPOSE_LEGAL);
+            $this->ensureSystemHierarchy($tenantId, self::CODE_ESTABLISHMENT, 'استقرار', OrgHierarchy::PURPOSE_ESTABLISHMENT);
+
+            if ($tier !== 'simple') {
+                $this->rebuildSystemTreesForTenant($tenantId);
+                $rebuilt = true;
+            } elseif ($companyCount === 1) {
+                // Point-sync primary path without full scan noise for truly simple
+                $co = Company::where('tenant_id', $tenantId)->orderBy('created_at')->first();
+                if ($co) {
+                    $this->syncCompany($co);
+                    $this->syncBranchesForCompany($co->company_id);
+                }
+            }
+        }
+
+        if ($buCount > 1) {
+            $this->ensureSystemHierarchy($tenantId, self::CODE_PRODUCT, 'خطوط محصول', OrgHierarchy::PURPOSE_CUSTOM);
+            foreach (BusinessUnit::where('tenant_id', $tenantId)->get() as $bu) {
+                $this->syncBusinessUnit($bu);
+            }
+        }
+
+        return [
+            'tier' => $tier,
+            'rebuilt' => $rebuilt,
+            'company_count' => $companyCount,
+            'branch_count' => $branchCount,
+            'bu_count' => $buCount,
+        ];
+    }
+
+    /**
+     * P3 — health report for support / admin.
+     *
+     * @return array{status: string, issues: list<array<string, mixed>>, counts: array<string, int>}
+     */
+    public function health(?string $tenantId = null): array
+    {
+        $tenantId = $this->resolveTenantId($tenantId);
+        $issues = [];
+
+        if ($tenantId === '') {
+            return [
+                'status' => self::STATUS_INCONSISTENT,
+                'issues' => [['code' => 'no_tenant', 'message' => 'tenant context missing']],
+                'counts' => [],
+            ];
+        }
+
+        $companies = Company::where('tenant_id', $tenantId)->get();
+        $branches = Branch::where('tenant_id', $tenantId)->get();
+        $bus = BusinessUnit::where('tenant_id', $tenantId)->get();
+
+        $legal = OrgHierarchy::where('tenant_id', $tenantId)->where('code', self::CODE_LEGAL)->first();
+        $est = OrgHierarchy::where('tenant_id', $tenantId)->where('code', self::CODE_ESTABLISHMENT)->first();
+
+        if ($companies->isNotEmpty() && !$legal) {
+            $issues[] = ['code' => 'missing_legal_tree', 'message' => 'SYS-LEGAL hierarchy missing'];
+        }
+        if ($companies->isNotEmpty() && !$est) {
+            $issues[] = ['code' => 'missing_establishment_tree', 'message' => 'SYS-ESTABLISHMENT hierarchy missing'];
+        }
+
+        if ($legal) {
+            foreach ($companies as $co) {
+                $exists = OrgHierarchyNode::where('tenant_id', $tenantId)
+                    ->where('hierarchy_id', $legal->hierarchy_id)
+                    ->where('entity_type', 'COMPANY')
+                    ->where('entity_id', $co->company_id)
+                    ->whereNull('deleted_at')
+                    ->exists();
+                if (!$exists) {
+                    $issues[] = [
+                        'code' => 'company_missing_legal_node',
+                        'entity_id' => $co->company_id,
+                        'message' => 'company not in LEGAL tree',
+                    ];
+                }
+            }
+        }
+
+        if ($est) {
+            foreach ($branches as $br) {
+                $exists = OrgHierarchyNode::where('tenant_id', $tenantId)
+                    ->where('hierarchy_id', $est->hierarchy_id)
+                    ->where('entity_type', 'BRANCH')
+                    ->where('entity_id', $br->branch_id)
+                    ->whereNull('deleted_at')
+                    ->exists();
+                if (!$exists) {
+                    $issues[] = [
+                        'code' => 'branch_missing_establishment_node',
+                        'entity_id' => $br->branch_id,
+                        'message' => 'branch not in ESTABLISHMENT tree',
+                    ];
+                }
+            }
+        }
+
+        // Orphan company nodes (entity hard-missing)
+        $companyIds = $companies->pluck('company_id')->all();
+        $orphanCompanyNodes = OrgHierarchyNode::where('tenant_id', $tenantId)
+            ->where('entity_type', 'COMPANY')
+            ->whereNull('deleted_at')
+            ->whereNotIn('entity_id', $companyIds === [] ? ['00000000-0000-0000-0000-000000000000'] : $companyIds)
+            ->count();
+
+        // Soft-deleted companies still counted via withTrashed for orphan check
+        $allCompanyIds = Company::withTrashed()->where('tenant_id', $tenantId)->pluck('company_id')->all();
+        $orphanCompanyNodes = OrgHierarchyNode::where('tenant_id', $tenantId)
+            ->where('entity_type', 'COMPANY')
+            ->whereNull('deleted_at')
+            ->when($allCompanyIds !== [], fn ($q) => $q->whereNotIn('entity_id', $allCompanyIds))
+            ->when($allCompanyIds === [], fn ($q) => $q)
+            ->count();
+
+        if ($orphanCompanyNodes > 0) {
+            $issues[] = [
+                'code' => 'orphan_company_nodes',
+                'count' => $orphanCompanyNodes,
+                'message' => 'hierarchy nodes point to missing companies',
+            ];
+        }
+
+        $status = self::STATUS_HEALTHY;
+        if ($issues !== []) {
+            $status = self::STATUS_NEEDS_SYNC;
+            foreach ($issues as $issue) {
+                if (($issue['code'] ?? '') === 'orphan_company_nodes') {
+                    $status = self::STATUS_INCONSISTENT;
+                    break;
+                }
+            }
+        }
+
+        return [
+            'status' => $status,
+            'issues' => $issues,
+            'counts' => [
+                'companies' => $companies->count(),
+                'branches' => $branches->count(),
+                'business_units' => $bus->count(),
+                'issues' => count($issues),
+            ],
+        ];
+    }
+
     public function rebuildSystemTreesForTenant(?string $tenantId = null): void
     {
-        $tenantId = $tenantId ?: TenantContext::getInstance()->getTenantId();
-        if (!$tenantId) {
+        $tenantId = $this->resolveTenantId($tenantId);
+        if ($tenantId === '') {
             return;
         }
 
@@ -214,6 +459,21 @@ class HierarchySyncService
         foreach ($branches as $branch) {
             $this->syncBranch($branch);
         }
+
+        $bus = BusinessUnit::withTrashed()->where('tenant_id', $tenantId)->orderBy('created_at')->get();
+        foreach ($bus as $bu) {
+            $this->syncBusinessUnit($bu);
+        }
+    }
+
+    private function resolveTenantId(mixed $explicit): string
+    {
+        $tid = (string) ($explicit ?? '');
+        if ($tid !== '') {
+            return $tid;
+        }
+
+        return (string) (TenantContext::getInstance()->getTenantId() ?? '');
     }
 
     private function ensureSystemHierarchy(
@@ -311,7 +571,6 @@ class HierarchySyncService
         return (string) $node->node_id;
     }
 
-    /** Safe entry for services — never throws. */
     public static function safe(callable $callback): void
     {
         try {
