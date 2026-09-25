@@ -46,6 +46,8 @@ Route::middleware([
         ->middleware(['permission:organization.branch.update', 'scope:BRANCH,branch']);
     Route::delete('/branches/{branch}', [BranchController::class, 'destroy'])
         ->middleware(['permission:organization.branch.delete', 'scope:BRANCH,branch']);
+    Route::post('/branches/{branch}/restore', [BranchController::class, 'restore'])
+        ->middleware('permission:organization.branch.update');
 
     Route::get('/companies/{company}/departments', [DepartmentController::class, 'index'])
         ->middleware(['permission:organization.department.view', 'scope:COMPANY,company']);
@@ -98,7 +100,7 @@ Route::middleware([
     Route::post('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'assignCompany'])
         ->middleware('permission:organization.business_unit.manage');
 
-    Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
+    Route::get('/hierarchies', [OrgHierarchyController::class, 'nodes'])
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies', [OrgHierarchyController::class, 'store'])
         ->middleware('permission:organization.hierarchy.manage');
