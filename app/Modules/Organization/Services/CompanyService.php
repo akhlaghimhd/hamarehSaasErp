@@ -44,7 +44,7 @@ class CompanyService
                 $this->clearPrimaryFlags($tenantId);
             }
 
-            return Company::create([
+            $company = Company::create([
                 'tenant_id'                 => $tenantId,
                 'code'                      => $dto->code,
                 'name'                      => $dto->name,
@@ -69,6 +69,10 @@ class CompanyService
                 'default_consol_rate_type'  => $rateType,
                 'row_version'               => 1,
             ]);
+
+            $this->ensureDefaultBranchQuietly($company->company_id, $tenantId);
+
+            return $company;
         });
     }
 
@@ -238,7 +242,6 @@ class CompanyService
             }
         }
 
-        // Soft-delete always deactivates; restore leaves inactive until user activates.
         DB::transaction(function () use ($company, $tenantId, $companyId) {
             $company->update([
                 'is_active'   => false,
@@ -261,7 +264,6 @@ class CompanyService
 
         $this->scopeAccessGuard->assertAccess('COMPANY', $companyId);
 
-        // Code uniqueness among non-deleted rows
         if (Company::where('tenant_id', $tenantId)->where('code', $company->code)->exists()) {
             throw new \Exception('کد این شرکت با یک شرکت فعال دیگر تداخل دارد؛ ابتدا کد را اصلاح کنید یا شرکت تکراری را حذف کنید.');
         }
@@ -269,14 +271,12 @@ class CompanyService
         return DB::transaction(function () use ($company, $tenantId, $companyId) {
             $company->restore();
 
-            // Always remain inactive after restore until the user explicitly activates.
             $payload = [
                 'is_active'   => false,
                 'status'      => 2,
                 'row_version' => ((int) ($company->row_version ?? 1)) + 1,
             ];
 
-            // Drop primary if another primary already exists
             if ($company->is_primary) {
                 $otherPrimary = Company::where('tenant_id', $tenantId)
                     ->where('company_id', '!=', $companyId)
@@ -293,9 +293,6 @@ class CompanyService
         });
     }
 
-    /**
-     * Resolve a company by id including soft-deleted rows (for detail / restore flows).
-     */
     public function getCompanyById(string $companyId, bool $withTrashed = true): ?Company
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
@@ -321,6 +318,8 @@ class CompanyService
             $existing = Company::where('tenant_id', $tenantId)->where('is_primary', true)->orderBy('created_at')->first();
 
             if ($existing) {
+                $this->ensureDefaultBranchQuietly($existing->company_id, $tenantId);
+
                 return $existing;
             }
 
@@ -334,13 +333,15 @@ class CompanyService
                         'row_version' => ((int) ($any->row_version ?? 1)) + 1,
                     ]);
                 });
+                $fresh = $any->fresh();
+                $this->ensureDefaultBranchQuietly($fresh->company_id, $tenantId);
 
-                return $any->fresh();
+                return $fresh;
             }
 
             $legalName = $name ?: 'شرکت اصلی';
 
-            return Company::create([
+            $created = Company::create([
                 'tenant_id'    => $tenantId,
                 'code'         => $code,
                 'name'         => $legalName,
@@ -351,11 +352,23 @@ class CompanyService
                 'entity_kind'  => Company::ENTITY_KIND_OPERATING,
                 'row_version'  => 1,
             ]);
+            $this->ensureDefaultBranchQuietly($created->company_id, $tenantId);
+
+            return $created;
         } finally {
             if ($previous) {
                 TenantContext::getInstance()->setTenantId($previous);
                 app()->instance('current_tenant_id', $previous);
             }
+        }
+    }
+
+    private function ensureDefaultBranchQuietly(string $companyId, string $tenantId): void
+    {
+        try {
+            app(BranchService::class)->ensureDefaultHqBranchForCompany($companyId, $tenantId);
+        } catch (\Throwable $e) {
+            report($e);
         }
     }
 
@@ -490,15 +503,16 @@ class CompanyService
         ?string $parentId,
         ?string $baseCurrencyId
     ): void {
-        if ($entityKind !== Company::ENTITY_KIND_ELIMINATION || $parentId === null || $baseCurrencyId === null) {
+        if ($entityKind !== Company::ENTITY_KIND_ELIMINATION) {
             return;
         }
-
+        if ($parentId === null || $parentId === '' || $baseCurrencyId === null || $baseCurrencyId === '') {
+            return;
+        }
         $parentCurrency = Company::where('tenant_id', $tenantId)
             ->where('company_id', $parentId)
             ->value('base_currency_id');
-
-        if ($parentCurrency !== null && $parentCurrency !== $baseCurrencyId) {
+        if ($parentCurrency && (string) $parentCurrency !== (string) $baseCurrencyId) {
             throw new \Exception('ارز پایه شرکت ELIMINATION باید با شرکت والد یکسان باشد.');
         }
     }
