@@ -9,6 +9,7 @@ use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Modules\Organization\Services\CompanyService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class CompanyController extends Controller
 {
@@ -17,9 +18,12 @@ class CompanyController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $companies = $this->companyService->getAllCompanies();
+        $membership = strtolower((string) $request->query('membership', 'active'));
+        $onlyTrashed = in_array($membership, ['deleted', 'trashed'], true);
+
+        $companies = $this->companyService->getAllCompanies($onlyTrashed);
 
         return response()->json([
             'status' => 'success',
@@ -41,8 +45,7 @@ class CompanyController extends Controller
 
     public function show(string $companyId): JsonResponse
     {
-        // getAllCompanies already applies Scope; for single item we rely on service isolation
-        $companies = $this->companyService->getAllCompanies();
+        $companies = $this->companyService->getAllCompanies(false);
         $company = $companies->firstWhere('company_id', $companyId);
 
         if (!$company) {
@@ -77,6 +80,17 @@ class CompanyController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Company deleted successfully.',
+        ]);
+    }
+
+    public function restore(string $companyId): JsonResponse
+    {
+        $company = $this->companyService->restoreCompany($companyId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Company restored successfully.',
+            'data'    => $company,
         ]);
     }
 }
