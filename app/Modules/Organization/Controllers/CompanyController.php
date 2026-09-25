@@ -45,8 +45,8 @@ class CompanyController extends Controller
 
     public function show(string $companyId): JsonResponse
     {
-        $companies = $this->companyService->getAllCompanies(false);
-        $company = $companies->firstWhere('company_id', $companyId);
+        // Include soft-deleted so detail page can open deleted companies (read-only).
+        $company = $this->companyService->getCompanyById($companyId, true);
 
         if (!$company) {
             return response()->json([
