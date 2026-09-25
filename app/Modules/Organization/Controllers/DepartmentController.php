@@ -9,6 +9,7 @@ use App\Modules\Organization\DTOs\CreateDepartmentDTO;
 use App\Modules\Organization\DTOs\UpdateDepartmentDTO;
 use App\Modules\Organization\Services\DepartmentService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class DepartmentController extends Controller
 {
@@ -17,9 +18,16 @@ class DepartmentController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request, ?string $company = null): JsonResponse
     {
-        $departments = $this->departmentService->getAllDepartments();
+        $companyId = $company ?? $request->route('company');
+        $membership = strtolower((string) $request->query('membership', 'active'));
+        $onlyTrashed = in_array($membership, ['deleted', 'trashed'], true);
+
+        $departments = $this->departmentService->getAllDepartments(
+            companyId: $companyId ? (string) $companyId : null,
+            onlyTrashed: $onlyTrashed
+        );
 
         return response()->json([
             'status' => 'success',
@@ -76,6 +84,17 @@ class DepartmentController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Department deleted successfully.',
+        ]);
+    }
+
+    public function restore(string $departmentId): JsonResponse
+    {
+        $department = $this->departmentService->restoreDepartment($departmentId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Department restored successfully.',
+            'data'    => $department,
         ]);
     }
 }
