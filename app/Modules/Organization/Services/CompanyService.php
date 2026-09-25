@@ -2,6 +2,7 @@
 
 namespace App\Modules\Organization\Services;
 
+use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Modules\Organization\DTOs\UpdateCompanyDTO;
@@ -139,6 +140,11 @@ class CompanyService
             }
         }
 
+        $becomingInactive = $dto->isActive === false && (bool) $company->is_active === true;
+        if ($becomingInactive && $company->is_primary) {
+            throw new \Exception('شرکت اصلی قابل غیرفعال‌سازی نیست. ابتدا شرکت دیگری را به‌عنوان اصلی تعیین کنید.');
+        }
+
         return DB::transaction(function () use (
             $company,
             $tenantId,
@@ -148,10 +154,19 @@ class CompanyService
             $isPrimary,
             $baseCurrencyId,
             $chartOfAccountsId,
-            $rateType
+            $rateType,
+            $becomingInactive
         ) {
             if ($isPrimary === true) {
                 $this->clearPrimaryFlags($tenantId, $company->company_id);
+            }
+
+            $status = $dto->status;
+            if ($dto->isActive === false && ($status === null || (int) $status === 1)) {
+                $status = 2;
+            }
+            if ($dto->isActive === true && ($status === null || (int) $status === 2)) {
+                $status = 1;
             }
 
             $company->update([
@@ -169,7 +184,7 @@ class CompanyService
                 'national_id'               => $dto->nationalId,
                 'vat_registration'          => $dto->vatRegistration,
                 'is_active'                 => $dto->isActive,
-                'status'                    => $dto->status,
+                'status'                    => $status,
                 'is_primary'                => $isPrimary,
                 'parent_company_id'         => $parentId,
                 'entity_kind'               => $entityKind,
@@ -178,6 +193,10 @@ class CompanyService
                 'default_consol_rate_type'  => $rateType,
                 'row_version'               => ((int) ($company->row_version ?? 1)) + 1,
             ]);
+
+            if ($becomingInactive) {
+                $this->cascadeDeactivateSubtree($tenantId, (string) $company->company_id);
+            }
 
             return $company->fresh();
         });
@@ -194,7 +213,7 @@ class CompanyService
         $this->scopeAccessGuard->assertAccess('COMPANY', $companyId);
 
         if ($company->branches()->exists()) {
-            throw new \Exception('این شرکت دارای شعبه‌های زیرمجموعه است و قابل حذف نیست.');
+            throw new \Exception('این شرکت دارای شعبه‌های زیرمجموعه است و قابل حذف نیست. ابتدا شعب را حذف یا منتقل کنید.');
         }
 
         if ($company->children()->exists()) {
@@ -210,6 +229,7 @@ class CompanyService
             }
         }
 
+        // Soft delete only — historical documents remain readable elsewhere; no hard delete.
         $company->delete();
     }
 
@@ -262,6 +282,61 @@ class CompanyService
                 app()->instance('current_tenant_id', $previous);
             }
         }
+    }
+
+    /**
+     * Propagate deactivation to descendant companies and their branches.
+     * Historical documents stay readable; new operations should respect is_active via scope/UI.
+     *
+     * @return list<string> company ids deactivated (excluding root)
+     */
+    private function cascadeDeactivateSubtree(string $tenantId, string $rootCompanyId): array
+    {
+        $all = Company::where('tenant_id', $tenantId)
+            ->get(['company_id', 'parent_company_id', 'is_active', 'is_primary']);
+
+        $byParent = [];
+        foreach ($all as $c) {
+            $pid = $c->parent_company_id ? (string) $c->parent_company_id : '';
+            $byParent[$pid][] = (string) $c->company_id;
+        }
+
+        $descendants = [];
+        $queue = [$rootCompanyId];
+        $guard = 0;
+        while ($queue !== [] && $guard < 500) {
+            $guard++;
+            $current = array_shift($queue);
+            foreach ($byParent[$current] ?? [] as $childId) {
+                if (!in_array($childId, $descendants, true) && $childId !== $rootCompanyId) {
+                    $descendants[] = $childId;
+                    $queue[] = $childId;
+                }
+            }
+        }
+
+        $targets = array_values(array_unique(array_merge([$rootCompanyId], $descendants)));
+
+        if ($targets !== []) {
+            Company::where('tenant_id', $tenantId)
+                ->whereIn('company_id', $targets)
+                ->where('is_primary', false)
+                ->update([
+                    'is_active'   => false,
+                    'status'      => 2,
+                    'updated_at'  => now(),
+                ]);
+
+            Branch::where('tenant_id', $tenantId)
+                ->whereIn('company_id', $targets)
+                ->where('is_active', true)
+                ->update([
+                    'is_active'  => false,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        return $descendants;
     }
 
     private function clearPrimaryFlags(string $tenantId, ?string $exceptCompanyId = null): void
