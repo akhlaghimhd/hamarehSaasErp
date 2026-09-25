@@ -100,7 +100,7 @@ Route::middleware([
     Route::post('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'assignCompany'])
         ->middleware('permission:organization.business_unit.manage');
 
-    Route::get('/hierarchies', [OrgHierarchyController::class, 'nodes'])
+    Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies', [OrgHierarchyController::class, 'store'])
         ->middleware('permission:organization.hierarchy.manage');
