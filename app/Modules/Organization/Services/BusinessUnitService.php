@@ -50,7 +50,7 @@ class BusinessUnitService
             throw new Exception('کد واحد کسب‌وکار تکراری است.');
         }
 
-        return BusinessUnit::create([
+        $bu = BusinessUnit::create([
             'business_unit_id' => (string) Str::uuid(),
             'tenant_id'        => $tenantId,
             'code'             => $code,
@@ -59,6 +59,10 @@ class BusinessUnitService
             'is_active'        => $isActive,
             'row_version'      => 1,
         ]);
+
+        HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($bu));
+
+        return $bu;
     }
 
     public function update(
@@ -96,7 +100,10 @@ class BusinessUnitService
 
         $bu->update($payload);
 
-        return $bu->fresh(['companyAssignments.company']);
+        $fresh = $bu->fresh(['companyAssignments.company']) ?? $bu;
+        HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($fresh));
+
+        return $fresh;
     }
 
     public function softDelete(string $businessUnitId): void
@@ -107,7 +114,10 @@ class BusinessUnitService
             ->where('business_unit_id', $businessUnitId)
             ->firstOrFail();
 
+        $id = (string) $bu->business_unit_id;
         $bu->delete();
+
+        HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->deactivateEntityNodes('BUSINESS_UNIT', $id));
     }
 
     public function restore(string $businessUnitId): BusinessUnit
@@ -119,20 +129,20 @@ class BusinessUnitService
             ->where('business_unit_id', $businessUnitId)
             ->firstOrFail();
 
-        if (BusinessUnit::where('tenant_id', $tenantId)
-            ->where('code', $bu->code)
-            ->exists()) {
-            throw new Exception('کد این واحد کسب‌وکار با یک رکورد فعال دیگر تداخل دارد.');
+        if (BusinessUnit::where('tenant_id', $tenantId)->where('code', $bu->code)->exists()) {
+            throw new Exception('کد این واحد با یک واحد فعال دیگر تداخل دارد.');
         }
 
         $bu->restore();
-
         $bu->update([
             'is_active'   => false,
             'row_version' => ((int) ($bu->row_version ?? 1)) + 1,
         ]);
 
-        return $bu->fresh(['companyAssignments.company']);
+        $fresh = $bu->fresh(['companyAssignments.company']) ?? $bu;
+        HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($fresh));
+
+        return $fresh;
     }
 
     /**
@@ -150,7 +160,9 @@ class BusinessUnitService
             throw new Exception('واحد غیرفعال را نمی‌توان به شرکت متصل کرد. ابتدا واحد را فعال کنید.');
         }
 
-        Company::where('tenant_id', $tenantId)->where('company_id', $companyId)->firstOrFail();
+        if (!Company::where('tenant_id', $tenantId)->where('company_id', $companyId)->exists()) {
+            throw new Exception('شرکت انتخاب شده نامعتبر است.');
+        }
 
         $existing = BusinessUnitCompany::withTrashed()
             ->where('tenant_id', $tenantId)
@@ -158,16 +170,21 @@ class BusinessUnitService
             ->where('company_id', $companyId)
             ->first();
 
-        if ($existing && !$existing->trashed()) {
-            throw new Exception('این واحد از قبل به این شرکت متصل است.');
-        }
-
-        return DB::transaction(function () use ($tenantId, $businessUnitId, $companyId, $isPrimary, $existing) {
+        $result = DB::transaction(function () use ($tenantId, $businessUnitId, $companyId, $isPrimary, $existing) {
             if ($isPrimary) {
                 BusinessUnitCompany::where('tenant_id', $tenantId)
                     ->where('business_unit_id', $businessUnitId)
-                    ->where('is_primary', true)
                     ->update(['is_primary' => false]);
+            }
+
+            if ($existing && !$existing->trashed()) {
+                $existing->update([
+                    'is_primary'  => $isPrimary || (bool) $existing->is_primary,
+                    'is_active'   => true,
+                    'row_version' => ((int) ($existing->row_version ?? 1)) + 1,
+                ]);
+
+                return ['row' => $existing->fresh(), 'created' => false];
             }
 
             if ($existing && $existing->trashed()) {
@@ -193,6 +210,15 @@ class BusinessUnitService
 
             return ['row' => $row, 'created' => true];
         });
+
+        $bu = BusinessUnit::where('tenant_id', $tenantId)
+            ->where('business_unit_id', $businessUnitId)
+            ->first();
+        if ($bu) {
+            HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($bu));
+        }
+
+        return $result;
     }
 
     public function unassignCompany(string $businessUnitId, string $companyId): void
@@ -215,7 +241,6 @@ class BusinessUnitService
         $wasPrimary = (bool) $row->is_primary;
         $row->delete();
 
-        // اگر شرکت اصلی قطع شد و هنوز اتصال دیگری هست، اولین اتصال باقی‌مانده اصلی می‌شود
         if ($wasPrimary) {
             $next = BusinessUnitCompany::where('tenant_id', $tenantId)
                 ->where('business_unit_id', $businessUnitId)
@@ -228,11 +253,16 @@ class BusinessUnitService
                 ]);
             }
         }
+
+        $bu = BusinessUnit::where('tenant_id', $tenantId)
+            ->where('business_unit_id', $businessUnitId)
+            ->first();
+        if ($bu) {
+            HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($bu));
+        }
     }
 
     /**
-     * Replace active company links for one business unit with the given set.
-     *
      * @param  list<string>  $companyIds
      * @return array{attached: int, detached: int}
      */
@@ -251,34 +281,35 @@ class BusinessUnitService
         }
 
         foreach ($companyIds as $cid) {
-            Company::where('tenant_id', $tenantId)->where('company_id', $cid)->firstOrFail();
+            if (!Company::where('tenant_id', $tenantId)->where('company_id', $cid)->exists()) {
+                throw new Exception('یکی از شرکت‌های انتخاب‌شده نامعتبر است.');
+            }
         }
 
-        if ($primaryCompanyId !== null && $primaryCompanyId !== '' && !in_array($primaryCompanyId, $companyIds, true)) {
-            throw new Exception('شرکت اصلی باید در فهرست شرکت‌های متصل باشد.');
+        if ($primaryCompanyId && !in_array($primaryCompanyId, $companyIds, true)) {
+            $primaryCompanyId = $companyIds[0] ?? null;
         }
 
-        return DB::transaction(function () use ($tenantId, $businessUnitId, $companyIds, $primaryCompanyId) {
+        $result = DB::transaction(function () use ($tenantId, $businessUnitId, $companyIds, $primaryCompanyId) {
             $current = BusinessUnitCompany::where('tenant_id', $tenantId)
                 ->where('business_unit_id', $businessUnitId)
-                ->get()
-                ->keyBy('company_id');
+                ->get();
 
-            $attached = 0;
+            $currentIds = $current->pluck('company_id')->all();
+            $toDetach = array_diff($currentIds, $companyIds);
+            $toAttach = array_diff($companyIds, $currentIds);
+
             $detached = 0;
-
-            foreach ($current as $companyId => $row) {
-                if (!in_array($companyId, $companyIds, true)) {
-                    $row->delete();
-                    $detached++;
-                }
+            foreach ($toDetach as $cid) {
+                BusinessUnitCompany::where('tenant_id', $tenantId)
+                    ->where('business_unit_id', $businessUnitId)
+                    ->where('company_id', $cid)
+                    ->delete();
+                $detached++;
             }
 
-            foreach ($companyIds as $cid) {
-                if ($current->has($cid)) {
-                    continue;
-                }
-
+            $attached = 0;
+            foreach ($toAttach as $cid) {
                 $trashed = BusinessUnitCompany::onlyTrashed()
                     ->where('tenant_id', $tenantId)
                     ->where('business_unit_id', $businessUnitId)
@@ -316,7 +347,6 @@ class BusinessUnitService
                     ->where('company_id', $primaryCompanyId)
                     ->update(['is_primary' => true]);
             } else {
-                // اگر اصلی مشخص نشد ولی اتصالی مانده و هیچ اصلی‌ای نیست → اولین را اصلی کن
                 $still = BusinessUnitCompany::where('tenant_id', $tenantId)
                     ->where('business_unit_id', $businessUnitId)
                     ->orderBy('created_at')
@@ -332,5 +362,14 @@ class BusinessUnitService
 
             return ['attached' => $attached, 'detached' => $detached];
         });
+
+        $bu = BusinessUnit::where('tenant_id', $tenantId)
+            ->where('business_unit_id', $businessUnitId)
+            ->first();
+        if ($bu) {
+            HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBusinessUnit($bu));
+        }
+
+        return $result;
     }
 }
