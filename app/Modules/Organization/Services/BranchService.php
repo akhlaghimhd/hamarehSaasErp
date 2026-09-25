@@ -212,6 +212,42 @@ class BranchService
         return $branch->fresh();
     }
 
+    /**
+     * Product law (§9): every company gets at least one implicit HQ branch
+     * so single-site tenants can use departments without multi-branch UX.
+     */
+    public function ensureDefaultHqBranchForCompany(string $companyId, ?string $tenantId = null): Branch
+    {
+        $tenantId = $tenantId ?: TenantContext::getInstance()->getTenantId();
+
+        $company = Company::where('tenant_id', $tenantId)
+            ->where('company_id', $companyId)
+            ->first();
+
+        if (!$company) {
+            throw new Exception('شرکت یافت نشد.');
+        }
+
+        $existing = Branch::where('tenant_id', $tenantId)
+            ->where('company_id', $companyId)
+            ->orderBy('created_at')
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        return Branch::create([
+            'tenant_id'   => $tenantId,
+            'company_id'  => $companyId,
+            'code'        => 'HQ',
+            'name'        => 'دفتر مرکزی',
+            'branch_kind' => Branch::KIND_OFFICE,
+            'is_active'   => true,
+            'row_version' => 1,
+        ]);
+    }
+
     private function normalizeBranchKind(?string $kind): string
     {
         $kind = $kind ? strtoupper(trim($kind)) : Branch::KIND_OFFICE;
