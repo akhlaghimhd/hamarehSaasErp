@@ -99,6 +99,14 @@ Route::middleware([
         ->middleware('permission:organization.business_unit.view');
     Route::post('/business-units', [BusinessUnitController::class, 'store'])
         ->middleware('permission:organization.business_unit.manage');
+    Route::get('/business-units/{businessUnit}', [BusinessUnitController::class, 'show'])
+        ->middleware('permission:organization.business_unit.view');
+    Route::put('/business-units/{businessUnit}', [BusinessUnitController::class, 'update'])
+        ->middleware('permission:organization.business_unit.manage');
+    Route::delete('/business-units/{businessUnit}', [BusinessUnitController::class, 'destroy'])
+        ->middleware('permission:organization.business_unit.manage');
+    Route::post('/business-units/{businessUnit}/restore', [BusinessUnitController::class, 'restore'])
+        ->middleware('permission:organization.business_unit.manage');
     Route::post('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'assignCompany'])
         ->middleware('permission:organization.business_unit.manage');
 
