@@ -72,10 +72,18 @@ class CompanyService
         });
     }
 
-    public function getAllCompanies()
+    /**
+     * @param  bool  $onlyTrashed  when true, only soft-deleted companies
+     */
+    public function getAllCompanies(bool $onlyTrashed = false)
     {
-        return Company::query()
-            ->withCount(['branches', 'departments', 'children'])
+        $q = Company::query()->withCount(['branches', 'departments', 'children']);
+
+        if ($onlyTrashed) {
+            $q->onlyTrashed();
+        }
+
+        return $q
             ->orderByDesc('is_primary')
             ->orderBy('created_at', 'desc')
             ->get();
@@ -230,8 +238,42 @@ class CompanyService
             }
         }
 
-        // Soft delete only — historical documents remain readable elsewhere; no hard delete.
         $company->delete();
+    }
+
+    public function restoreCompany(string $companyId): Company
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $company = Company::onlyTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('company_id', $companyId)
+            ->firstOrFail();
+
+        $this->scopeAccessGuard->assertAccess('COMPANY', $companyId);
+
+        // Code uniqueness among non-deleted rows
+        if (Company::where('tenant_id', $tenantId)->where('code', $company->code)->exists()) {
+            throw new \Exception('کد این شرکت با یک شرکت فعال دیگر تداخل دارد؛ ابتدا کد را اصلاح کنید یا شرکت تکراری را حذف کنید.');
+        }
+
+        $company->restore();
+
+        // Restored companies stay inactive until explicitly activated
+        if ($company->is_primary) {
+            $otherPrimary = Company::where('tenant_id', $tenantId)
+                ->where('company_id', '!=', $companyId)
+                ->where('is_primary', true)
+                ->exists();
+            if ($otherPrimary) {
+                $company->update([
+                    'is_primary'  => false,
+                    'row_version' => ((int) ($company->row_version ?? 1)) + 1,
+                ]);
+            }
+        }
+
+        return $company->fresh();
     }
 
     public function ensurePrimaryCompanyForTenant(string $tenantId, ?string $name = null, string $code = 'HQ'): Company
@@ -286,10 +328,7 @@ class CompanyService
     }
 
     /**
-     * Propagate deactivation to descendant companies and their branches.
-     * Historical documents stay readable; new operations should respect is_active via scope/UI.
-     *
-     * @return list<string> company ids deactivated (excluding root)
+     * @return list<string>
      */
     private function cascadeDeactivateSubtree(string $tenantId, string $rootCompanyId): array
     {
@@ -323,9 +362,9 @@ class CompanyService
                 ->whereIn('company_id', $targets)
                 ->where('is_primary', false)
                 ->update([
-                    'is_active'   => false,
-                    'status'      => 2,
-                    'updated_at'  => now(),
+                    'is_active'  => false,
+                    'status'     => 2,
+                    'updated_at' => now(),
                 ]);
 
             Branch::where('tenant_id', $tenantId)
@@ -413,9 +452,6 @@ class CompanyService
         }
     }
 
-    /**
-     * ORG-P1-05 extension: elimination entity currency should match parent when both set.
-     */
     private function assertEliminationCurrency(
         string $tenantId,
         string $entityKind,
