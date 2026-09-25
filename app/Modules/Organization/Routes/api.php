@@ -33,6 +33,8 @@ Route::middleware([
         ->middleware(['permission:organization.company.update', 'scope:COMPANY,company']);
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])
         ->middleware(['permission:organization.company.delete', 'scope:COMPANY,company']);
+    Route::post('/companies/{company}/restore', [CompanyController::class, 'restore'])
+        ->middleware('permission:organization.company.update');
 
     Route::get('/companies/{company}/branches', [BranchController::class, 'index'])
         ->middleware(['permission:organization.branch.view', 'scope:COMPANY,company']);
