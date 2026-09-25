@@ -75,6 +75,7 @@ class CompanyService
     public function getAllCompanies()
     {
         return Company::query()
+            ->withCount(['branches', 'departments', 'children'])
             ->orderByDesc('is_primary')
             ->orderBy('created_at', 'desc')
             ->get();
