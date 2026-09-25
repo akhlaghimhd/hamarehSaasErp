@@ -111,34 +111,47 @@ class CompanyService
         $this->scopeAccessGuard->assertAccess('COMPANY', $companyId);
 
         if ($company->code !== $dto->code) {
-            if (Company::where('tenant_id', $tenantId)->where('code', $dto->code)->where('company_id', '!=', $companyId)->exists()) {
+            if (Company::where('tenant_id', $tenantId)
+                ->where('code', $dto->code)
+                ->where('company_id', '!=', $companyId)
+                ->exists()) {
                 throw new \Exception('کد شرکت وارد شده قبلاً در سیستم ثبت شده است.');
             }
         }
 
-        $entityKind = $dto->entityKindProvided
-            ? $this->normalizeEntityKind($dto->entityKind)
-            : $company->entity_kind;
+        $entityKind = $this->normalizeEntityKind(
+            $dto->entityKind !== null && $dto->entityKind !== ''
+                ? $dto->entityKind
+                : $company->entity_kind
+        );
 
         $parentId = $dto->parentCompanyIdProvided
             ? $dto->parentCompanyId
             : $company->parent_company_id;
 
-        $isPrimary = $dto->isPrimaryProvided
+        $isPrimary = $dto->isPrimary !== null
             ? (bool) $dto->isPrimary
             : (bool) $company->is_primary;
-
-        $rateType = $dto->defaultConsolRateTypeProvided
-            ? $this->normalizeRateType($dto->defaultConsolRateType)
-            : $company->default_consol_rate_type;
 
         $baseCurrencyId = $dto->baseCurrencyIdProvided
             ? $dto->baseCurrencyId
             : $company->base_currency_id;
 
+        $chartId = $dto->chartOfAccountsIdProvided
+            ? $dto->chartOfAccountsId
+            : $company->chart_of_accounts_id;
+
+        $rateType = $dto->defaultConsolRateTypeProvided
+            ? $this->normalizeRateType($dto->defaultConsolRateType)
+            : $company->default_consol_rate_type;
+
         $this->assertParentValid($tenantId, $parentId, $companyId);
         $this->assertEntityKindRules($entityKind, $parentId);
         $this->assertEliminationCurrency($tenantId, $entityKind, $parentId, $baseCurrencyId);
+
+        if ($company->is_primary && $isPrimary === false) {
+            throw new \Exception('نمی‌توان پرچم شرکت اصلی را بدون تعیین جایگزین برداشت.');
+        }
 
         $company = DB::transaction(function () use (
             $company,
@@ -147,10 +160,11 @@ class CompanyService
             $entityKind,
             $parentId,
             $isPrimary,
-            $rateType,
-            $baseCurrencyId
+            $baseCurrencyId,
+            $chartId,
+            $rateType
         ) {
-            if ($isPrimary) {
+            if ($isPrimary === true) {
                 $this->clearPrimaryFlags($tenantId, $company->company_id);
             }
 
@@ -174,9 +188,7 @@ class CompanyService
                 'parent_company_id'         => $parentId,
                 'entity_kind'               => $entityKind,
                 'base_currency_id'          => $baseCurrencyId,
-                'chart_of_accounts_id'      => $dto->chartOfAccountsIdProvided
-                    ? $dto->chartOfAccountsId
-                    : $company->chart_of_accounts_id,
+                'chart_of_accounts_id'      => $chartId,
                 'default_consol_rate_type'  => $rateType,
                 'row_version'               => ((int) ($company->row_version ?? 1)) + 1,
             ]);
@@ -185,8 +197,9 @@ class CompanyService
         });
 
         HierarchySyncService::safe(function (HierarchySyncService $sync) use ($company) {
-            $sync->syncCompany($company->fresh() ?? $company);
-            $sync->syncBranchesForCompany($company->company_id);
+            $fresh = $company->fresh() ?? $company;
+            $sync->syncCompany($fresh);
+            $sync->syncBranchesForCompany($fresh->company_id);
         });
 
         return $company->fresh() ?? $company;
@@ -240,15 +253,12 @@ class CompanyService
             throw new \Exception('کد این شرکت با یک شرکت فعال دیگر تداخل دارد.');
         }
 
-        $company = DB::transaction(function () use ($company, $tenantId, $companyId) {
+        $company = DB::transaction(function () use ($company) {
             $company->restore();
-
-            $payload = [
+            $company->update([
                 'is_active'   => false,
                 'row_version' => ((int) ($company->row_version ?? 1)) + 1,
-            ];
-
-            $company->update($payload);
+            ]);
 
             return $company->fresh();
         });
@@ -265,9 +275,7 @@ class CompanyService
     public function getCompanyById(string $companyId, bool $withTrashed = true): ?Company
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
-
         $q = Company::query()->where('tenant_id', $tenantId)->where('company_id', $companyId);
-
         if ($withTrashed) {
             $q->withTrashed();
         }
@@ -306,7 +314,7 @@ class CompanyService
                 'is_active'   => true,
                 'status'      => 1,
                 'is_primary'  => true,
-                'entity_kind' => Company::ENTITY_KIND_OPERATING,
+                'entity_kind' => 'OPERATING',
                 'row_version' => 1,
             ]);
             $this->ensureDefaultBranchQuietly($created->company_id, $tenantId);
@@ -320,7 +328,6 @@ class CompanyService
         try {
             app(BranchService::class)->ensureDefaultHqBranchForCompany($companyId, $tenantId);
         } catch (\Throwable) {
-            // non-blocking
         }
     }
 
@@ -342,19 +349,14 @@ class CompanyService
             }
         }
 
-        Company::where('tenant_id', $tenantId)
-            ->whereIn('company_id', $ids)
-            ->update([
-                'is_active'  => false,
-                'updated_at' => now(),
-            ]);
-
-        Branch::where('tenant_id', $tenantId)
-            ->whereIn('company_id', $ids)
-            ->update([
-                'is_active'  => false,
-                'updated_at' => now(),
-            ]);
+        Company::where('tenant_id', $tenantId)->whereIn('company_id', $ids)->update([
+            'is_active' => false,
+            'updated_at' => now(),
+        ]);
+        Branch::where('tenant_id', $tenantId)->whereIn('company_id', $ids)->update([
+            'is_active' => false,
+            'updated_at' => now(),
+        ]);
 
         return $ids;
     }
@@ -399,8 +401,7 @@ class CompanyService
         if (!$parent) {
             throw new \Exception('شرکت والد نامعتبر است.');
         }
-        // cycle check upward
-        $seen = [$selfId];
+        $seen = $selfId ? [$selfId] : [];
         $cursor = $parentId;
         while ($cursor) {
             if (in_array($cursor, $seen, true)) {
@@ -413,7 +414,7 @@ class CompanyService
 
     private function assertEntityKindRules(string $entityKind, ?string $parentId): void
     {
-        if ($entityKind === 'ELIMINATION' && !$parentId) {
+        if ($entityKind === 'ELIMINATION' && ($parentId === null || $parentId === '')) {
             throw new \Exception('شرکت حذف معاملات گروهی باید شرکت والد داشته باشد.');
         }
     }
