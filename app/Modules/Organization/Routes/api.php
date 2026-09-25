@@ -109,6 +109,10 @@ Route::middleware([
         ->middleware('permission:organization.business_unit.manage');
     Route::post('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'assignCompany'])
         ->middleware('permission:organization.business_unit.manage');
+    Route::put('/business-units/{businessUnit}/companies', [BusinessUnitController::class, 'syncCompanies'])
+        ->middleware('permission:organization.business_unit.manage');
+    Route::delete('/business-units/{businessUnit}/companies/{company}', [BusinessUnitController::class, 'unassignCompany'])
+        ->middleware('permission:organization.business_unit.manage');
 
     Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
         ->middleware('permission:organization.hierarchy.view');
