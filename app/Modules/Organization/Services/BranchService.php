@@ -58,11 +58,18 @@ class BranchService
         ]);
     }
 
-    public function getAllBranches(?string $companyId = null)
+    /**
+     * @param  bool  $onlyTrashed  when true, only soft-deleted branches
+     */
+    public function getAllBranches(?string $companyId = null, bool $onlyTrashed = false)
     {
         $this->ensureScopeContextHydrated();
 
-        $query = Branch::with('company')->orderBy('created_at', 'desc');
+        $query = Branch::query()->with('company')->orderBy('created_at', 'desc');
+
+        if ($onlyTrashed) {
+            $query->onlyTrashed();
+        }
 
         if ($companyId !== null && $companyId !== '') {
             $query->where('company_id', $companyId);
@@ -173,6 +180,36 @@ class BranchService
         }
 
         $branch->delete();
+    }
+
+    public function restoreBranch(string $branchId): Branch
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $branch = Branch::onlyTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('branch_id', $branchId)
+            ->firstOrFail();
+
+        $this->scopeAccessGuard->assertAccess('BRANCH', $branchId);
+
+        // Code uniqueness among non-deleted rows of the same company
+        if (Branch::where('tenant_id', $tenantId)
+            ->where('company_id', $branch->company_id)
+            ->where('code', $branch->code)
+            ->exists()) {
+            throw new Exception('کد این شعبه با یک شعبه فعال دیگر در همان شرکت تداخل دارد.');
+        }
+
+        $branch->restore();
+
+        // Remain inactive after restore until explicit activation
+        $branch->update([
+            'is_active'   => false,
+            'row_version' => ((int) ($branch->row_version ?? 1)) + 1,
+        ]);
+
+        return $branch->fresh();
     }
 
     private function normalizeBranchKind(?string $kind): string
