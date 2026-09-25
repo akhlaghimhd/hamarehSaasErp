@@ -61,9 +61,17 @@ class DepartmentService
         ]);
     }
 
-    public function getAllDepartments()
+    public function getAllDepartments(?string $companyId = null, bool $onlyTrashed = false)
     {
         $query = Department::with(['branch', 'parent'])->orderBy('created_at', 'desc');
+
+        if ($onlyTrashed) {
+            $query->onlyTrashed();
+        }
+
+        if ($companyId !== null && $companyId !== '') {
+            $query->where('company_id', $companyId);
+        }
 
         $departmentReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('DEPARTMENT');
 
@@ -73,10 +81,43 @@ class DepartmentService
             $branchReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('BRANCH');
             if (!empty($branchReferenceIds)) {
                 $query->whereIn('branch_id', $branchReferenceIds);
+            } else {
+                $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
+                if (!empty($companyReferenceIds)) {
+                    $query->whereIn('company_id', $companyReferenceIds);
+                }
             }
         }
 
         return $query->get();
+    }
+
+    public function restoreDepartment(string $departmentId): Department
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $department = Department::onlyTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('department_id', $departmentId)
+            ->firstOrFail();
+
+        $this->scopeAccessGuard->assertAccess('BRANCH', $department->branch_id);
+
+        if (Department::where('tenant_id', $tenantId)
+            ->where('branch_id', $department->branch_id)
+            ->where('code', $department->code)
+            ->exists()) {
+            throw new Exception('کد این واحد با یک واحد فعال دیگر در همان شعبه تداخل دارد.');
+        }
+
+        $department->restore();
+
+        $department->update([
+            'is_active'   => false,
+            'row_version' => ((int) ($department->row_version ?? 1)) + 1,
+        ]);
+
+        return $department->fresh(['branch', 'parent']);
     }
 
     public function updateDepartment(string $departmentId, UpdateDepartmentDTO $dto): Department
