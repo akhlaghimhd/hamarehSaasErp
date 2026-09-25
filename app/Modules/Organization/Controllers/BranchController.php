@@ -20,15 +20,17 @@ class BranchController extends Controller
 
     /**
      * List branches with Scope + optional company filter from nested route.
-     * GET /api/organization/companies/{company}/branches
-     * Also supports flat list if route ever exposes it without company.
+     * GET /api/organization/companies/{company}/branches?membership=active|deleted
      */
     public function index(Request $request, ?string $company = null): JsonResponse
     {
         $companyId = $company ?? $request->route('company');
+        $membership = strtolower((string) $request->query('membership', 'active'));
+        $onlyTrashed = in_array($membership, ['deleted', 'trashed'], true);
 
         $branches = $this->branchService->getAllBranches(
-            companyId: $companyId ? (string) $companyId : null
+            companyId: $companyId ? (string) $companyId : null,
+            onlyTrashed: $onlyTrashed
         );
 
         return response()->json([
@@ -86,6 +88,17 @@ class BranchController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Branch deleted successfully.',
+        ]);
+    }
+
+    public function restore(string $branchId): JsonResponse
+    {
+        $branch = $this->branchService->restoreBranch($branchId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Branch restored successfully.',
+            'data'    => $branch,
         ]);
     }
 }
