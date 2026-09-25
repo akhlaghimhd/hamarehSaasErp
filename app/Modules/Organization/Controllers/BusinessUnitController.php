@@ -108,7 +108,7 @@ class BusinessUnitController extends Controller
             'is_primary' => 'sometimes|boolean',
         ]);
 
-        $row = $this->service->assignCompany(
+        $result = $this->service->assignCompany(
             $businessUnit,
             $data['company_id'],
             (bool) ($data['is_primary'] ?? false)
@@ -117,7 +117,38 @@ class BusinessUnitController extends Controller
         return response()->json([
             'status'  => 'success',
             'message' => 'Company assigned to business unit.',
-            'data'    => $row,
+            'data'    => $result['row'],
         ], 201);
+    }
+
+    public function unassignCompany(string $businessUnit, string $company): JsonResponse
+    {
+        $this->service->unassignCompany($businessUnit, $company);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Company unassigned from business unit.',
+        ]);
+    }
+
+    public function syncCompanies(string $businessUnit, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'company_ids'        => 'present|array',
+            'company_ids.*'      => 'uuid',
+            'primary_company_id' => 'nullable|uuid',
+        ]);
+
+        $result = $this->service->syncCompanies(
+            $businessUnit,
+            $data['company_ids'] ?? [],
+            $data['primary_company_id'] ?? null
+        );
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Business unit company links synchronized.',
+            'data'    => $result,
+        ]);
     }
 }
