@@ -146,12 +146,23 @@ class OrganizationCrudAndIsolationTest extends TestCase
     #[Test]
     public function can_create_list_show_update_and_soft_delete_company(): void
     {
+        // Primary HQ stays active (cannot deactivate primary). CRUD target is a secondary company.
+        $hqResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->postJson('/api/organization/companies', [
+                'code'       => 'COMP-HQ',
+                'name'       => 'Primary HQ',
+                'is_active'  => true,
+                'is_primary' => true,
+            ]);
+        $hqResponse->assertStatus(201);
+
         $createPayload = [
             'code'                => 'COMP-CRUD-01',
             'name'                => 'CRUD Company',
             'registration_number' => 'REG-100',
             'economic_code'       => 'ECO-100',
             'is_active'           => true,
+            'is_primary'          => false,
         ];
 
         $createResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
@@ -164,6 +175,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
 
         $companyId = $createResponse->json('data.company_id');
         $this->assertNotEmpty($companyId);
+        $this->assertFalse((bool) $createResponse->json('data.is_primary'));
 
         $this->assertDatabaseHas('erp_companies', [
             'company_id'  => $companyId,
@@ -180,6 +192,12 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $ids = collect($indexResponse->json('data'))->pluck('company_id')->toArray();
         $this->assertContains($companyId, $ids);
 
+        // List includes aggregate counts (withCount)
+        $row = collect($indexResponse->json('data'))->firstWhere('company_id', $companyId);
+        $this->assertArrayHasKey('branches_count', $row);
+        $this->assertArrayHasKey('departments_count', $row);
+        $this->assertArrayHasKey('children_count', $row);
+
         $showResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->getJson('/api/organization/companies/' . $companyId);
 
@@ -193,6 +211,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'registration_number' => 'REG-200',
             'economic_code'       => 'ECO-200',
             'is_active'           => false,
+            'is_primary'          => false,
         ];
 
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
@@ -230,6 +249,35 @@ class OrganizationCrudAndIsolationTest extends TestCase
 
         $idsAfter = collect($indexAfterDelete->json('data'))->pluck('company_id')->toArray();
         $this->assertNotContains($companyId, $idsAfter);
+    }
+
+    #[Test]
+    public function cannot_deactivate_primary_company(): void
+    {
+        $create = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->postJson('/api/organization/companies', [
+                'code'       => 'COMP-PRIMARY',
+                'name'       => 'Primary Only',
+                'is_active'  => true,
+                'is_primary' => true,
+            ]);
+        $create->assertStatus(201);
+        $companyId = $create->json('data.company_id');
+        $this->assertTrue((bool) $create->json('data.is_primary'));
+
+        $response = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
+            ->putJson('/api/organization/companies/' . $companyId, [
+                'code'       => 'COMP-PRIMARY',
+                'name'       => 'Primary Only',
+                'is_active'  => false,
+                'is_primary' => true,
+            ]);
+
+        $this->assertNotEquals(200, $response->status());
+        $this->assertDatabaseHas('erp_companies', [
+            'company_id' => $companyId,
+            'is_active'  => true,
+        ]);
     }
 
     #[Test]
@@ -458,9 +506,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
     #[Test]
     public function branch_and_department_update_increments_row_version(): void
     {
-        // Nested routes match Routes/api.php:
-        // POST /companies/{company}/branches
-        // POST /companies/{company}/departments
         $companyResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->postJson('/api/organization/companies', [
                 'code'      => 'COMP-RV-01',
@@ -501,27 +546,27 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->postJson('/api/organization/companies/' . $companyId . '/departments', [
                 'branch_id' => $branchId,
                 'code'      => 'DEP-RV-01',
-                'name'      => 'Row Version Department',
+                'name'      => 'Row Version Dept',
                 'is_active' => true,
             ]);
         $deptResponse->assertStatus(201);
-        $departmentId = $deptResponse->json('data.department_id');
+        $deptId = $deptResponse->json('data.department_id');
 
         $this->assertDatabaseHas('erp_departments', [
-            'department_id' => $departmentId,
+            'department_id' => $deptId,
             'row_version'   => 1,
         ]);
 
         $deptUpdate = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->putJson('/api/organization/departments/' . $departmentId, [
+            ->putJson('/api/organization/departments/' . $deptId, [
                 'code'      => 'DEP-RV-01-UPD',
-                'name'      => 'Row Version Department Updated',
+                'name'      => 'Row Version Dept Updated',
                 'is_active' => true,
             ]);
         $deptUpdate->assertStatus(200);
 
         $this->assertDatabaseHas('erp_departments', [
-            'department_id' => $departmentId,
+            'department_id' => $deptId,
             'row_version'   => 2,
         ]);
     }
