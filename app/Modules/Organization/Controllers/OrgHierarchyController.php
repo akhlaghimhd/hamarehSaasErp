@@ -2,9 +2,10 @@
 
 namespace App\Modules\Organization\Controllers;
 
-use App\Base\Controller;
+use App\Http\Controllers\Controller;
 use App\Modules\Organization\Models\OrgHierarchy;
 use App\Modules\Organization\Models\OrgHierarchyNode;
+use App\Modules\Organization\Services\HierarchySyncService;
 use App\Modules\Organization\Services\OrgHierarchyService;
 use App\Base\Context\TenantContext;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,8 @@ use Illuminate\Http\Request;
 class OrgHierarchyController extends Controller
 {
     public function __construct(
-        private readonly OrgHierarchyService $service
+        protected OrgHierarchyService $service,
+        protected HierarchySyncService $syncService,
     ) {
     }
 
@@ -29,7 +31,7 @@ class OrgHierarchyController extends Controller
     {
         $data = $request->validate([
             'code'       => 'required|string|max:50',
-            'name'       => 'required|string|max:200',
+            'name'       => 'required|string|max:150',
             'purpose'    => 'required|string|max:30',
             'valid_from' => 'nullable|date',
             'valid_to'   => 'nullable|date',
@@ -91,5 +93,33 @@ class OrgHierarchyController extends Controller
             'message' => 'Node added.',
             'data'    => $node,
         ], 201);
+    }
+
+    /** P3 — hierarchy health for current tenant */
+    public function health(): JsonResponse
+    {
+        $report = $this->syncService->health();
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $report,
+        ]);
+    }
+
+    /** P3 — rebuild system trees for current tenant */
+    public function rebuild(): JsonResponse
+    {
+        $this->syncService->rebuildSystemTreesForTenant();
+        $structural = $this->syncService->ensureStructuralTrees();
+        $health = $this->syncService->health();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'System hierarchies rebuilt.',
+            'data'    => [
+                'structural' => $structural,
+                'health'     => $health,
+            ],
+        ]);
     }
 }
