@@ -6,6 +6,7 @@ use App\Modules\Organization\Models\OrgHierarchy;
 use App\Modules\Organization\Models\OrgHierarchyNode;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class OrgHierarchyService
@@ -67,9 +68,11 @@ class OrgHierarchyService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        OrgHierarchy::where('tenant_id', $tenantId)
-            ->where('hierarchy_id', $hierarchyId)
-            ->firstOrFail();
+        $hierQ = OrgHierarchy::where('tenant_id', $tenantId)->where('hierarchy_id', $hierarchyId);
+        if ($onlyTrashed) {
+            $hierQ->withTrashed();
+        }
+        $hierQ->firstOrFail();
 
         $q = OrgHierarchyNode::where('tenant_id', $tenantId)
             ->where('hierarchy_id', $hierarchyId);
@@ -101,7 +104,6 @@ class OrgHierarchyService
 
         $this->assertEntityAllowedForPurpose($hierarchy->purpose, $entityType);
 
-        // Prevent duplicate of same entity in the same tree (active rows).
         $dup = OrgHierarchyNode::where('tenant_id', $tenantId)
             ->where('hierarchy_id', $hierarchyId)
             ->where('entity_type', $entityType)
@@ -141,10 +143,6 @@ class OrgHierarchyService
         ]);
     }
 
-    /**
-     * Soft-delete a node and all descendants (structure stays consistent; no orphan children).
-     * System trees may reappear after rebuild — caller should warn the user.
-     */
     public function softDeleteNode(string $nodeId): int
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
@@ -178,7 +176,6 @@ class OrgHierarchyService
             ->where('node_id', $nodeId)
             ->firstOrFail();
 
-        // Restore ancestors first so parent chain is intact.
         $this->restoreAncestors($tenantId, $node);
         $node->restore();
 
@@ -206,7 +203,6 @@ class OrgHierarchyService
         $node->row_version = (int) $node->row_version + 1;
         $node->save();
 
-        // Deactivating cascades to descendants so structure does not look "half active".
         if (!$active) {
             $desc = $this->collectDescendantIds($tenantId, $node->hierarchy_id, $nodeId);
             if ($desc !== []) {
@@ -214,7 +210,7 @@ class OrgHierarchyService
                     ->whereIn('node_id', $desc)
                     ->update([
                         'is_active'   => false,
-                        'row_version' => \DB::raw('row_version + 1'),
+                        'row_version' => DB::raw('row_version + 1'),
                     ]);
             }
         }
@@ -230,7 +226,6 @@ class OrgHierarchyService
             ->where('hierarchy_id', $hierarchyId)
             ->firstOrFail();
 
-        // Soft-delete all nodes then hierarchy.
         OrgHierarchyNode::where('tenant_id', $tenantId)
             ->where('hierarchy_id', $hierarchyId)
             ->get()
@@ -291,7 +286,6 @@ class OrgHierarchyService
     public function bulkSoftDeleteNodes(array $nodeIds): int
     {
         $count = 0;
-        // Delete deepest first is safer; softDeleteNode already cascades children.
         foreach (array_unique($nodeIds) as $id) {
             try {
                 $count += $this->softDeleteNode((string) $id);
@@ -320,7 +314,6 @@ class OrgHierarchyService
     protected function assertRootRules(string $purpose, string $entityType): void
     {
         $purpose = strtoupper($purpose);
-        // LEGAL / TAX / ESTABLISHMENT roots should be COMPANY.
         if (in_array($purpose, ['LEGAL', 'TAX', 'ESTABLISHMENT'], true) && $entityType !== 'COMPANY') {
             throw new \Exception('ریشهٔ این نوع درخت باید شرکت باشد. «ریشه» یعنی بالاترین سطح نقشه بدون والد.');
         }
@@ -332,7 +325,6 @@ class OrgHierarchyService
         $parentType = $parent->entity_type;
 
         if ($purpose === 'LEGAL' || $purpose === 'TAX') {
-            // Only company under company.
             if ($childType !== 'COMPANY' || $parentType !== 'COMPANY') {
                 throw new \Exception('در درخت حقوقی/مالیاتی فقط شرکت زیر شرکت مجاز است.');
             }
