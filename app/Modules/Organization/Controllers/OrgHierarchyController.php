@@ -3,11 +3,8 @@
 namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
-use App\Modules\Organization\Models\OrgHierarchy;
-use App\Modules\Organization\Models\OrgHierarchyNode;
 use App\Modules\Organization\Services\HierarchySyncService;
 use App\Modules\Organization\Services\OrgHierarchyService;
-use App\Base\Context\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,11 +16,14 @@ class OrgHierarchyController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $membership = strtolower((string) $request->query('membership', 'active'));
+        $onlyTrashed = in_array($membership, ['deleted', 'trashed'], true);
+
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->listHierarchies(),
+            'data'   => $this->service->listHierarchies($onlyTrashed),
         ]);
     }
 
@@ -52,18 +52,48 @@ class OrgHierarchyController extends Controller
         ], 201);
     }
 
-    public function nodes(string $hierarchy): JsonResponse
+    public function destroy(string $hierarchy): JsonResponse
     {
-        $tenantId = TenantContext::getInstance()->getTenantId();
+        $this->service->softDeleteHierarchy($hierarchy);
 
-        OrgHierarchy::where('tenant_id', $tenantId)
-            ->where('hierarchy_id', $hierarchy)
-            ->firstOrFail();
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Hierarchy soft-deleted (nodes included).',
+        ]);
+    }
 
-        $nodes = OrgHierarchyNode::where('tenant_id', $tenantId)
-            ->where('hierarchy_id', $hierarchy)
-            ->orderBy('sort_order')
-            ->get();
+    public function restore(string $hierarchy): JsonResponse
+    {
+        $h = $this->service->restoreHierarchy($hierarchy);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Hierarchy restored.',
+            'data'    => $h,
+        ]);
+    }
+
+    public function setActive(string $hierarchy, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $h = $this->service->setHierarchyActive($hierarchy, (bool) $data['is_active']);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => $data['is_active'] ? 'Hierarchy activated.' : 'Hierarchy deactivated.',
+            'data'    => $h,
+        ]);
+    }
+
+    public function nodes(string $hierarchy, Request $request): JsonResponse
+    {
+        $membership = strtolower((string) $request->query('membership', 'active'));
+        $onlyTrashed = in_array($membership, ['deleted', 'trashed'], true);
+
+        $nodes = $this->service->listNodes($hierarchy, $onlyTrashed);
 
         return response()->json([
             'status' => 'success',
@@ -80,13 +110,20 @@ class OrgHierarchyController extends Controller
             'sort_order'     => 'sometimes|integer|min:0',
         ]);
 
-        $node = $this->service->addNode(
-            $hierarchy,
-            $data['entity_type'],
-            $data['entity_id'],
-            $data['parent_node_id'] ?? null,
-            (int) ($data['sort_order'] ?? 0),
-        );
+        try {
+            $node = $this->service->addNode(
+                $hierarchy,
+                $data['entity_type'],
+                $data['entity_id'],
+                $data['parent_node_id'] ?? null,
+                (int) ($data['sort_order'] ?? 0),
+            );
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'status'  => 'success',
@@ -95,7 +132,88 @@ class OrgHierarchyController extends Controller
         ], 201);
     }
 
-    /** P3 — hierarchy health for current tenant */
+    public function destroyNode(string $node): JsonResponse
+    {
+        try {
+            $count = $this->service->softDeleteNode($node);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Node soft-deleted (including {$count} row(s) with descendants).",
+            'data'    => ['deleted_count' => $count],
+        ]);
+    }
+
+    public function restoreNode(string $node): JsonResponse
+    {
+        try {
+            $n = $this->service->restoreNode($node);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Node restored (ancestors restored if needed).',
+            'data'    => $n,
+        ]);
+    }
+
+    public function setNodeActive(string $node, Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        try {
+            $n = $this->service->setNodeActive($node, (bool) $data['is_active']);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => $data['is_active'] ? 'Node activated.' : 'Node deactivated (descendants too).',
+            'data'    => $n,
+        ]);
+    }
+
+    public function bulkNodes(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'node_ids'   => 'required|array|min:1',
+            'node_ids.*' => 'uuid',
+            'action'     => 'required|in:activate,deactivate,delete',
+        ]);
+
+        $ids = $data['node_ids'];
+        $action = $data['action'];
+
+        $affected = match ($action) {
+            'activate'   => $this->service->bulkSetNodesActive($ids, true),
+            'deactivate' => $this->service->bulkSetNodesActive($ids, false),
+            'delete'     => $this->service->bulkSoftDeleteNodes($ids),
+        };
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Bulk action applied.',
+            'data'    => ['affected' => $affected, 'action' => $action],
+        ]);
+    }
+
     public function health(): JsonResponse
     {
         $report = $this->syncService->health();
@@ -106,7 +224,6 @@ class OrgHierarchyController extends Controller
         ]);
     }
 
-    /** P3 — rebuild system trees for current tenant */
     public function rebuild(): JsonResponse
     {
         $this->syncService->rebuildSystemTreesForTenant();
@@ -115,7 +232,7 @@ class OrgHierarchyController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'System hierarchies rebuilt.',
+            'message' => 'System hierarchies rebuilt from organization entities.',
             'data'    => [
                 'structural' => $structural,
                 'health'     => $health,
