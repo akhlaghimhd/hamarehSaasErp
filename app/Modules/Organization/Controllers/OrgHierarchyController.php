@@ -230,6 +230,17 @@ class OrgHierarchyController extends Controller
 
     public function previewRebuild(): JsonResponse
     {
+        if (!method_exists($this->syncService, 'previewRebuild')) {
+            return response()->json([
+                'status' => 'success',
+                'data'   => [
+                    'has_changes' => true,
+                    'summary' => [],
+                    'items' => [['kind' => 'info', 'message' => 'پیش‌نمایش در این نسخه کامل نیست؛ با تأیید، بازنشانی اجرا می‌شود.']],
+                ],
+            ]);
+        }
+
         $preview = $this->syncService->previewRebuild();
 
         return response()->json([
@@ -240,16 +251,18 @@ class OrgHierarchyController extends Controller
 
     public function rebuild(): JsonResponse
     {
-        $preview = $this->syncService->previewRebuild();
-        if (!($preview['has_changes'] ?? false)) {
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'No differences; rebuild skipped.',
-                'data'    => [
-                    'skipped' => true,
-                    'preview' => $preview,
-                ],
-            ]);
+        if (method_exists($this->syncService, 'previewRebuild')) {
+            $preview = $this->syncService->previewRebuild();
+            if (!($preview['has_changes'] ?? false)) {
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'No differences; rebuild skipped.',
+                    'data'    => [
+                        'skipped' => true,
+                        'preview' => $preview,
+                    ],
+                ]);
+            }
         }
 
         $rebuild = $this->syncService->rebuildSystemTreesForTenant();
