@@ -226,7 +226,7 @@ class OrgHierarchyController extends Controller
 
     public function rebuild(): JsonResponse
     {
-        $this->syncService->rebuildSystemTreesForTenant();
+        $rebuild = $this->syncService->rebuildSystemTreesForTenant();
         $structural = $this->syncService->ensureStructuralTrees();
         $health = $this->syncService->health();
 
@@ -234,6 +234,7 @@ class OrgHierarchyController extends Controller
             'status'  => 'success',
             'message' => 'System hierarchies rebuilt from organization entities.',
             'data'    => [
+                'rebuild'    => $rebuild,
                 'structural' => $structural,
                 'health'     => $health,
             ],
