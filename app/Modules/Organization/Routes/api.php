@@ -119,9 +119,24 @@ Route::middleware([
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies/rebuild', [OrgHierarchyController::class, 'rebuild'])
         ->middleware('permission:organization.hierarchy.manage');
+    Route::post('/hierarchies/nodes/bulk', [OrgHierarchyController::class, 'bulkNodes'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::delete('/hierarchies/nodes/{node}', [OrgHierarchyController::class, 'destroyNode'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::post('/hierarchies/nodes/{node}/restore', [OrgHierarchyController::class, 'restoreNode'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::patch('/hierarchies/nodes/{node}/active', [OrgHierarchyController::class, 'setNodeActive'])
+        ->middleware('permission:organization.hierarchy.manage');
+
     Route::get('/hierarchies', [OrgHierarchyController::class, 'index'])
         ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies', [OrgHierarchyController::class, 'store'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::delete('/hierarchies/{hierarchy}', [OrgHierarchyController::class, 'destroy'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::post('/hierarchies/{hierarchy}/restore', [OrgHierarchyController::class, 'restore'])
+        ->middleware('permission:organization.hierarchy.manage');
+    Route::patch('/hierarchies/{hierarchy}/active', [OrgHierarchyController::class, 'setActive'])
         ->middleware('permission:organization.hierarchy.manage');
     Route::get('/hierarchies/{hierarchy}/nodes', [OrgHierarchyController::class, 'nodes'])
         ->middleware('permission:organization.hierarchy.view');
