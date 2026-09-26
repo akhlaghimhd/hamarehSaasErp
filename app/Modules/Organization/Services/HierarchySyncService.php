@@ -17,9 +17,6 @@ use Illuminate\Support\Str;
  *
  * System trees are derived from source entities. Never throw to CRUD callers
  * when used via safe(). Point-sync; idempotent upsert.
- *
- * P2 full feature-pack wiring is DEBT until SaaS Admin packs API exists.
- * P5 report contracts and P6 manual node origin column are DEBT.
  */
 class HierarchySyncService
 {
@@ -158,10 +155,6 @@ class HierarchySyncService
         }
     }
 
-    /**
-     * P4 — place BU under primary company in SYS-PRODUCT (CUSTOM purpose).
-     * Only material when tenant has more than one active BU (product law threshold).
-     */
     public function syncBusinessUnit(BusinessUnit $bu): void
     {
         $tenantId = $this->resolveTenantId($bu->tenant_id ?? null);
@@ -171,7 +164,6 @@ class HierarchySyncService
 
         $activeBuCount = BusinessUnit::where('tenant_id', $tenantId)->where('is_active', true)->count();
         if ($activeBuCount <= 1 && !$bu->trashed()) {
-            // Keep single-BU tenants free of product-tree noise; still deactivate if leftover
             $this->deactivateEntityNodes('BUSINESS_UNIT', (string) $bu->business_unit_id);
 
             return;
@@ -262,12 +254,6 @@ class HierarchySyncService
             ]);
     }
 
-    /**
-     * P2 minimal — if structure is multi-entity, ensure system trees exist and are rebuilt.
-     * Full pack upgrade/downgrade hooks are DEBT (no SaaS feature-pack API yet).
-     *
-     * @return array{tier: string, rebuilt: bool, company_count: int, branch_count: int, bu_count: int}
-     */
     public function ensureStructuralTrees(?string $tenantId = null): array
     {
         $tenantId = $this->resolveTenantId($tenantId);
@@ -294,7 +280,6 @@ class HierarchySyncService
 
         $rebuilt = false;
         if ($companyCount >= 1) {
-            // Always keep LEGAL/EST shells when any company exists (cheap ensure)
             $this->ensureSystemHierarchy($tenantId, self::CODE_LEGAL, 'ساختار حقوقی', OrgHierarchy::PURPOSE_LEGAL);
             $this->ensureSystemHierarchy($tenantId, self::CODE_ESTABLISHMENT, 'استقرار', OrgHierarchy::PURPOSE_ESTABLISHMENT);
 
@@ -302,7 +287,6 @@ class HierarchySyncService
                 $this->rebuildSystemTreesForTenant($tenantId);
                 $rebuilt = true;
             } elseif ($companyCount === 1) {
-                // Point-sync primary path without full scan noise for truly simple
                 $co = Company::where('tenant_id', $tenantId)->orderBy('created_at')->first();
                 if ($co) {
                     $this->syncCompany($co);
@@ -327,11 +311,6 @@ class HierarchySyncService
         ];
     }
 
-    /**
-     * P3 — health report for support / admin.
-     *
-     * @return array{status: string, issues: list<array<string, mixed>>, counts: array<string, int>}
-     */
     public function health(?string $tenantId = null): array
     {
         $tenantId = $this->resolveTenantId($tenantId);
@@ -395,15 +374,6 @@ class HierarchySyncService
             }
         }
 
-        // Orphan company nodes (entity hard-missing)
-        $companyIds = $companies->pluck('company_id')->all();
-        $orphanCompanyNodes = OrgHierarchyNode::where('tenant_id', $tenantId)
-            ->where('entity_type', 'COMPANY')
-            ->whereNull('deleted_at')
-            ->whereNotIn('entity_id', $companyIds === [] ? ['00000000-0000-0000-0000-000000000000'] : $companyIds)
-            ->count();
-
-        // Soft-deleted companies still counted via withTrashed for orphan check
         $allCompanyIds = Company::withTrashed()->where('tenant_id', $tenantId)->pluck('company_id')->all();
         $orphanCompanyNodes = OrgHierarchyNode::where('tenant_id', $tenantId)
             ->where('entity_type', 'COMPANY')
@@ -443,11 +413,38 @@ class HierarchySyncService
         ];
     }
 
-    public function rebuildSystemTreesForTenant(?string $tenantId = null): void
+    /**
+     * Full rebuild of system trees. Restores soft-deleted SYS hierarchies/nodes
+     * that still have a matching company/branch/BU source entity.
+     *
+     * @return array{companies:int,branches:int,business_units:int,hierarchies_restored:int}
+     */
+    public function rebuildSystemTreesForTenant(?string $tenantId = null): array
     {
         $tenantId = $this->resolveTenantId($tenantId);
         if ($tenantId === '') {
-            return;
+            return [
+                'companies' => 0,
+                'branches' => 0,
+                'business_units' => 0,
+                'hierarchies_restored' => 0,
+            ];
+        }
+
+        $hRestored = 0;
+        foreach ([
+            [self::CODE_LEGAL, 'ساختار حقوقی', OrgHierarchy::PURPOSE_LEGAL],
+            [self::CODE_ESTABLISHMENT, 'استقرار', OrgHierarchy::PURPOSE_ESTABLISHMENT],
+            [self::CODE_PRODUCT, 'خطوط محصول', OrgHierarchy::PURPOSE_CUSTOM],
+        ] as [$code, $name, $purpose]) {
+            $before = OrgHierarchy::withTrashed()
+                ->where('tenant_id', $tenantId)
+                ->where('code', $code)
+                ->first();
+            $this->ensureSystemHierarchy($tenantId, $code, $name, $purpose);
+            if ($before && $before->trashed()) {
+                $hRestored++;
+            }
         }
 
         $companies = Company::withTrashed()->where('tenant_id', $tenantId)->orderBy('created_at')->get();
@@ -464,6 +461,13 @@ class HierarchySyncService
         foreach ($bus as $bu) {
             $this->syncBusinessUnit($bu);
         }
+
+        return [
+            'companies' => $companies->count(),
+            'branches' => $branches->count(),
+            'business_units' => $bus->count(),
+            'hierarchies_restored' => $hRestored,
+        ];
     }
 
     private function resolveTenantId(mixed $explicit): string
@@ -519,14 +523,22 @@ class HierarchySyncService
         string $entityType,
         string $entityId
     ): ?string {
-        $node = OrgHierarchyNode::where('tenant_id', $tenantId)
+        $node = OrgHierarchyNode::withTrashed()
+            ->where('tenant_id', $tenantId)
             ->where('hierarchy_id', $hierarchyId)
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
-            ->whereNull('deleted_at')
             ->first();
 
-        return $node ? (string) $node->node_id : null;
+        if (!$node) {
+            return null;
+        }
+
+        if ($node->trashed()) {
+            $node->restore();
+        }
+
+        return (string) $node->node_id;
     }
 
     private function upsertNode(
