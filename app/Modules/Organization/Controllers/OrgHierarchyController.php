@@ -2,7 +2,7 @@
 
 namespace App\Modules\Organization\Controllers;
 
-use App\Http\Controllers\Controller;
+use App\Base\Controller;
 use App\Modules\Organization\Models\OrgHierarchy;
 use App\Modules\Organization\Models\OrgHierarchyNode;
 use App\Modules\Organization\Services\HierarchySyncService;
