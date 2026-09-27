@@ -88,6 +88,23 @@ class BranchService
         return $query->get();
     }
 
+    /**
+     * Direct lookup by id (ScopeScoped + TenantScoped still apply).
+     * Prefer this over scanning getAllBranches for show/detail.
+     */
+    public function getBranchById(string $branchId, bool $withTrashed = false): ?Branch
+    {
+        $this->ensureScopeContextHydrated();
+
+        $query = Branch::query()->with('company');
+
+        if ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query->where('branch_id', $branchId)->first();
+    }
+
     public function updateBranch(string $branchId, UpdateBranchDTO $dto): Branch
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
