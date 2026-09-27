@@ -25,6 +25,12 @@ class OrgHierarchy extends Model
         self::PURPOSE_CUSTOM,
     ];
 
+    public const SYSTEM_CODES = [
+        'SYS-LEGAL',
+        'SYS-ESTABLISHMENT',
+        'SYS-PRODUCT',
+    ];
+
     protected $table = 'erp_org_hierarchies';
 
     protected $primaryKey = 'hierarchy_id';
@@ -48,6 +54,8 @@ class OrgHierarchy extends Model
         'row_version',
     ];
 
+    protected $appends = ['is_system'];
+
     protected function casts(): array
     {
         return [
@@ -60,6 +68,12 @@ class OrgHierarchy extends Model
             'updated_at'  => 'datetime',
             'deleted_at'  => 'datetime',
         ];
+    }
+
+    public function getIsSystemAttribute(): bool
+    {
+        return in_array((string) $this->code, self::SYSTEM_CODES, true)
+            || str_starts_with((string) $this->code, 'SYS-');
     }
 
     public function nodes()

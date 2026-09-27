@@ -19,6 +19,14 @@ class OrgHierarchyNode extends Model
         'COST_CENTER',
     ];
 
+    public const ORIGIN_SYSTEM = 'SYSTEM';
+    public const ORIGIN_MANUAL = 'MANUAL';
+
+    public const ORIGINS = [
+        self::ORIGIN_SYSTEM,
+        self::ORIGIN_MANUAL,
+    ];
+
     protected $table = 'erp_org_hierarchy_nodes';
 
     protected $primaryKey = 'node_id';
@@ -33,6 +41,7 @@ class OrgHierarchyNode extends Model
         'parent_node_id',
         'entity_type',
         'entity_id',
+        'node_origin',
         'sort_order',
         'is_active',
         'created_by',
