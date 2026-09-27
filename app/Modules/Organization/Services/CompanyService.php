@@ -153,6 +153,11 @@ class CompanyService
             throw new \Exception('نمی‌توان پرچم شرکت اصلی را بدون تعیین جایگزین برداشت.');
         }
 
+        // Primary company must stay active (product rule).
+        if ($company->is_primary && $dto->isActive === false) {
+            throw new \Exception('شرکت اصلی قابل غیرفعال‌سازی نیست.');
+        }
+
         $company = DB::transaction(function () use (
             $company,
             $tenantId,
@@ -221,6 +226,16 @@ class CompanyService
 
         if ($company->children()->exists()) {
             throw new \Exception('این شرکت دارای زیرمجموعه است و قابل حذف نیست.');
+        }
+
+        // Integrity: do not soft-delete a company while it still has branches.
+        // Callers must soft-delete (or reassign) branches first.
+        $hasBranches = Branch::where('tenant_id', $tenantId)
+            ->where('company_id', $companyId)
+            ->exists();
+
+        if ($hasBranches) {
+            throw new \Exception('این شرکت دارای شعبه است و قابل حذف نیست.');
         }
 
         DB::transaction(function () use ($company, $tenantId, $companyId) {
