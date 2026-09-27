@@ -21,6 +21,7 @@ class BranchController extends Controller
     /**
      * List branches with Scope + optional company filter from nested route.
      * GET /api/organization/companies/{company}/branches?membership=active|deleted
+     * GET /api/organization/branches?membership=active|deleted
      */
     public function index(Request $request, ?string $company = null): JsonResponse
     {
@@ -51,12 +52,14 @@ class BranchController extends Controller
         ], 201);
     }
 
-    public function show(string $branchId): JsonResponse
+    /**
+     * Route param name is {branch} — must match method argument name for Laravel injection.
+     */
+    public function show(string $branch): JsonResponse
     {
-        $branches = $this->branchService->getAllBranches();
-        $branch = $branches->firstWhere('branch_id', $branchId);
+        $found = $this->branchService->getBranchById($branch);
 
-        if (!$branch) {
+        if (!$found) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Branch not found or access denied.',
@@ -65,25 +68,25 @@ class BranchController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $branch,
+            'data'   => $found,
         ]);
     }
 
-    public function update(string $branchId, UpdateBranchRequest $request): JsonResponse
+    public function update(string $branch, UpdateBranchRequest $request): JsonResponse
     {
         $dto = UpdateBranchDTO::fromRequest($request->validated());
-        $branch = $this->branchService->updateBranch($branchId, $dto);
+        $updated = $this->branchService->updateBranch($branch, $dto);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Branch updated successfully.',
-            'data'    => $branch,
+            'data'    => $updated,
         ]);
     }
 
-    public function destroy(string $branchId): JsonResponse
+    public function destroy(string $branch): JsonResponse
     {
-        $this->branchService->deleteBranch($branchId);
+        $this->branchService->deleteBranch($branch);
 
         return response()->json([
             'status'  => 'success',
@@ -91,14 +94,14 @@ class BranchController extends Controller
         ]);
     }
 
-    public function restore(string $branchId): JsonResponse
+    public function restore(string $branch): JsonResponse
     {
-        $branch = $this->branchService->restoreBranch($branchId);
+        $restored = $this->branchService->restoreBranch($branch);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Branch restored successfully.',
-            'data'    => $branch,
+            'data'    => $restored,
         ]);
     }
 }

@@ -47,12 +47,12 @@ class DepartmentController extends Controller
         ], 201);
     }
 
-    public function show(string $departmentId): JsonResponse
+    /** Route param is {department} — must match argument name. */
+    public function show(string $department): JsonResponse
     {
-        $departments = $this->departmentService->getAllDepartments();
-        $department = $departments->firstWhere('department_id', $departmentId);
+        $found = $this->departmentService->getDepartmentById($department);
 
-        if (!$department) {
+        if (!$found) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'Department not found or access denied.',
@@ -61,25 +61,25 @@ class DepartmentController extends Controller
 
         return response()->json([
             'status' => 'success',
-            'data'   => $department,
+            'data'   => $found,
         ]);
     }
 
-    public function update(string $departmentId, UpdateDepartmentRequest $request): JsonResponse
+    public function update(string $department, UpdateDepartmentRequest $request): JsonResponse
     {
         $dto = UpdateDepartmentDTO::fromRequest($request->validated());
-        $department = $this->departmentService->updateDepartment($departmentId, $dto);
+        $updated = $this->departmentService->updateDepartment($department, $dto);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Department updated successfully.',
-            'data'    => $department,
+            'data'    => $updated,
         ]);
     }
 
-    public function destroy(string $departmentId): JsonResponse
+    public function destroy(string $department): JsonResponse
     {
-        $this->departmentService->deleteDepartment($departmentId);
+        $this->departmentService->deleteDepartment($department);
 
         return response()->json([
             'status'  => 'success',
@@ -87,14 +87,14 @@ class DepartmentController extends Controller
         ]);
     }
 
-    public function restore(string $departmentId): JsonResponse
+    public function restore(string $department): JsonResponse
     {
-        $department = $this->departmentService->restoreDepartment($departmentId);
+        $restored = $this->departmentService->restoreDepartment($department);
 
         return response()->json([
             'status'  => 'success',
             'message' => 'Department restored successfully.',
-            'data'    => $department,
+            'data'    => $restored,
         ]);
     }
 }
