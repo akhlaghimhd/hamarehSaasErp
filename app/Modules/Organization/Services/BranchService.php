@@ -80,7 +80,9 @@ class BranchService
             $query->where('company_id', $companyId);
         }
 
-        $companyReferenceIds = ScopeContext::getInstance()->getAccessibleCompanyIds();
+        // Scope filter: when user has COMPANY scopes, limit to those companies.
+        // Empty = gradual policy (no extra filter beyond TenantScoped / ScopeScoped on model).
+        $companyReferenceIds = ScopeContext::getInstance()->getReferenceIdsByType('COMPANY');
         if (!empty($companyReferenceIds)) {
             $query->whereIn('company_id', $companyReferenceIds);
         }
