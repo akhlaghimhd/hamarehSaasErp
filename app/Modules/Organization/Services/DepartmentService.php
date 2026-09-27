@@ -92,6 +92,20 @@ class DepartmentService
         return $query->get();
     }
 
+    /**
+     * Direct lookup by id (ScopeScoped + TenantScoped still apply).
+     */
+    public function getDepartmentById(string $departmentId, bool $withTrashed = false): ?Department
+    {
+        $query = Department::with(['branch', 'parent']);
+
+        if ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query->where('department_id', $departmentId)->first();
+    }
+
     public function restoreDepartment(string $departmentId): Department
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
