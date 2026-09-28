@@ -156,13 +156,24 @@ Route::middleware([
     Route::post('/hierarchies/{hierarchy}/nodes/reorder', [OrgHierarchyController::class, 'reorderNodes'])
         ->middleware('permission:organization.hierarchy.manage');
 
+    // Intercompany — static catalog BEFORE parameterized routes
+    Route::get('/intercompany/document-types', [IntercompanyController::class, 'documentTypes'])
+        ->middleware('permission:organization.intercompany.view');
     Route::get('/intercompany/partners', [IntercompanyController::class, 'partners'])
         ->middleware('permission:organization.intercompany.view');
     Route::post('/intercompany/partners', [IntercompanyController::class, 'storePartner'])
         ->middleware('permission:organization.intercompany.manage');
+    Route::put('/intercompany/partners/{partner}', [IntercompanyController::class, 'updatePartner'])
+        ->middleware('permission:organization.intercompany.manage');
+    Route::delete('/intercompany/partners/{partner}', [IntercompanyController::class, 'destroyPartner'])
+        ->middleware('permission:organization.intercompany.manage');
     Route::get('/intercompany/rules', [IntercompanyController::class, 'rules'])
         ->middleware('permission:organization.intercompany.view');
     Route::post('/intercompany/rules', [IntercompanyController::class, 'storeRule'])
+        ->middleware('permission:organization.intercompany.manage');
+    Route::put('/intercompany/rules/{rule}', [IntercompanyController::class, 'updateRule'])
+        ->middleware('permission:organization.intercompany.manage');
+    Route::delete('/intercompany/rules/{rule}', [IntercompanyController::class, 'destroyRule'])
         ->middleware('permission:organization.intercompany.manage');
 
     Route::get('/sales-organizations', [SalesOrganizationController::class, 'index'])
