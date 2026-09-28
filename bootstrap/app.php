@@ -7,6 +7,7 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 use App\Base\Http\Middleware\RequirePermission;
 use App\Base\Http\Middleware\LoadUserScopesMiddleware;
 use App\Base\Http\Middleware\RequireScope;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
@@ -74,6 +75,14 @@ return Application::configure(basePath: dirname(__DIR__))
                     'status'  => 'error',
                     'message' => 'مورد درخواستی یافت نشد.',
                 ], 404);
+            }
+
+            if ($e instanceof DomainException) {
+                return response()->json([
+                    'status'     => 'error',
+                    'message'    => $e->getMessage(),
+                    'error_code' => $e->errorCode,
+                ], 422);
             }
 
             if ($e instanceof HttpExceptionInterface) {
