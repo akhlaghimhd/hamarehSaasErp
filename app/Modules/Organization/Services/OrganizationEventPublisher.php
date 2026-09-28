@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * ORG-P6-04 / P6-05 — Publish integration contracts toward Accounting via event_outbox.
+ * ORG-P6-04 / P6-05 / ADR-ORG-002 — Publish integration contracts via event_outbox.
  * Does not implement posting; only emits versioned event envelopes.
  */
 class OrganizationEventPublisher
@@ -54,6 +54,46 @@ class OrganizationEventPublisher
             'erp_consolidation_runs',
             $consolRunId,
             array_merge(['consol_run_id' => $consolRunId], $context)
+        );
+    }
+
+    public function publishIntercompanyPartnerUpserted(string $icPartnerId, array $context = []): string
+    {
+        return $this->publish(
+            'intercompany_partner_upserted',
+            'erp_intercompany_partners',
+            $icPartnerId,
+            array_merge(['ic_partner_id' => $icPartnerId], $context)
+        );
+    }
+
+    public function publishIntercompanyPartnerDeleted(string $icPartnerId, array $context = []): string
+    {
+        return $this->publish(
+            'intercompany_partner_deleted',
+            'erp_intercompany_partners',
+            $icPartnerId,
+            array_merge(['ic_partner_id' => $icPartnerId], $context)
+        );
+    }
+
+    public function publishIntercompanyRuleUpserted(string $icRuleId, array $context = []): string
+    {
+        return $this->publish(
+            'intercompany_rule_upserted',
+            'erp_intercompany_rules',
+            $icRuleId,
+            array_merge(['ic_rule_id' => $icRuleId], $context)
+        );
+    }
+
+    public function publishIntercompanyRuleDeleted(string $icRuleId, array $context = []): string
+    {
+        return $this->publish(
+            'intercompany_rule_deleted',
+            'erp_intercompany_rules',
+            $icRuleId,
+            array_merge(['ic_rule_id' => $icRuleId], $context)
         );
     }
 }

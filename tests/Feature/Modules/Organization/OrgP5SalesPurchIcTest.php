@@ -83,10 +83,14 @@ class OrgP5SalesPurchIcTest extends TestCase
         $map = $ic->mapPartners($a->company_id, $b->company_id);
         $this->assertSame($a->company_id, $map->from_company_id);
 
-        $rule = $ic->createRule('SI-TO-PI', 'Sales inv to purch inv', 'SALES_INVOICE', 'PURCHASE_INVOICE');
-        $this->assertSame('SALES_INVOICE', $rule->source_doc_type);
+        // Catalog codes only (ADR-ORG-002 / Org-IC-P1)
+        $rule = $ic->createRule('SO-TO-PO', 'Sales order to purchase order', 'SO', 'PO');
+        $this->assertSame('SO', $rule->source_doc_type);
+        $this->assertSame('PO', $rule->target_doc_type);
 
-        $this->assertCount(1, $ic->listPartners());
+        $listed = $ic->listPartners();
+        $this->assertCount(1, $listed);
+        $this->assertSame('Company A', $listed->first()['from_company_name']);
         $this->assertCount(1, $ic->listRules());
     }
 
@@ -97,5 +101,64 @@ class OrgP5SalesPurchIcTest extends TestCase
 
         $this->expectException(\Exception::class);
         app(IntercompanyService::class)->mapPartners($co->company_id, $co->company_id);
+    }
+
+    #[Test]
+    public function intercompany_rejects_unknown_document_type(): void
+    {
+        $ic = app(IntercompanyService::class);
+
+        $this->expectException(\Exception::class);
+        $ic->createRule('BAD', 'Bad rule', 'SALES_INVOICE', 'PO');
+    }
+
+    #[Test]
+    public function intercompany_partner_update_deactivate_and_soft_delete(): void
+    {
+        $svcCo = app(CompanyService::class);
+        $a = $svcCo->createCompany(new CreateCompanyDTO(code: 'IC-U1', name: 'U1'));
+        $b = $svcCo->createCompany(new CreateCompanyDTO(code: 'IC-U2', name: 'U2'));
+
+        $ic = app(IntercompanyService::class);
+        $map = $ic->mapPartners($a->company_id, $b->company_id, notes: 'initial');
+
+        $updated = $ic->updatePartner($map->ic_partner_id, [
+            'notes' => 'updated',
+            'is_active' => false,
+        ]);
+        $this->assertFalse((bool) $updated->is_active);
+        $this->assertSame('updated', $updated->notes);
+
+        $ic->softDeletePartner($map->ic_partner_id);
+        $this->assertCount(0, $ic->listPartners());
+    }
+
+    #[Test]
+    public function intercompany_rule_update_and_soft_delete(): void
+    {
+        $ic = app(IntercompanyService::class);
+        $rule = $ic->createRule('INV-BILL', 'Invoice to bill', 'INV', 'BILL', true);
+
+        $updated = $ic->updateRule($rule->ic_rule_id, [
+            'auto_create_mirror' => false,
+            'is_active' => false,
+        ]);
+        $this->assertFalse((bool) $updated->auto_create_mirror);
+        $this->assertFalse((bool) $updated->is_active);
+
+        $ic->softDeleteRule($rule->ic_rule_id);
+        $this->assertCount(0, $ic->listRules());
+    }
+
+    #[Test]
+    public function intercompany_document_type_catalog_is_non_empty(): void
+    {
+        $catalog = app(IntercompanyService::class)->documentTypeCatalog();
+        $this->assertNotEmpty($catalog);
+        $codes = array_column($catalog, 'code');
+        $this->assertContains('SO', $codes);
+        $this->assertContains('PO', $codes);
+        $this->assertContains('INV', $codes);
+        $this->assertContains('BILL', $codes);
     }
 }

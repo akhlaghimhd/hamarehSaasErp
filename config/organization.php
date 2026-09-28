@@ -25,12 +25,16 @@ return [
     ],
 
     /*
-    | Integration event types published toward Accounting (ORG-P6-04 / P6-05)
+    | Integration event types published toward Accounting / Sales / Purch (ORG-P6 + ADR-ORG-002)
     */
     'events' => [
         'elimination_requested' => 'organization.elimination.requested.v1',
         'consolidation_snapshotted' => 'organization.consolidation.snapshotted.v1',
         'structure_template_applied' => 'organization.structure.template_applied.v1',
+        'intercompany_partner_upserted' => 'organization.intercompany_partner.upserted.v1',
+        'intercompany_partner_deleted' => 'organization.intercompany_partner.deleted.v1',
+        'intercompany_rule_upserted' => 'organization.intercompany_rule.upserted.v1',
+        'intercompany_rule_deleted' => 'organization.intercompany_rule.deleted.v1',
     ],
 
 ];
