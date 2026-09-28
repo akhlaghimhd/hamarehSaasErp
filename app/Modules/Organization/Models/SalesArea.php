@@ -7,20 +7,21 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class SalesOrganization extends Model
+class SalesArea extends Model
 {
     use HasUuids, TenantScoped, SoftDeletes;
 
-    protected $table = 'erp_sales_organizations';
+    protected $table = 'erp_sales_areas';
 
-    protected $primaryKey = 'sales_org_id';
+    protected $primaryKey = 'sales_area_id';
 
     public $incrementing = false;
 
     protected $keyType = 'string';
 
     protected $fillable = [
-        'tenant_id', 'code', 'name', 'description', 'company_id', 'is_active',
+        'tenant_id', 'sales_org_id', 'distribution_channel_id', 'division_id',
+        'code', 'name', 'is_active',
         'created_by', 'updated_by', 'deleted_by', 'row_version',
     ];
 
@@ -32,18 +33,18 @@ class SalesOrganization extends Model
         ];
     }
 
-    public function assignments()
+    public function salesOrganization()
     {
-        return $this->hasMany(SalesOrgAssignment::class, 'sales_org_id', 'sales_org_id');
+        return $this->belongsTo(SalesOrganization::class, 'sales_org_id', 'sales_org_id');
     }
 
-    public function company()
+    public function distributionChannel()
     {
-        return $this->belongsTo(Company::class, 'company_id', 'company_id');
+        return $this->belongsTo(DistributionChannel::class, 'distribution_channel_id', 'distribution_channel_id');
     }
 
-    public function salesAreas()
+    public function productDivision()
     {
-        return $this->hasMany(SalesArea::class, 'sales_org_id', 'sales_org_id');
+        return $this->belongsTo(ProductDivision::class, 'division_id', 'division_id');
     }
 }

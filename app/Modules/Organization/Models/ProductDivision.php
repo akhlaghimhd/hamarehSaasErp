@@ -7,38 +7,28 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class PurchasingOrganization extends Model
+class ProductDivision extends Model
 {
     use HasUuids, TenantScoped, SoftDeletes;
 
-    protected $table = 'erp_purchasing_organizations';
+    protected $table = 'erp_product_divisions';
 
-    protected $primaryKey = 'purch_org_id';
+    protected $primaryKey = 'division_id';
 
     public $incrementing = false;
 
     protected $keyType = 'string';
 
     protected $fillable = [
-        'tenant_id', 'code', 'name', 'description', 'company_id', 'is_active', 'is_reference',
+        'tenant_id', 'code', 'name', 'is_active',
         'created_by', 'updated_by', 'deleted_by', 'row_version',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean', 'is_reference' => 'boolean', 'row_version' => 'integer',
+            'is_active' => 'boolean', 'row_version' => 'integer',
             'created_at' => 'datetime', 'updated_at' => 'datetime', 'deleted_at' => 'datetime',
         ];
-    }
-
-    public function assignments()
-    {
-        return $this->hasMany(PurchOrgAssignment::class, 'purch_org_id', 'purch_org_id');
-    }
-
-    public function company()
-    {
-        return $this->belongsTo(Company::class, 'company_id', 'company_id');
     }
 }
