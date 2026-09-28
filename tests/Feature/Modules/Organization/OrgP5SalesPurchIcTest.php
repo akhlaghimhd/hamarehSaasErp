@@ -9,6 +9,7 @@ use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\Organization\Services\CompanyService;
 use App\Modules\Organization\Services\SalesOrganizationService;
 use App\Modules\Organization\Services\PurchasingOrganizationService;
+use App\Modules\Organization\Services\SalesStructureService;
 use App\Modules\Organization\Services\IntercompanyService;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Base\Context\TenantContext;
@@ -73,6 +74,72 @@ class OrgP5SalesPurchIcTest extends TestCase
     }
 
     #[Test]
+    public function sales_structure_channel_division_area_and_office(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'SP-ST',
+            name: 'Structure Co',
+        ));
+
+        $so = app(SalesOrganizationService::class)->create('SO-DOM', 'Domestic', $co->company_id);
+        $struct = app(SalesStructureService::class);
+
+        $ch = $struct->createChannel('RETAIL', 'Retail');
+        $this->assertSame('RETAIL', $ch->code);
+
+        $div = $struct->createDivision('FG', 'Finished Goods');
+        $this->assertSame('FG', $div->code);
+
+        $area = $struct->createSalesArea(
+            $so->sales_org_id,
+            $ch->distribution_channel_id,
+            $div->division_id,
+            'SO-DOM-RETAIL-FG',
+            'Domestic Retail FG'
+        );
+        $this->assertSame($so->sales_org_id, $area->sales_org_id);
+        $this->assertCount(1, $struct->listSalesAreas());
+
+        $office = $struct->createOffice('TEH-01', 'Tehran Office', $so->sales_org_id);
+        $group = $struct->createGroup($office->sales_office_id, 'G1', 'Team North');
+        $this->assertSame('G1', $group->code);
+        $this->assertCount(1, $struct->listOffices());
+
+        $struct->softDeleteSalesArea($area->sales_area_id);
+        $this->assertCount(0, $struct->listSalesAreas());
+
+        $struct->softDeleteChannel($ch->distribution_channel_id);
+        $struct->softDeleteDivision($div->division_id);
+        $this->assertCount(0, $struct->listChannels());
+        $this->assertCount(0, $struct->listDivisions());
+    }
+
+    #[Test]
+    public function sales_area_rejects_duplicate_triple(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(code: 'SP-DUP', name: 'Dup Co'));
+        $so = app(SalesOrganizationService::class)->create('SO-X', 'X', $co->company_id);
+        $struct = app(SalesStructureService::class);
+        $ch = $struct->createChannel('CH1', 'Channel 1');
+        $div = $struct->createDivision('D1', 'Div 1');
+
+        $struct->createSalesArea($so->sales_org_id, $ch->distribution_channel_id, $div->division_id);
+
+        $this->expectException(\Exception::class);
+        $struct->createSalesArea($so->sales_org_id, $ch->distribution_channel_id, $div->division_id);
+    }
+
+    #[Test]
+    public function channel_code_must_be_unique_per_tenant(): void
+    {
+        $struct = app(SalesStructureService::class);
+        $struct->createChannel('DUP', 'One');
+
+        $this->expectException(\Exception::class);
+        $struct->createChannel('DUP', 'Two');
+    }
+
+    #[Test]
     public function intercompany_partner_map_and_rule(): void
     {
         $svcCo = app(CompanyService::class);
@@ -83,7 +150,6 @@ class OrgP5SalesPurchIcTest extends TestCase
         $map = $ic->mapPartners($a->company_id, $b->company_id);
         $this->assertSame($a->company_id, $map->from_company_id);
 
-        // Catalog codes only (ADR-ORG-002 / Org-IC-P1)
         $rule = $ic->createRule('SO-TO-PO', 'Sales order to purchase order', 'SO', 'PO');
         $this->assertSame('SO', $rule->source_doc_type);
         $this->assertSame('PO', $rule->target_doc_type);
