@@ -177,6 +177,66 @@ class OrgP5SalesPurchIcTest extends TestCase
     }
 
     #[Test]
+    public function structure_entities_support_update_and_restore(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'SP-UR',
+            name: 'Update Restore Co',
+        ));
+        $so = app(SalesOrganizationService::class)->create('SO-UR', 'UR Sales', $co->company_id);
+        $struct = app(SalesStructureService::class);
+
+        $ch = $struct->createChannel('CH-UR', 'Channel UR');
+        $ch = $struct->updateChannel($ch->distribution_channel_id, 'CH-UR2', 'Channel UR2', true);
+        $this->assertSame('CH-UR2', $ch->code);
+
+        $div = $struct->createDivision('DIV-UR', 'Div UR');
+        $div = $struct->updateDivision($div->division_id, 'DIV-UR2', 'Div UR2', true);
+        $this->assertSame('DIV-UR2', $div->code);
+
+        $area = $struct->createSalesArea(
+            $so->sales_org_id,
+            $ch->distribution_channel_id,
+            $div->division_id,
+            'AREA-1',
+            'Area One'
+        );
+        $area = $struct->updateSalesArea($area->sales_area_id, 'AREA-2', 'Area Two', true);
+        $this->assertSame('AREA-2', $area->code);
+
+        $office = $struct->createOffice('OFF-1', 'Office 1', $so->sales_org_id);
+        $office = $struct->updateOffice($office->sales_office_id, 'OFF-2', 'Office 2', $so->sales_org_id, true);
+        $this->assertSame('OFF-2', $office->code);
+
+        $group = $struct->createGroup($office->sales_office_id, 'G-1', 'Group 1');
+        $group = $struct->updateGroup($group->sales_group_id, 'G-2', 'Group 2', true);
+        $this->assertSame('G-2', $group->code);
+
+        $struct->softDeleteSalesArea($area->sales_area_id);
+        $struct->softDeleteChannel($ch->distribution_channel_id);
+        $struct->softDeleteDivision($div->division_id);
+        $struct->softDeleteGroup($group->sales_group_id);
+        $struct->softDeleteOffice($office->sales_office_id);
+
+        $this->assertCount(0, $struct->listChannels());
+        $this->assertCount(0, $struct->listDivisions());
+        $this->assertCount(0, $struct->listSalesAreas());
+        $this->assertCount(0, $struct->listOffices());
+
+        $struct->restoreChannel($ch->distribution_channel_id);
+        $struct->restoreDivision($div->division_id);
+        $struct->restoreSalesArea($area->sales_area_id);
+        $struct->restoreOffice($office->sales_office_id);
+        $struct->restoreGroup($group->sales_group_id);
+
+        $this->assertCount(1, $struct->listChannels());
+        $this->assertCount(1, $struct->listDivisions());
+        $this->assertCount(1, $struct->listSalesAreas());
+        $this->assertCount(1, $struct->listOffices());
+        $this->assertFalse((bool) $struct->listChannels()->first()->is_active);
+    }
+
+    #[Test]
     public function intercompany_partner_map_and_rule(): void
     {
         $svcCo = app(CompanyService::class);
