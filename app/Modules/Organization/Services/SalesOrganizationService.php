@@ -8,15 +8,51 @@ use App\Modules\Organization\Models\SalesOrganization;
 use App\Modules\Organization\Models\SalesOrgAssignment;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Str;
+use Exception;
 
 class SalesOrganizationService
 {
-    public function create(string $code, string $name, ?string $companyId = null): SalesOrganization
+    public function listForTenant(bool $onlyTrashed = false)
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        $query = SalesOrganization::where('tenant_id', $tenantId)
+            ->with(['assignments', 'company'])
+            ->orderBy('code');
+
+        if ($onlyTrashed) {
+            $query->onlyTrashed();
+        }
+
+        return $query->get();
+    }
+
+    public function find(string $salesOrgId, bool $withTrashed = false): SalesOrganization
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $query = SalesOrganization::where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->with(['assignments', 'company', 'salesAreas']);
+
+        if ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query->firstOrFail();
+    }
+
+    public function create(
+        string $code,
+        string $name,
+        ?string $companyId = null,
+        ?string $description = null,
+        bool $isActive = true
+    ): SalesOrganization {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
         if (SalesOrganization::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new \Exception('کد سازمان فروش تکراری است.');
+            throw new Exception('کد سازمان فروش تکراری است.');
         }
 
         if ($companyId) {
@@ -28,10 +64,100 @@ class SalesOrganizationService
             'tenant_id'    => $tenantId,
             'code'         => $code,
             'name'         => $name,
+            'description'  => $description,
             'company_id'   => $companyId,
-            'is_active'    => true,
+            'is_active'    => $isActive,
             'row_version'  => 1,
         ]);
+    }
+
+    public function update(
+        string $salesOrgId,
+        string $code,
+        string $name,
+        ?string $companyId = null,
+        ?string $description = null,
+        ?bool $isActive = null
+    ): SalesOrganization {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $row = SalesOrganization::where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->firstOrFail();
+
+        if ($row->code !== $code) {
+            if (SalesOrganization::where('tenant_id', $tenantId)
+                ->where('code', $code)
+                ->where('sales_org_id', '!=', $salesOrgId)
+                ->exists()) {
+                throw new Exception('کد سازمان فروش تکراری است.');
+            }
+        }
+
+        if ($companyId) {
+            Company::where('tenant_id', $tenantId)->where('company_id', $companyId)->firstOrFail();
+        }
+
+        $payload = [
+            'code'        => $code,
+            'name'        => $name,
+            'description' => $description,
+            'company_id'  => $companyId,
+            'row_version' => ((int) ($row->row_version ?? 1)) + 1,
+        ];
+
+        if ($isActive !== null) {
+            $payload['is_active'] = $isActive;
+        }
+
+        $row->update($payload);
+
+        return $row->fresh(['assignments', 'company']) ?? $row;
+    }
+
+    public function softDelete(string $salesOrgId): void
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $row = SalesOrganization::where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->firstOrFail();
+
+        $row->delete();
+    }
+
+    public function restore(string $salesOrgId): SalesOrganization
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $row = SalesOrganization::onlyTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->firstOrFail();
+
+        if (SalesOrganization::where('tenant_id', $tenantId)->where('code', $row->code)->exists()) {
+            throw new Exception('کد این سازمان فروش با یک رکورد فعال دیگر تداخل دارد.');
+        }
+
+        $row->restore();
+        $row->update([
+            'is_active'   => false,
+            'row_version' => ((int) ($row->row_version ?? 1)) + 1,
+        ]);
+
+        return $row->fresh(['assignments', 'company']) ?? $row;
+    }
+
+    public function listAssignments(string $salesOrgId)
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        SalesOrganization::where('tenant_id', $tenantId)->where('sales_org_id', $salesOrgId)->firstOrFail();
+
+        return SalesOrgAssignment::where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->orderBy('created_at')
+            ->get();
     }
 
     public function assign(string $salesOrgId, ?string $companyId = null, ?string $branchId = null): SalesOrgAssignment
@@ -47,7 +173,33 @@ class SalesOrganizationService
             Branch::where('tenant_id', $tenantId)->where('branch_id', $branchId)->firstOrFail();
         }
         if (!$companyId && !$branchId) {
-            throw new \Exception('حداقل یکی از company_id یا branch_id الزامی است.');
+            throw new Exception('حداقل یکی از company_id یا branch_id الزامی است.');
+        }
+
+        $existing = SalesOrgAssignment::withTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('sales_org_id', $salesOrgId)
+            ->where('company_id', $companyId)
+            ->where('branch_id', $branchId)
+            ->first();
+
+        if ($existing && !$existing->trashed()) {
+            $existing->update([
+                'is_active'   => true,
+                'row_version' => ((int) ($existing->row_version ?? 1)) + 1,
+            ]);
+
+            return $existing->fresh() ?? $existing;
+        }
+
+        if ($existing && $existing->trashed()) {
+            $existing->restore();
+            $existing->update([
+                'is_active'   => true,
+                'row_version' => ((int) ($existing->row_version ?? 1)) + 1,
+            ]);
+
+            return $existing->fresh() ?? $existing;
         }
 
         return SalesOrgAssignment::create([
@@ -61,10 +213,14 @@ class SalesOrganizationService
         ]);
     }
 
-    public function listForTenant()
+    public function unassign(string $assignmentId): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
-        return SalesOrganization::where('tenant_id', $tenantId)->orderBy('code')->get();
+        $row = SalesOrgAssignment::where('tenant_id', $tenantId)
+            ->where('assignment_id', $assignmentId)
+            ->firstOrFail();
+
+        $row->delete();
     }
 }
