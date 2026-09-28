@@ -61,9 +61,14 @@ class OrgP4BuCostHierarchyTest extends TestCase
 
         $svc = app(BusinessUnitService::class);
         $bu = $svc->create('BU01', 'Operations BU');
+        // assignCompany returns array{row: BusinessUnitCompany, created: bool}
         $asg = $svc->assignCompany($bu->business_unit_id, $co->company_id, true);
 
-        $this->assertTrue((bool) $asg->is_primary);
+        $this->assertIsArray($asg);
+        $this->assertArrayHasKey('row', $asg);
+        $this->assertArrayHasKey('created', $asg);
+        $this->assertTrue((bool) $asg['row']->is_primary);
+        $this->assertTrue((bool) $asg['created']);
         $this->assertCount(1, $svc->listForTenant());
     }
 
