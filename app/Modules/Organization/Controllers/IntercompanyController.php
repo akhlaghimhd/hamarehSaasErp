@@ -14,69 +14,172 @@ class IntercompanyController extends Controller
     ) {
     }
 
+    public function documentTypes(): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'data' => $this->service->documentTypeCatalog(),
+        ]);
+    }
+
     public function partners(): JsonResponse
     {
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->listPartners(),
+            'data' => $this->service->listPartners(),
         ]);
     }
 
     public function storePartner(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'from_company_id'     => 'required|uuid',
-            'to_company_id'       => 'required|uuid',
+            'from_company_id' => 'required|uuid',
+            'to_company_id' => 'required|uuid',
             'partner_customer_id' => 'nullable|uuid',
-            'partner_vendor_id'   => 'nullable|uuid',
-            'notes'               => 'nullable|string|max:500',
+            'partner_vendor_id' => 'nullable|uuid',
+            'notes' => 'nullable|string|max:500',
+            'is_active' => 'sometimes|boolean',
         ]);
 
-        $row = $this->service->mapPartners(
-            $data['from_company_id'],
-            $data['to_company_id'],
-            $data['partner_customer_id'] ?? null,
-            $data['partner_vendor_id'] ?? null,
-            $data['notes'] ?? null,
-        );
+        try {
+            $row = $this->service->mapPartners(
+                $data['from_company_id'],
+                $data['to_company_id'],
+                $data['partner_customer_id'] ?? null,
+                $data['partner_vendor_id'] ?? null,
+                $data['notes'] ?? null,
+                (bool) ($data['is_active'] ?? true),
+            );
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'IC partner mapped.',
-            'data'    => $row,
+            'data' => $row,
         ], 201);
+    }
+
+    public function updatePartner(Request $request, string $partner): JsonResponse
+    {
+        $data = $request->validate([
+            'from_company_id' => 'sometimes|uuid',
+            'to_company_id' => 'sometimes|uuid',
+            'partner_customer_id' => 'nullable|uuid',
+            'partner_vendor_id' => 'nullable|uuid',
+            'notes' => 'nullable|string|max:500',
+            'is_active' => 'sometimes|boolean',
+        ]);
+
+        try {
+            $row = $this->service->updatePartner($partner, $data);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => 'error', 'message' => 'شریک یافت نشد.'], 404);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'IC partner updated.',
+            'data' => $row,
+        ]);
+    }
+
+    public function destroyPartner(string $partner): JsonResponse
+    {
+        try {
+            $this->service->softDeletePartner($partner);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => 'error', 'message' => 'شریک یافت نشد.'], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'IC partner deleted.',
+        ]);
     }
 
     public function rules(): JsonResponse
     {
         return response()->json([
             'status' => 'success',
-            'data'   => $this->service->listRules(),
+            'data' => $this->service->listRules(),
         ]);
     }
 
     public function storeRule(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'code'               => 'required|string|max:50',
-            'name'               => 'required|string|max:200',
-            'source_doc_type'    => 'required|string|max:50',
-            'target_doc_type'    => 'required|string|max:50',
+            'code' => 'required|string|max:50',
+            'name' => 'required|string|max:200',
+            'source_doc_type' => 'required|string|max:50',
+            'target_doc_type' => 'required|string|max:50',
             'auto_create_mirror' => 'sometimes|boolean',
+            'is_active' => 'sometimes|boolean',
+            'notes' => 'nullable|string|max:500',
         ]);
 
-        $row = $this->service->createRule(
-            $data['code'],
-            $data['name'],
-            $data['source_doc_type'],
-            $data['target_doc_type'],
-            (bool) ($data['auto_create_mirror'] ?? true),
-        );
+        try {
+            $row = $this->service->createRule(
+                $data['code'],
+                $data['name'],
+                $data['source_doc_type'],
+                $data['target_doc_type'],
+                (bool) ($data['auto_create_mirror'] ?? true),
+                (bool) ($data['is_active'] ?? true),
+                $data['notes'] ?? null,
+            );
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+        }
 
         return response()->json([
-            'status'  => 'success',
+            'status' => 'success',
             'message' => 'IC rule created.',
-            'data'    => $row,
+            'data' => $row,
         ], 201);
+    }
+
+    public function updateRule(Request $request, string $rule): JsonResponse
+    {
+        $data = $request->validate([
+            'code' => 'sometimes|string|max:50',
+            'name' => 'sometimes|string|max:200',
+            'source_doc_type' => 'sometimes|string|max:50',
+            'target_doc_type' => 'sometimes|string|max:50',
+            'auto_create_mirror' => 'sometimes|boolean',
+            'is_active' => 'sometimes|boolean',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $row = $this->service->updateRule($rule, $data);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => 'error', 'message' => 'قانون یافت نشد.'], 404);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'IC rule updated.',
+            'data' => $row,
+        ]);
+    }
+
+    public function destroyRule(string $rule): JsonResponse
+    {
+        try {
+            $this->service->softDeleteRule($rule);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => 'error', 'message' => 'قانون یافت نشد.'], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'IC rule deleted.',
+        ]);
     }
 }
