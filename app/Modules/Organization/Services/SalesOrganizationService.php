@@ -7,8 +7,8 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\SalesOrganization;
 use App\Modules\Organization\Models\SalesOrgAssignment;
 use App\Base\Context\TenantContext;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Support\Str;
-use Exception;
 
 class SalesOrganizationService
 {
@@ -52,7 +52,7 @@ class SalesOrganizationService
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         if (SalesOrganization::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new Exception('کد سازمان فروش تکراری است.');
+            throw new DomainException('کد سازمان فروش تکراری است.', 'duplicate_sales_org_code');
         }
 
         if ($companyId) {
@@ -90,7 +90,7 @@ class SalesOrganizationService
                 ->where('code', $code)
                 ->where('sales_org_id', '!=', $salesOrgId)
                 ->exists()) {
-                throw new Exception('کد سازمان فروش تکراری است.');
+                throw new DomainException('کد سازمان فروش تکراری است.', 'duplicate_sales_org_code');
             }
         }
 
@@ -136,7 +136,10 @@ class SalesOrganizationService
             ->firstOrFail();
 
         if (SalesOrganization::where('tenant_id', $tenantId)->where('code', $row->code)->exists()) {
-            throw new Exception('کد این سازمان فروش با یک رکورد فعال دیگر تداخل دارد.');
+            throw new DomainException(
+                'کد این سازمان فروش با یک رکورد فعال دیگر تداخل دارد.',
+                'restore_code_conflict'
+            );
         }
 
         $row->restore();
@@ -173,7 +176,10 @@ class SalesOrganizationService
             Branch::where('tenant_id', $tenantId)->where('branch_id', $branchId)->firstOrFail();
         }
         if (!$companyId && !$branchId) {
-            throw new Exception('حداقل یکی از company_id یا branch_id الزامی است.');
+            throw new DomainException(
+                'حداقل یکی از company_id یا branch_id الزامی است.',
+                'assignment_target_required'
+            );
         }
 
         $existing = SalesOrgAssignment::withTrashed()

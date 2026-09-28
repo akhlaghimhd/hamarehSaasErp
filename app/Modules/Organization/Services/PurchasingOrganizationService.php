@@ -7,8 +7,8 @@ use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\PurchasingOrganization;
 use App\Modules\Organization\Models\PurchOrgAssignment;
 use App\Base\Context\TenantContext;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Support\Str;
-use Exception;
 
 class PurchasingOrganizationService
 {
@@ -53,7 +53,7 @@ class PurchasingOrganizationService
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         if (PurchasingOrganization::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new Exception('کد سازمان خرید تکراری است.');
+            throw new DomainException('کد سازمان خرید تکراری است.', 'duplicate_purch_org_code');
         }
 
         if ($companyId) {
@@ -93,7 +93,7 @@ class PurchasingOrganizationService
                 ->where('code', $code)
                 ->where('purch_org_id', '!=', $purchOrgId)
                 ->exists()) {
-                throw new Exception('کد سازمان خرید تکراری است.');
+                throw new DomainException('کد سازمان خرید تکراری است.', 'duplicate_purch_org_code');
             }
         }
 
@@ -142,7 +142,10 @@ class PurchasingOrganizationService
             ->firstOrFail();
 
         if (PurchasingOrganization::where('tenant_id', $tenantId)->where('code', $row->code)->exists()) {
-            throw new Exception('کد این سازمان خرید با یک رکورد فعال دیگر تداخل دارد.');
+            throw new DomainException(
+                'کد این سازمان خرید با یک رکورد فعال دیگر تداخل دارد.',
+                'restore_code_conflict'
+            );
         }
 
         $row->restore();
@@ -179,7 +182,10 @@ class PurchasingOrganizationService
             Branch::where('tenant_id', $tenantId)->where('branch_id', $branchId)->firstOrFail();
         }
         if (!$companyId && !$branchId) {
-            throw new Exception('حداقل یکی از company_id یا branch_id الزامی است.');
+            throw new DomainException(
+                'حداقل یکی از company_id یا branch_id الزامی است.',
+                'assignment_target_required'
+            );
         }
 
         $existing = PurchOrgAssignment::withTrashed()

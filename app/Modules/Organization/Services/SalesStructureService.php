@@ -9,8 +9,8 @@ use App\Modules\Organization\Models\SalesOrganization;
 use App\Modules\Organization\Models\SalesOffice;
 use App\Modules\Organization\Models\SalesGroup;
 use App\Base\Context\TenantContext;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Support\Str;
-use Exception;
 
 class SalesStructureService
 {
@@ -31,7 +31,7 @@ class SalesStructureService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
         if (DistributionChannel::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new Exception('کد کانال توزیع تکراری است.');
+            throw new DomainException('کد کانال توزیع تکراری است.', 'duplicate_channel_code');
         }
 
         return DistributionChannel::create([
@@ -51,7 +51,7 @@ class SalesStructureService
 
         if ($row->code !== $code
             && DistributionChannel::where('tenant_id', $tenantId)->where('code', $code)->where('distribution_channel_id', '!=', $id)->exists()) {
-            throw new Exception('کد کانال توزیع تکراری است.');
+            throw new DomainException('کد کانال توزیع تکراری است.', 'duplicate_channel_code');
         }
 
         $payload = [
@@ -90,7 +90,7 @@ class SalesStructureService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
         if (ProductDivision::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new Exception('کد دیویژن محصول تکراری است.');
+            throw new DomainException('کد دیویژن محصول تکراری است.', 'duplicate_division_code');
         }
 
         return ProductDivision::create([
@@ -110,7 +110,7 @@ class SalesStructureService
 
         if ($row->code !== $code
             && ProductDivision::where('tenant_id', $tenantId)->where('code', $code)->where('division_id', '!=', $id)->exists()) {
-            throw new Exception('کد دیویژن محصول تکراری است.');
+            throw new DomainException('کد دیویژن محصول تکراری است.', 'duplicate_division_code');
         }
 
         $payload = [
@@ -163,7 +163,10 @@ class SalesStructureService
             ->where('distribution_channel_id', $channelId)
             ->where('division_id', $divisionId)
             ->exists()) {
-            throw new Exception('این ترکیب ناحیه فروش (سازمان + کانال + دیویژن) از قبل وجود دارد.');
+            throw new DomainException(
+                'این ترکیب ناحیه فروش (سازمان + کانال + دیویژن) از قبل وجود دارد.',
+                'duplicate_sales_area'
+            );
         }
 
         return SalesArea::create([
@@ -198,7 +201,7 @@ class SalesStructureService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
         if (SalesOffice::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
-            throw new Exception('کد دفتر فروش تکراری است.');
+            throw new DomainException('کد دفتر فروش تکراری است.', 'duplicate_office_code');
         }
         if ($salesOrgId) {
             SalesOrganization::where('tenant_id', $tenantId)->where('sales_org_id', $salesOrgId)->firstOrFail();
@@ -227,7 +230,7 @@ class SalesStructureService
         SalesOffice::where('tenant_id', $tenantId)->where('sales_office_id', $officeId)->firstOrFail();
 
         if (SalesGroup::where('tenant_id', $tenantId)->where('sales_office_id', $officeId)->where('code', $code)->exists()) {
-            throw new Exception('کد گروه فروش در این دفتر تکراری است.');
+            throw new DomainException('کد گروه فروش در این دفتر تکراری است.', 'duplicate_group_code');
         }
 
         return SalesGroup::create([
