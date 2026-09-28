@@ -14,6 +14,7 @@ use App\Modules\Organization\Services\IntercompanyService;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -125,7 +126,7 @@ class OrgP5SalesPurchIcTest extends TestCase
 
         $struct->createSalesArea($so->sales_org_id, $ch->distribution_channel_id, $div->division_id);
 
-        $this->expectException(\Exception::class);
+        $this->expectException(DomainException::class);
         $struct->createSalesArea($so->sales_org_id, $ch->distribution_channel_id, $div->division_id);
     }
 
@@ -135,8 +136,44 @@ class OrgP5SalesPurchIcTest extends TestCase
         $struct = app(SalesStructureService::class);
         $struct->createChannel('DUP', 'One');
 
-        $this->expectException(\Exception::class);
+        $this->expectException(DomainException::class);
         $struct->createChannel('DUP', 'Two');
+    }
+
+    #[Test]
+    public function cannot_delete_channel_or_division_while_sales_area_references_them(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'SP-REF',
+            name: 'Ref Co',
+        ));
+        $so = app(SalesOrganizationService::class)->create('SO-R', 'R', $co->company_id);
+        $struct = app(SalesStructureService::class);
+        $ch = $struct->createChannel('CH-R', 'Channel R');
+        $div = $struct->createDivision('DIV-R', 'Div R');
+        $struct->createSalesArea(
+            $so->sales_org_id,
+            $ch->distribution_channel_id,
+            $div->division_id
+        );
+
+        try {
+            $struct->softDeleteChannel($ch->distribution_channel_id);
+            $this->fail('Expected DomainException for channel in use');
+        } catch (DomainException $e) {
+            $this->assertSame('channel_in_use_by_sales_area', $e->errorCode);
+        }
+
+        try {
+            $struct->softDeleteDivision($div->division_id);
+            $this->fail('Expected DomainException for division in use');
+        } catch (DomainException $e) {
+            $this->assertSame('division_in_use_by_sales_area', $e->errorCode);
+        }
+
+        $this->assertCount(1, $struct->listChannels());
+        $this->assertCount(1, $struct->listDivisions());
+        $this->assertCount(1, $struct->listSalesAreas());
     }
 
     #[Test]

@@ -70,7 +70,20 @@ class SalesStructureService
     public function softDeleteChannel(string $id): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
-        DistributionChannel::where('tenant_id', $tenantId)->where('distribution_channel_id', $id)->firstOrFail()->delete();
+        $row = DistributionChannel::where('tenant_id', $tenantId)
+            ->where('distribution_channel_id', $id)
+            ->firstOrFail();
+
+        if (SalesArea::where('tenant_id', $tenantId)
+            ->where('distribution_channel_id', $id)
+            ->exists()) {
+            throw new DomainException(
+                'این کانال در یک یا چند ناحیه فروش استفاده شده و قابل حذف نیست. ابتدا ناحیه(ها) را حذف کنید.',
+                'channel_in_use_by_sales_area'
+            );
+        }
+
+        $row->delete();
     }
 
     // ── Product divisions ──────────────────────────────────────────────
@@ -129,7 +142,20 @@ class SalesStructureService
     public function softDeleteDivision(string $id): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
-        ProductDivision::where('tenant_id', $tenantId)->where('division_id', $id)->firstOrFail()->delete();
+        $row = ProductDivision::where('tenant_id', $tenantId)
+            ->where('division_id', $id)
+            ->firstOrFail();
+
+        if (SalesArea::where('tenant_id', $tenantId)
+            ->where('division_id', $id)
+            ->exists()) {
+            throw new DomainException(
+                'این دیویژن در یک یا چند ناحیه فروش استفاده شده و قابل حذف نیست. ابتدا ناحیه(ها) را حذف کنید.',
+                'division_in_use_by_sales_area'
+            );
+        }
+
+        $row->delete();
     }
 
     // ── Sales areas ────────────────────────────────────────────────────
