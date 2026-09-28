@@ -7,10 +7,16 @@ use App\Modules\Organization\Models\IntercompanyPartner;
 use App\Modules\Organization\Models\IntercompanyRule;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class IntercompanyService
 {
+    public function __construct(
+        private readonly OrganizationEventPublisher $events,
+    ) {
+    }
+
     /**
      * Stable document-type catalog for IC mirror rules (Org config).
      * Operational engines (Sales/Purch/Accounting) consume these codes later.
@@ -64,11 +70,13 @@ class IntercompanyService
             $existing->is_active = $isActive;
             $existing->row_version = (int) $existing->row_version + 1;
             $existing->save();
+            $row = $existing->fresh();
+            $this->safePublishPartnerUpserted($row);
 
-            return $existing->fresh();
+            return $row;
         }
 
-        return IntercompanyPartner::create([
+        $row = IntercompanyPartner::create([
             'ic_partner_id' => (string) Str::uuid(),
             'tenant_id' => $tenantId,
             'from_company_id' => $fromCompanyId,
@@ -79,6 +87,9 @@ class IntercompanyService
             'notes' => $notes,
             'row_version' => 1,
         ]);
+        $this->safePublishPartnerUpserted($row);
+
+        return $row;
     }
 
     public function updatePartner(
@@ -121,8 +132,10 @@ class IntercompanyService
 
         $row->row_version = (int) $row->row_version + 1;
         $row->save();
+        $fresh = $row->fresh();
+        $this->safePublishPartnerUpserted($fresh);
 
-        return $row->fresh();
+        return $fresh;
     }
 
     public function softDeletePartner(string $icPartnerId): void
@@ -131,7 +144,16 @@ class IntercompanyService
         $row = IntercompanyPartner::where('tenant_id', $tenantId)
             ->where('ic_partner_id', $icPartnerId)
             ->firstOrFail();
+        $id = $row->ic_partner_id;
+        $from = $row->from_company_id;
+        $to = $row->to_company_id;
         $row->delete();
+        $this->safePublish(function () use ($id, $from, $to) {
+            $this->events->publishIntercompanyPartnerDeleted($id, [
+                'from_company_id' => $from,
+                'to_company_id' => $to,
+            ]);
+        });
     }
 
     public function createRule(
@@ -152,7 +174,7 @@ class IntercompanyService
         $this->assertKnownDocType($sourceDocType);
         $this->assertKnownDocType($targetDocType);
 
-        return IntercompanyRule::create([
+        $row = IntercompanyRule::create([
             'ic_rule_id' => (string) Str::uuid(),
             'tenant_id' => $tenantId,
             'code' => $code,
@@ -164,6 +186,9 @@ class IntercompanyService
             'notes' => $notes,
             'row_version' => 1,
         ]);
+        $this->safePublishRuleUpserted($row);
+
+        return $row;
     }
 
     public function updateRule(string $icRuleId, array $attrs): IntercompanyRule
@@ -202,8 +227,10 @@ class IntercompanyService
 
         $row->row_version = (int) $row->row_version + 1;
         $row->save();
+        $fresh = $row->fresh();
+        $this->safePublishRuleUpserted($fresh);
 
-        return $row->fresh();
+        return $fresh;
     }
 
     public function softDeleteRule(string $icRuleId): void
@@ -212,7 +239,12 @@ class IntercompanyService
         $row = IntercompanyRule::where('tenant_id', $tenantId)
             ->where('ic_rule_id', $icRuleId)
             ->firstOrFail();
+        $id = $row->ic_rule_id;
+        $code = $row->code;
         $row->delete();
+        $this->safePublish(function () use ($id, $code) {
+            $this->events->publishIntercompanyRuleDeleted($id, ['code' => $code]);
+        });
     }
 
     public function listPartners(): Collection
@@ -289,6 +321,46 @@ class IntercompanyService
         $known = array_column($this->documentTypeCatalog(), 'code');
         if (! in_array($upper, $known, true)) {
             throw new \Exception("نوع سند «{$code}» در کاتالوگ بین‌شرکتی تعریف نشده است.");
+        }
+    }
+
+    private function safePublishPartnerUpserted(IntercompanyPartner $row): void
+    {
+        $this->safePublish(function () use ($row) {
+            $this->events->publishIntercompanyPartnerUpserted($row->ic_partner_id, [
+                'from_company_id' => $row->from_company_id,
+                'to_company_id' => $row->to_company_id,
+                'is_active' => (bool) $row->is_active,
+                'partner_customer_id' => $row->partner_customer_id,
+                'partner_vendor_id' => $row->partner_vendor_id,
+            ]);
+        });
+    }
+
+    private function safePublishRuleUpserted(IntercompanyRule $row): void
+    {
+        $this->safePublish(function () use ($row) {
+            $this->events->publishIntercompanyRuleUpserted($row->ic_rule_id, [
+                'code' => $row->code,
+                'source_doc_type' => $row->source_doc_type,
+                'target_doc_type' => $row->target_doc_type,
+                'auto_create_mirror' => (bool) $row->auto_create_mirror,
+                'is_active' => (bool) $row->is_active,
+            ]);
+        });
+    }
+
+    /**
+     * Outbox must not break CRUD if table/migration lag in a given environment.
+     */
+    private function safePublish(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (\Throwable $e) {
+            Log::warning('organization.intercompany.event_publish_failed', [
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 }
