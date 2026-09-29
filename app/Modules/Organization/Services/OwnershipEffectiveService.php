@@ -67,7 +67,6 @@ class OwnershipEffectiveService
 
     /**
      * Minority interest % = max(0, 100 − directOwnershipTotal).
-     * When total direct > 100 (data error), minority is 0 and callers may validate separately.
      */
     public function minorityInterestPercent(string $tenantId, string $companyId, ?string $asOf = null): float
     {
@@ -135,7 +134,6 @@ class OwnershipEffectiveService
 
     /**
      * @return array<string, list<array{owner_company_id:string,ownership_percent:float}>>
-     *          map company_id → list of owners
      */
     private function buildChildToOwnersGraph(string $tenantId, ?string $asOf): array
     {
@@ -167,8 +165,9 @@ class OwnershipEffectiveService
 
     /**
      * Sum of path products from target company up to owner.
+     * pathProduct is expressed in percent units (100 = 100%).
      *
-     * @param  array<string,bool>  $visited  node path guard
+     * @param  array<string,bool>  $visited
      */
     private function walkEffective(
         array $graph,
@@ -192,7 +191,7 @@ class OwnershipEffectiveService
                 continue;
             }
 
-            $sum += $this->walkEffective($graph, $targetOwner, $ownerId, $visited, $segment * 100.0);
+            $sum += $this->walkEffective($graph, $targetOwner, $ownerId, $visited, $segment);
         }
 
         return $sum;
