@@ -3,6 +3,8 @@
 namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
+use App\Modules\Organization\Models\HierarchyPurposeCatalog;
+use App\Modules\Organization\Services\HierarchyReportContract;
 use App\Modules\Organization\Services\HierarchySyncService;
 use App\Modules\Organization\Services\OrgHierarchyService;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +16,44 @@ class OrgHierarchyController extends Controller
         protected OrgHierarchyService $service,
         protected HierarchySyncService $syncService,
     ) {
+    }
+
+    /**
+     * D6 — platform purpose catalog (labels + allowed entity types).
+     */
+    public function purposes(): JsonResponse
+    {
+        $rows = HierarchyPurposeCatalog::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('code')
+            ->get([
+                'purpose_id',
+                'code',
+                'label_fa',
+                'label_en',
+                'description',
+                'is_system',
+                'allows_user_tree',
+                'sort_order',
+                'allowed_entity_types',
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $rows,
+        ]);
+    }
+
+    /**
+     * D2 — published report contracts (capability → purpose + fallback).
+     */
+    public function reportContracts(): JsonResponse
+    {
+        return response()->json([
+            'status' => 'success',
+            'data'   => HierarchyReportContract::contracts(),
+        ]);
     }
 
     public function index(Request $request): JsonResponse
