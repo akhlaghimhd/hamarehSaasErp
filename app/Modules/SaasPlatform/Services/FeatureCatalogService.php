@@ -1,0 +1,160 @@
+<?php
+
+namespace App\Modules\SaasPlatform\Services;
+
+use App\Modules\SaasPlatform\Models\PlatformFeatureCatalog;
+use App\Modules\SaasPlatform\Models\TenantFeatureEntitlement;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+
+/**
+ * PLT-W1-01 — Single source of truth for tenant feature packs.
+ */
+class FeatureCatalogService
+{
+    public const CACHE_TTL_SECONDS = 120;
+
+    /** Known independent org packs (product law). */
+    public const CODE_MULTI_COMPANY = 'multi_company';
+    public const CODE_MULTI_BRANCH = 'multi_branch';
+    public const CODE_MULTI_BUSINESS_UNIT = 'multi_business_unit';
+    public const CODE_CUSTOM_ORG_HIERARCHY = 'custom_org_hierarchy';
+
+    public function listCatalog(bool $activeOnly = true): Collection
+    {
+        $q = PlatformFeatureCatalog::query()->orderBy('sort_order')->orderBy('code');
+        if ($activeOnly) {
+            $q->where('is_active', true);
+        }
+
+        return $q->get();
+    }
+
+    /**
+     * Whether the tenant currently has the pack enabled.
+     * Missing entitlement = disabled (must purchase).
+     */
+    public function isEnabled(string $tenantId, string $featureCode): bool
+    {
+        $enabled = $this->enabledCodesForTenant($tenantId);
+
+        return in_array($featureCode, $enabled, true);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function enabledCodesForTenant(string $tenantId): array
+    {
+        $cacheKey = $this->cacheKey($tenantId);
+
+        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($tenantId) {
+            $now = now();
+
+            return TenantFeatureEntitlement::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('is_enabled', true)
+                ->whereNull('deleted_at')
+                ->where(function ($q) use ($now) {
+                    $q->whereNull('effective_from')->orWhere('effective_from', '<=', $now);
+                })
+                ->where(function ($q) use ($now) {
+                    $q->whereNull('effective_to')->orWhere('effective_to', '>', $now);
+                })
+                ->pluck('feature_code')
+                ->unique()
+                ->values()
+                ->all();
+        });
+    }
+
+    public function listEntitlements(string $tenantId): Collection
+    {
+        return TenantFeatureEntitlement::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderBy('feature_code')
+            ->get();
+    }
+
+    /**
+     * Enable or update an entitlement (SaaS Admin / internal).
+     * Does not hard-delete on disable — sets is_enabled=false (PLT-W1-03 freeze semantics).
+     */
+    public function setEntitlement(
+        string $tenantId,
+        string $featureCode,
+        bool $enabled,
+        string $source = TenantFeatureEntitlement::SOURCE_MANUAL,
+        ?string $notes = null
+    ): TenantFeatureEntitlement {
+        $featureCode = trim($featureCode);
+        if ($featureCode === '') {
+            throw new HttpException(422, 'feature_code الزامی است.');
+        }
+
+        $catalog = PlatformFeatureCatalog::query()
+            ->where('code', $featureCode)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$catalog) {
+            throw new HttpException(422, "بسته ویژگی «{$featureCode}» در کاتالوگ یافت نشد یا غیرفعال است.");
+        }
+
+        return DB::transaction(function () use ($tenantId, $featureCode, $enabled, $source, $notes) {
+            $row = TenantFeatureEntitlement::withoutGlobalScopes()
+                ->where('tenant_id', $tenantId)
+                ->where('feature_code', $featureCode)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($row) {
+                $row->is_enabled = $enabled;
+                $row->source = $source;
+                if ($notes !== null) {
+                    $row->notes = $notes;
+                }
+                $row->row_version = ((int) ($row->row_version ?? 1)) + 1;
+                $row->save();
+            } else {
+                $row = TenantFeatureEntitlement::create([
+                    'entitlement_id' => (string) Str::uuid(),
+                    'tenant_id'      => $tenantId,
+                    'feature_code'   => $featureCode,
+                    'is_enabled'     => $enabled,
+                    'source'         => $source,
+                    'notes'          => $notes,
+                ]);
+            }
+
+            $this->forgetCache($tenantId);
+
+            return $row;
+        });
+    }
+
+    public function assertEnabled(string $tenantId, string $featureCode): void
+    {
+        if (!$this->isEnabled($tenantId, $featureCode)) {
+            throw new HttpException(
+                403,
+                "بسته ویژگی «{$featureCode}» برای این سازمان فعال نیست. از پنل SaaS Admin خریداری یا فعال‌سازی کنید."
+            );
+        }
+    }
+
+    public function forgetCache(string $tenantId): void
+    {
+        Cache::forget($this->cacheKey($tenantId));
+    }
+
+    private function cacheKey(string $tenantId): string
+    {
+        return 'feature_entitlements:'.$tenantId;
+    }
+}
