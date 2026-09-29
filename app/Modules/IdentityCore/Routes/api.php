@@ -14,6 +14,7 @@ use App\Modules\IdentityCore\Controllers\SodController;
 use App\Modules\IdentityCore\Controllers\AccessCertificationController;
 use App\Modules\IdentityCore\Controllers\PrivilegedAccessController;
 use App\Modules\IdentityCore\Controllers\ScimController;
+use App\Modules\IdentityCore\Controllers\RoleAssignmentApprovalController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -53,7 +54,6 @@ Route::prefix('identity')->group(function () {
         Route::post('/auth/sso/providers', [SsoController::class, 'upsertProvider'])
             ->middleware('permission:identity.mfa.manage');
 
-        // ID-W3-05 SCIM 2.0 Users (mounted under identity for tenant middleware reuse)
         Route::prefix('scim/v2')->group(function () {
             Route::get('/ServiceProviderConfig', [ScimController::class, 'serviceProviderConfig'])
                 ->middleware('permission:identity.user.view');
@@ -141,6 +141,17 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.privileged.approve');
             Route::post('/mark-role', [PrivilegedAccessController::class, 'markRole'])
                 ->middleware('permission:identity.privileged.approve');
+        });
+
+        Route::prefix('role-assignment-requests')->group(function () {
+            Route::get('/', [RoleAssignmentApprovalController::class, 'index'])
+                ->middleware('permission:identity.role.view');
+            Route::post('/', [RoleAssignmentApprovalController::class, 'store'])
+                ->middleware('permission:identity.role.assign');
+            Route::post('/{id}/approve', [RoleAssignmentApprovalController::class, 'approve'])
+                ->middleware('permission:identity.role.assign');
+            Route::post('/{id}/reject', [RoleAssignmentApprovalController::class, 'reject'])
+                ->middleware('permission:identity.role.assign');
         });
 
         Route::prefix('roles')->group(function () {
