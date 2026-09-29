@@ -8,11 +8,15 @@ use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Models\TenantScope;
 use App\Modules\IdentityCore\Models\TenantUserScope;
 use App\Modules\IdentityCore\Models\TenantUser;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Collection;
 use Exception;
 
+/**
+ * PLT-W1-02 residual — Identity-side feature pack enforcement on scope create/assign.
+ */
 class ScopeService
 {
     /** Scope types that must point at a concrete resource in the same tenant. */
@@ -22,6 +26,7 @@ class ScopeService
         'WAREHOUSE',
         'DEPARTMENT',
         'COST_CENTER',
+        'BUSINESS_UNIT',
     ];
 
     public function listScopes(?string $scopeType = null): Collection
@@ -48,6 +53,7 @@ class ScopeService
     {
         $tenantId = $this->getTenantId();
 
+        $this->assertPackAllowsScopeType($tenantId, $dto->scopeType);
         $this->assertReferenceValid($tenantId, $dto->scopeType, $dto->referenceId);
 
         return DB::transaction(function () use ($dto, $tenantId) {
@@ -86,6 +92,10 @@ class ScopeService
 
             $scopeType = $dto->scopeType !== null ? strtoupper($dto->scopeType) : $scope->scope_type;
             $referenceId = $dto->referenceId !== null ? $dto->referenceId : $scope->reference_id;
+
+            if ($dto->scopeType !== null) {
+                $this->assertPackAllowsScopeType($tenantId, $scopeType);
+            }
 
             $this->assertReferenceValid($tenantId, $scopeType, $referenceId);
 
@@ -134,10 +144,6 @@ class ScopeService
         });
     }
 
-    /**
-     * Full replace of user scope assignments (operational assign).
-     * Soft-deletes previous rows; restores or inserts target set.
-     */
     public function assignScopesToUser(AssignScopeToUserDTO $dto): void
     {
         $tenantId = $this->getTenantId();
@@ -156,9 +162,11 @@ class ScopeService
                 if (!$scope) {
                     throw new Exception("Scope {$scopeId} is invalid or inactive for this tenant.");
                 }
+
+                // Identity residual: cannot assign gated scope types without pack
+                $this->assertPackAllowsScopeType($tenantId, $scope->scope_type);
             }
 
-            // Soft-delete assignments not in the desired set
             TenantUserScope::where('tenant_id', $tenantId)
                 ->where('tenant_user_id', $dto->tenantUserId)
                 ->whereNotIn('scope_id', $desiredScopeIds)
@@ -204,9 +212,6 @@ class ScopeService
         });
     }
 
-    /**
-     * Soft-remove specific scopes from a tenant user (operational unassign).
-     */
     public function unassignScopesFromUser(AssignScopeToUserDTO $dto): void
     {
         $tenantId = $this->getTenantId();
@@ -238,11 +243,6 @@ class ScopeService
         });
     }
 
-    /**
-     * Active scopes assigned to a tenant user (Eloquent Collection of TenantScope).
-     * Query via assignment scope_ids so return type stays Eloquent\Collection
-     * (pluck()->filter()->values() would yield Support\Collection and break the contract).
-     */
     public function getUserScopes(string $tenantUserId): Collection
     {
         $tenantId = $this->getTenantId();
@@ -264,6 +264,21 @@ class ScopeService
             ->get();
     }
 
+    /**
+     * Identity enforcement of org feature packs (PLT-W1-02 residual).
+     * COMPANY/BRANCH scopes remain allowed for existing entities (freeze keeps data usable).
+     * BUSINESS_UNIT scopes require multi_business_unit pack.
+     */
+    private function assertPackAllowsScopeType(string $tenantId, string $scopeType): void
+    {
+        $type = strtoupper($scopeType);
+        $features = app(FeatureCatalogService::class);
+
+        if ($type === 'BUSINESS_UNIT') {
+            $features->assertEnabled($tenantId, FeatureCatalogService::CODE_MULTI_BUSINESS_UNIT);
+        }
+    }
+
     private function assertTenantUserBelongsToTenant(string $tenantId, string $tenantUserId): void
     {
         $tenantUser = TenantUser::withoutGlobalScopes()
@@ -277,9 +292,6 @@ class ScopeService
         }
     }
 
-    /**
-     * Logical reference check (no cross-module physical FK).
-     */
     private function assertReferenceValid(string $tenantId, string $scopeType, ?string $referenceId): void
     {
         $type = strtoupper($scopeType);
@@ -316,6 +328,11 @@ class ScopeService
             'COST_CENTER' => DB::table('cost_centers')
                 ->where('tenant_id', $tenantId)
                 ->where('cost_center_id', $referenceId)
+                ->whereNull('deleted_at')
+                ->exists(),
+            'BUSINESS_UNIT' => DB::table('erp_business_units')
+                ->where('tenant_id', $tenantId)
+                ->where('business_unit_id', $referenceId)
                 ->whereNull('deleted_at')
                 ->exists(),
             default => true,

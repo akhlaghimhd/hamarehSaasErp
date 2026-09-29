@@ -15,7 +15,6 @@ class FeatureCatalogController extends Controller
         private readonly FeatureCatalogService $featureCatalog
     ) {}
 
-    /** Global sellable catalog (read). */
     public function catalog(): JsonResponse
     {
         $items = $this->featureCatalog->listCatalog(true);
@@ -27,7 +26,6 @@ class FeatureCatalogController extends Controller
         ], 200);
     }
 
-    /** Current tenant entitlements + enabled codes. */
     public function myEntitlements(Request $request): JsonResponse
     {
         $tenantId = $this->resolveTenantId($request);
@@ -45,7 +43,6 @@ class FeatureCatalogController extends Controller
         ], 200);
     }
 
-    /** SaaS Admin: set entitlement for a tenant. */
     public function setEntitlement(Request $request): JsonResponse
     {
         try {
@@ -80,6 +77,64 @@ class FeatureCatalogController extends Controller
                 'status'  => 'error',
                 'message' => $e->getMessage(),
             ], 400);
+        }
+    }
+
+    /** PLT-W1-03 — explicit downgrade freeze. */
+    public function freeze(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'tenant_id'    => 'required|uuid',
+                'feature_code' => 'required|string|max:80',
+                'notes'        => 'nullable|string|max:500',
+            ]);
+
+            $row = $this->featureCatalog->freezeEntitlement(
+                $validated['tenant_id'],
+                $validated['feature_code'],
+                $validated['notes'] ?? null
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Feature pack frozen (downgrade). Existing data retained; new creates blocked.',
+                'data'    => $row,
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        }
+    }
+
+    /** PLT-W1-03 — explicit upgrade / re-enable. */
+    public function unfreeze(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'tenant_id'    => 'required|uuid',
+                'feature_code' => 'required|string|max:80',
+                'notes'        => 'nullable|string|max:500',
+            ]);
+
+            $row = $this->featureCatalog->unfreezeEntitlement(
+                $validated['tenant_id'],
+                $validated['feature_code'],
+                $validated['notes'] ?? null
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Feature pack unfrozen (upgrade / re-enable).',
+                'data'    => $row,
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
         }
     }
 
