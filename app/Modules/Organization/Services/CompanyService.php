@@ -8,6 +8,7 @@ use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Services\ScopeAccessGuard;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Illuminate\Support\Facades\DB;
 
 class CompanyService
@@ -20,6 +21,15 @@ class CompanyService
     public function createCompany(CreateCompanyDTO $dto): Company
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        // PLT-W1-02: additional companies require multi_company pack
+        $existingCount = Company::where('tenant_id', $tenantId)->count();
+        if ($existingCount >= 1) {
+            app(FeatureCatalogService::class)->assertEnabled(
+                $tenantId,
+                FeatureCatalogService::CODE_MULTI_COMPANY
+            );
+        }
 
         if (Company::where('tenant_id', $tenantId)->where('code', $dto->code)->exists()) {
             throw new \Exception('کد شرکت وارد شده قبلاً در سیستم ثبت شده است.');
