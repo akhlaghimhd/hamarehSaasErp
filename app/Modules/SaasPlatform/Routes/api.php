@@ -7,6 +7,7 @@ use App\Modules\SaasPlatform\Controllers\SubscriptionController;
 use App\Modules\SaasPlatform\Controllers\InvoiceController;
 use App\Modules\SaasPlatform\Controllers\AddonController;
 use App\Modules\SaasPlatform\Controllers\CouponController;
+use App\Modules\SaasPlatform\Controllers\FeatureCatalogController;
 
 /*
 |--------------------------------------------------------------------------
@@ -65,5 +66,16 @@ Route::middleware(['auth:sanctum', 'tenant.context', 'load.scopes'])->group(func
     Route::post('/coupons', [CouponController::class, 'store'])
         ->middleware('permission:saas-admin.coupon.create')
         ->name('saas-platform.coupons.store');
+
+    // PLT-W1-01 Feature Catalog
+    Route::get('/feature-catalog', [FeatureCatalogController::class, 'catalog'])
+        ->name('saas-platform.feature-catalog.index');
+
+    Route::get('/feature-entitlements', [FeatureCatalogController::class, 'myEntitlements'])
+        ->name('saas-platform.feature-entitlements.mine');
+
+    Route::post('/feature-entitlements', [FeatureCatalogController::class, 'setEntitlement'])
+        ->middleware('permission:saas-admin.feature.manage')
+        ->name('saas-platform.feature-entitlements.set');
 
 });
