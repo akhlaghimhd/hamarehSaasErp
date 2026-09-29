@@ -52,7 +52,6 @@ class RoleAssignmentApprovalService
 
         $this->validity->assertValidWindow($validFrom, $validTo);
 
-        // SoD pre-check against existing effective roles + this requested role
         $existing = $this->validity->effectiveRoleIds($tenantId, $userId);
         $this->sod->assertAssignable($tenantId, array_values(array_unique(array_merge($existing, [$roleId]))));
 
@@ -119,7 +118,6 @@ class RoleAssignmentApprovalService
                 throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند خودش درخواست را تأیید کند.');
             }
 
-            // Re-check SoD at approval time
             $existing = $this->validity->effectiveRoleIds($tenantId, $req->user_id);
             $this->sod->assertAssignable(
                 $tenantId,
@@ -155,6 +153,9 @@ class RoleAssignmentApprovalService
                 'review_note' => $reviewNote,
                 'row_version' => ((int) $req->row_version) + 1,
             ]);
+
+            app(IdentitySessionReevaluationService::class)
+                ->invalidateUser($tenantId, $req->user_id, 'role_assignment_approved');
 
             $this->outbox($tenantId, $req->request_id, 'identity.role_assignment.approved.v1', [
                 'request_id'     => $req->request_id,
