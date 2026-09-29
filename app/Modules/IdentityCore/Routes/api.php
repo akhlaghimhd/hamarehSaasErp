@@ -12,6 +12,7 @@ use App\Modules\IdentityCore\Controllers\ProfileController;
 use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
 use App\Modules\IdentityCore\Controllers\SodController;
 use App\Modules\IdentityCore\Controllers\AccessCertificationController;
+use App\Modules\IdentityCore\Controllers\PrivilegedAccessController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -93,7 +94,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.membership_history.view');
         });
 
-        // ID-W2-01 Access Certification
         Route::prefix('access-certifications')->group(function () {
             Route::get('/', [AccessCertificationController::class, 'index'])
                 ->middleware('permission:identity.access_cert.view');
@@ -109,6 +109,22 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.access_cert.manage');
             Route::post('/items/{itemId}/certify', [AccessCertificationController::class, 'certify'])
                 ->middleware('permission:identity.access_cert.certify');
+        });
+
+        // ID-W2-02 Privileged / Emergency Access
+        Route::prefix('privileged-access')->group(function () {
+            Route::get('/', [PrivilegedAccessController::class, 'index'])
+                ->middleware('permission:identity.privileged.view');
+            Route::post('/request', [PrivilegedAccessController::class, 'request'])
+                ->middleware('permission:identity.privileged.request');
+            Route::post('/{id}/approve', [PrivilegedAccessController::class, 'approve'])
+                ->middleware('permission:identity.privileged.approve');
+            Route::post('/{id}/deny', [PrivilegedAccessController::class, 'deny'])
+                ->middleware('permission:identity.privileged.approve');
+            Route::post('/{id}/revoke', [PrivilegedAccessController::class, 'revoke'])
+                ->middleware('permission:identity.privileged.approve');
+            Route::post('/mark-role', [PrivilegedAccessController::class, 'markRole'])
+                ->middleware('permission:identity.privileged.approve');
         });
 
         Route::prefix('roles')->group(function () {
