@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use App\Base\Context\TenantContext;
 use App\Base\Support\TenantCache;
+use App\Modules\IdentityCore\Services\RoleAssignmentValidityService;
 use App\Modules\IdentityCore\Services\RoleInheritanceService;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
@@ -19,7 +20,8 @@ class RequirePermission
      * Policy:
      * - Tenant owner (is_owner on active membership) always passes.
      * - Everyone else is checked against role-assigned permission codes
-     *   including inherited permissions from parent roles (ID-W2-03).
+     *   including inherited permissions from parent roles (ID-W2-03)
+     *   and only time-valid role assignments (ID-W3-01).
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -73,14 +75,8 @@ class RequirePermission
      */
     private function resolveRolePermissionCodes(string $tenantId, string $userId): array
     {
-        $roleIds = DB::table('tenant_user_roles')
-            ->where('tenant_id', $tenantId)
-            ->where('user_id', $userId)
-            ->whereNull('deleted_at')
-            ->pluck('tenant_role_id')
-            ->unique()
-            ->values()
-            ->all();
+        $roleIds = app(RoleAssignmentValidityService::class)
+            ->effectiveRoleIds($tenantId, $userId);
 
         return app(RoleInheritanceService::class)->permissionCodesForRoles($tenantId, $roleIds);
     }
