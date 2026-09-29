@@ -6,6 +6,7 @@ use App\Modules\Organization\Models\BusinessUnit;
 use App\Modules\Organization\Models\BusinessUnitCompany;
 use App\Modules\Organization\Models\Company;
 use App\Base\Context\TenantContext;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Exception;
@@ -45,6 +46,12 @@ class BusinessUnitService
     public function create(string $code, string $name, ?string $description = null, bool $isActive = true): BusinessUnit
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        // PLT-W1-02: any BU requires multi_business_unit pack (independent of company/branch)
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_MULTI_BUSINESS_UNIT
+        );
 
         if (BusinessUnit::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
             throw new Exception('کد واحد کسب‌وکار تکراری است.');
