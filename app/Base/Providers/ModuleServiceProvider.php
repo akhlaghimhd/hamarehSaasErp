@@ -18,6 +18,8 @@ use App\Modules\ProcurementSales\Listeners\WorkflowTaskCompletedListener as Proc
 use App\Modules\Workflow\Events\WorkflowTaskCompletedV1;
 use App\Modules\IdentityCore\Contracts\SmsSenderInterface;
 use App\Modules\IdentityCore\Infrastructure\LogSmsSender;
+use App\Modules\Organization\Contracts\HierarchyReportContract;
+use App\Modules\Organization\Services\HierarchyReportService;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -33,6 +35,9 @@ class ModuleServiceProvider extends ServiceProvider
         });
 
         $this->app->bind(SmsSenderInterface::class, LogSmsSender::class);
+
+        // ORG-W2-03 — cross-module hierarchy read contract
+        $this->app->bind(HierarchyReportContract::class, HierarchyReportService::class);
     }
 
     public function boot(): void
@@ -93,15 +98,12 @@ class ModuleServiceProvider extends ServiceProvider
                 continue;
             }
 
-            // identity-core, saas-platform, ...
             $prefix = strtolower(preg_replace('/(?<!^)[A-Z]/', '-$0', $moduleName));
 
-            // Canonical versioned API (frontend uses this)
             Route::prefix('api/v1/'.$prefix)
                 ->middleware('api')
                 ->group($routesPath);
 
-            // Legacy unversioned mount — unique name prefix so route:cache works
             Route::prefix('api/'.$prefix)
                 ->middleware('api')
                 ->name('legacy.')
