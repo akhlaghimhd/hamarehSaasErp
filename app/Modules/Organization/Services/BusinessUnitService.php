@@ -32,6 +32,9 @@ class BusinessUnitService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        // ORG-W2-04: deny show of out-of-scope BU
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
+
         $query = BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
             ->with(['companyAssignments.company']);
@@ -81,6 +84,8 @@ class BusinessUnitService
     ): BusinessUnit {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
+
         $bu = BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
             ->firstOrFail();
@@ -116,6 +121,8 @@ class BusinessUnitService
     public function softDelete(string $businessUnitId): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
 
         $bu = BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
@@ -158,6 +165,8 @@ class BusinessUnitService
     public function assignCompany(string $businessUnitId, string $companyId, bool $isPrimary = false): array
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
 
         $bu = BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
@@ -232,6 +241,8 @@ class BusinessUnitService
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
+
         BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
             ->firstOrFail();
@@ -276,6 +287,8 @@ class BusinessUnitService
     public function syncCompanies(string $businessUnitId, array $companyIds, ?string $primaryCompanyId = null): array
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        BusinessUnit::assertCurrentUserHasAccessTo($businessUnitId);
 
         $bu = BusinessUnit::where('tenant_id', $tenantId)
             ->where('business_unit_id', $businessUnitId)
