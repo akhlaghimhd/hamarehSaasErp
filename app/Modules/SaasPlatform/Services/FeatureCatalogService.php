@@ -11,7 +11,10 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * PLT-W1-01 — Single source of truth for tenant feature packs.
+ * PLT-W1-01 / PLT-W1-03 — Single source of truth for tenant feature packs.
+ *
+ * Freeze (downgrade): set is_enabled=false — existing operational data remains;
+ * create paths call assertEnabled and reject new multi-* entities.
  */
 class FeatureCatalogService
 {
@@ -136,6 +139,40 @@ class FeatureCatalogService
 
             return $row;
         });
+    }
+
+    /**
+     * PLT-W1-03 — Explicit freeze (downgrade): disable pack without deleting entitlement row or org data.
+     */
+    public function freezeEntitlement(
+        string $tenantId,
+        string $featureCode,
+        ?string $notes = null
+    ): TenantFeatureEntitlement {
+        return $this->setEntitlement(
+            $tenantId,
+            $featureCode,
+            false,
+            TenantFeatureEntitlement::SOURCE_MANUAL,
+            $notes ?? 'Frozen (pack downgrade) — existing data retained; new creates blocked.'
+        );
+    }
+
+    /**
+     * PLT-W1-03 — Re-enable after freeze (upgrade / re-purchase).
+     */
+    public function unfreezeEntitlement(
+        string $tenantId,
+        string $featureCode,
+        ?string $notes = null
+    ): TenantFeatureEntitlement {
+        return $this->setEntitlement(
+            $tenantId,
+            $featureCode,
+            true,
+            TenantFeatureEntitlement::SOURCE_MANUAL,
+            $notes ?? 'Unfrozen (pack upgrade / re-enable).'
+        );
     }
 
     public function assertEnabled(string $tenantId, string $featureCode): void

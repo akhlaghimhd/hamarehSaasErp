@@ -5,6 +5,7 @@ namespace Tests\Feature\Modules\Organization;
 use Tests\TestCase;
 use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\SaasPlatform\Services\FeatureCatalogService;
+use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Services\CompanyService;
 use App\Modules\Organization\Services\BusinessUnitService;
 use App\Modules\Organization\Services\OrgHierarchyService;
@@ -136,5 +137,66 @@ class FeaturePackGateTest extends TestCase
 
         $h = app(OrgHierarchyService::class)->createHierarchy('REP-1', 'Reporting', 'CUSTOM');
         $this->assertSame('CUSTOM', $h->purpose);
+    }
+
+    /**
+     * PLT-W1-03: freeze keeps existing companies readable; blocks further creates.
+     */
+    #[Test]
+    public function freeze_multi_company_retains_data_and_blocks_new_create(): void
+    {
+        $this->features->setEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY,
+            true
+        );
+
+        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'C1',
+            name: 'Company One',
+            legalName: 'Company One Legal',
+            isActive: true,
+            status: 1,
+            isPrimary: true,
+            entityKind: 'OPERATING',
+        ));
+
+        $c2 = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'C2',
+            name: 'Company Two',
+            legalName: 'Company Two Legal',
+            isActive: true,
+            status: 1,
+            isPrimary: false,
+            entityKind: 'OPERATING',
+        ));
+
+        $this->assertSame(2, Company::where('tenant_id', $this->tenant->tenant_id)->count());
+
+        // Downgrade / freeze
+        $this->features->freezeEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY
+        );
+
+        $this->assertFalse(
+            $this->features->isEnabled($this->tenant->tenant_id, FeatureCatalogService::CODE_MULTI_COMPANY)
+        );
+
+        // Existing data retained
+        $this->assertSame(2, Company::where('tenant_id', $this->tenant->tenant_id)->count());
+        $this->assertNotNull(Company::where('tenant_id', $this->tenant->tenant_id)->where('code', 'C2')->first());
+
+        // New create blocked
+        $this->expectException(HttpException::class);
+        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'C3',
+            name: 'Company Three',
+            legalName: 'Company Three Legal',
+            isActive: true,
+            status: 1,
+            isPrimary: false,
+            entityKind: 'OPERATING',
+        ));
     }
 }
