@@ -192,11 +192,11 @@ class IdentityAuditExportService
 
     private function accessCertifications(string $tenantId, $from, $to, int $limit): array
     {
-        if (!\Illuminate\Support\Facades\Schema::hasTable('tenant_access_certification_campaigns')) {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('tenant_access_cert_campaigns')) {
             return [];
         }
 
-        $q = DB::table('tenant_access_certification_campaigns')
+        $q = DB::table('tenant_access_cert_campaigns')
             ->where('tenant_id', $tenantId)
             ->orderByDesc('created_at')
             ->limit($limit);
