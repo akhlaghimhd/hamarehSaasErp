@@ -9,6 +9,7 @@ use App\Modules\Organization\DTOs\UpdateBranchDTO;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use App\Base\Services\ScopeAccessGuard;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Exception;
 
 class BranchService
@@ -31,6 +32,17 @@ class BranchService
         }
 
         $this->scopeAccessGuard->assertAccess('COMPANY', $dto->companyId);
+
+        // PLT-W1-02: additional branches (beyond first/HQ) require multi_branch pack
+        $existingBranchCount = Branch::where('tenant_id', $tenantId)
+            ->where('company_id', $dto->companyId)
+            ->count();
+        if ($existingBranchCount >= 1) {
+            app(FeatureCatalogService::class)->assertEnabled(
+                $tenantId,
+                FeatureCatalogService::CODE_MULTI_BRANCH
+            );
+        }
 
         if (Branch::where('tenant_id', $tenantId)
             ->where('company_id', $dto->companyId)
