@@ -12,10 +12,10 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * ID-W1-04 — OIDC SSO foundation.
+ * ID-W1-03/04 residual — OIDC full path + SAML AuthnRequest foundation.
  *
- * Live token exchange is used when $claimsOverride is null.
- * Tests inject validated claims via completeLoginWithClaims to avoid external IdP.
+ * SAML ACS assertion parsing / signature validation is deferred (hardening).
+ * beginAuthorization works for both OIDC and SAML Redirect binding.
  */
 class SsoService
 {
@@ -54,6 +54,11 @@ class SsoService
             throw new HttpException(422, 'کد ارائه‌دهنده SSO نامعتبر است.');
         }
 
+        $protocol = strtoupper((string) ($data['protocol'] ?? 'OIDC'));
+        if (!in_array($protocol, ['OIDC', 'SAML'], true)) {
+            throw new HttpException(422, 'پروتکل باید OIDC یا SAML باشد.');
+        }
+
         $provider = TenantSsoProvider::query()
             ->where('tenant_id', $tenantId)
             ->where('code', $code)
@@ -69,16 +74,13 @@ class SsoService
         }
 
         $provider->name = (string) ($data['name'] ?? $provider->name ?? $code);
-        $provider->protocol = strtoupper((string) ($data['protocol'] ?? 'OIDC'));
-        if ($provider->protocol !== 'OIDC') {
-            throw new HttpException(422, 'در این نسخه فقط پروتکل OIDC پشتیبانی می‌شود.');
-        }
+        $provider->protocol = $protocol;
         $provider->issuer = (string) ($data['issuer'] ?? '');
         $provider->authorization_endpoint = (string) ($data['authorization_endpoint'] ?? '');
-        $provider->token_endpoint = (string) ($data['token_endpoint'] ?? '');
+        $provider->token_endpoint = (string) ($data['token_endpoint'] ?? ($protocol === 'SAML' ? 'SAML' : ''));
         $provider->jwks_uri = $data['jwks_uri'] ?? null;
-        $provider->client_id = (string) ($data['client_id'] ?? '');
-        $provider->scopes = (string) ($data['scopes'] ?? 'openid profile email');
+        $provider->client_id = (string) ($data['client_id'] ?? ($protocol === 'SAML' ? $provider->issuer : ''));
+        $provider->scopes = (string) ($data['scopes'] ?? ($protocol === 'SAML' ? 'SAML' : 'openid profile email'));
         $provider->is_enabled = (bool) ($data['is_enabled'] ?? true);
         $provider->auto_provision = (bool) ($data['auto_provision'] ?? false);
         $provider->updated_by = $actorId;
@@ -90,8 +92,21 @@ class SsoService
             $provider->setClientSecret((string) $data['client_secret']);
         }
 
-        if ($provider->issuer === '' || $provider->authorization_endpoint === '' || $provider->token_endpoint === '' || $provider->client_id === '') {
-            throw new HttpException(422, 'issuer، authorization_endpoint، token_endpoint و client_id الزامی هستند.');
+        if ($protocol === 'OIDC') {
+            if ($provider->issuer === '' || $provider->authorization_endpoint === '' || $provider->token_endpoint === '' || $provider->client_id === '') {
+                throw new HttpException(422, 'issuer، authorization_endpoint، token_endpoint و client_id الزامی هستند.');
+            }
+        } else {
+            // SAML: issuer = EntityID of SP or IdP entity; authorization_endpoint = IdP SSO URL
+            if ($provider->issuer === '' || $provider->authorization_endpoint === '') {
+                throw new HttpException(422, 'برای SAML فیلدهای issuer (EntityID) و authorization_endpoint (SSO URL) الزامی هستند.');
+            }
+            if ($provider->client_id === '') {
+                $provider->client_id = $provider->issuer;
+            }
+            if ($provider->token_endpoint === '') {
+                $provider->token_endpoint = 'SAML';
+            }
         }
 
         $provider->save();
@@ -100,7 +115,7 @@ class SsoService
     }
 
     /**
-     * @return array{authorization_url:string,state:string}
+     * @return array{authorization_url:string,state:string,protocol:string}
      */
     public function beginAuthorization(string $tenantId, string $providerCode, string $redirectUri): array
     {
@@ -112,8 +127,19 @@ class SsoService
             'provider_code' => $provider->code,
             'provider_id'   => $provider->sso_provider_id,
             'redirect_uri'  => $redirectUri,
+            'protocol'      => $provider->protocol,
             'created_at'    => now()->toIso8601String(),
         ], self::STATE_TTL);
+
+        if (strtoupper($provider->protocol) === 'SAML') {
+            $url = $this->buildSamlRedirectUrl($provider, $redirectUri, $state);
+
+            return [
+                'authorization_url' => $url,
+                'state'             => $state,
+                'protocol'          => 'SAML',
+            ];
+        }
 
         $query = http_build_query([
             'response_type' => 'code',
@@ -126,19 +152,57 @@ class SsoService
         return [
             'authorization_url' => rtrim($provider->authorization_endpoint, '?').'?'.$query,
             'state'             => $state,
+            'protocol'          => 'OIDC',
         ];
     }
 
     /**
-     * Live OIDC code exchange + claim login.
-     *
-     * @return array auth session payload from AuthenticationService
+     * Minimal SAML 2.0 AuthnRequest (Redirect binding, deflate+base64).
      */
+    private function buildSamlRedirectUrl(TenantSsoProvider $provider, string $acsUrl, string $relayState): string
+    {
+        $id = '_'.Str::uuid()->toString();
+        $instant = gmdate('Y-m-d\TH:i:s\Z');
+        $issuer = htmlspecialchars($provider->client_id ?: $provider->issuer, ENT_XML1);
+        $dest = htmlspecialchars($provider->authorization_endpoint, ENT_XML1);
+        $acs = htmlspecialchars($acsUrl, ENT_XML1);
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" '
+            .'xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" '
+            .'ID="'.$id.'" Version="2.0" IssueInstant="'.$instant.'" '
+            .'Destination="'.$dest.'" '
+            .'AssertionConsumerServiceURL="'.$acs.'" '
+            .'ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST">'
+            .'<saml:Issuer>'.$issuer.'</saml:Issuer>'
+            .'</samlp:AuthnRequest>';
+
+        $deflated = gzdeflate($xml);
+        $encoded = base64_encode($deflated ?: $xml);
+
+        $query = http_build_query([
+            'SAMLRequest' => $encoded,
+            'RelayState'  => $relayState,
+        ]);
+
+        $sep = str_contains($provider->authorization_endpoint, '?') ? '&' : '?';
+
+        return $provider->authorization_endpoint.$sep.$query;
+    }
+
     public function handleCallback(string $code, string $state): array
     {
         $ctx = Cache::pull($this->stateKey($state));
         if (!$ctx || empty($ctx['tenant_id']) || empty($ctx['provider_code'])) {
             throw new HttpException(400, 'state نامعتبر یا منقضی است.');
+        }
+
+        $protocol = strtoupper((string) ($ctx['protocol'] ?? 'OIDC'));
+        if ($protocol === 'SAML') {
+            throw new HttpException(
+                501,
+                'ACS و اعتبارسنجی Assertion برای SAML در این نسخه تکمیل نشده است. از completeLoginWithClaims پس از اعتبارسنجی IdP استفاده کنید یا OIDC را پیکربندی کنید.'
+            );
         }
 
         $provider = $this->findEnabledProvider($ctx['tenant_id'], $ctx['provider_code']);
@@ -152,10 +216,7 @@ class SsoService
     }
 
     /**
-     * Core login path (testable without live IdP).
-     *
      * @param  array{sub:string,email?:string,email_verified?:bool}  $claims
-     * @return array
      */
     public function completeLoginWithClaims(string $tenantId, TenantSsoProvider $provider, array $claims): array
     {
@@ -194,7 +255,6 @@ class SsoService
                     'کاربری متناظر با این هویت سازمانی یافت نشد. ابتدا کاربر باید در سیستم عضو شود یا auto_provision فعال باشد.'
                 );
             }
-            // Auto-provision is deferred to a controlled path; foundation blocks without membership.
             throw new HttpException(
                 403,
                 'auto_provision در foundation فقط پس از تعریف سیاست عضویت فعال می‌شود. کاربر باید از قبل عضو tenant باشد.'
@@ -205,12 +265,10 @@ class SsoService
             throw new HttpException(403, 'حساب کاربری غیرفعال است.');
         }
 
-        // Ensure link exists and touch last_login
         $identity = $this->linkIdentity($user->user_id, $tenantId, $provider, $sub, $email);
         $identity->last_login_at = now();
         $identity->save();
 
-        // MFA still applies for SSO sessions
         $user->load('credential');
         if (app(MfaService::class)->isRequired($user)) {
             return $this->auth->issueMfaChallengeSession($user, $tenantId);
@@ -288,9 +346,6 @@ class SsoService
     }
 
     /**
-     * Foundation: decode JWT payload and validate iss/aud/exp.
-     * Full JWKS signature verification is Wave-2 hardening (ID-W3 / Adaptive).
-     *
      * @return array{sub:string,email?:string}
      */
     private function decodeIdTokenClaims(string $jwt, TenantSsoProvider $provider): array

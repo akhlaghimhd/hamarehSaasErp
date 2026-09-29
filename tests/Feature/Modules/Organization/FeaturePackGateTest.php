@@ -139,9 +139,6 @@ class FeaturePackGateTest extends TestCase
         $this->assertSame('CUSTOM', $h->purpose);
     }
 
-    /**
-     * PLT-W1-03: freeze keeps existing companies readable; blocks further creates.
-     */
     #[Test]
     public function freeze_multi_company_retains_data_and_blocks_new_create(): void
     {
@@ -161,7 +158,7 @@ class FeaturePackGateTest extends TestCase
             entityKind: 'OPERATING',
         ));
 
-        $c2 = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
             code: 'C2',
             name: 'Company Two',
             legalName: 'Company Two Legal',
@@ -173,7 +170,6 @@ class FeaturePackGateTest extends TestCase
 
         $this->assertSame(2, Company::where('tenant_id', $this->tenant->tenant_id)->count());
 
-        // Downgrade / freeze
         $this->features->freezeEntitlement(
             $this->tenant->tenant_id,
             FeatureCatalogService::CODE_MULTI_COMPANY
@@ -183,11 +179,8 @@ class FeaturePackGateTest extends TestCase
             $this->features->isEnabled($this->tenant->tenant_id, FeatureCatalogService::CODE_MULTI_COMPANY)
         );
 
-        // Existing data retained
         $this->assertSame(2, Company::where('tenant_id', $this->tenant->tenant_id)->count());
-        $this->assertNotNull(Company::where('tenant_id', $this->tenant->tenant_id)->where('code', 'C2')->first());
 
-        // New create blocked
         $this->expectException(HttpException::class);
         app(CompanyService::class)->createCompany(new CreateCompanyDTO(
             code: 'C3',
@@ -198,5 +191,52 @@ class FeaturePackGateTest extends TestCase
             isPrimary: false,
             entityKind: 'OPERATING',
         ));
+    }
+
+    /** PLT-W1-03 residual — unfreeze re-enables creates. */
+    #[Test]
+    public function unfreeze_multi_company_allows_create_again(): void
+    {
+        $this->features->setEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY,
+            true
+        );
+
+        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'C1',
+            name: 'Company One',
+            legalName: 'Company One Legal',
+            isActive: true,
+            status: 1,
+            isPrimary: true,
+            entityKind: 'OPERATING',
+        ));
+
+        $this->features->freezeEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY
+        );
+
+        $this->features->unfreezeEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY
+        );
+
+        $this->assertTrue(
+            $this->features->isEnabled($this->tenant->tenant_id, FeatureCatalogService::CODE_MULTI_COMPANY)
+        );
+
+        $c2 = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+            code: 'C2',
+            name: 'Company Two',
+            legalName: 'Company Two Legal',
+            isActive: true,
+            status: 1,
+            isPrimary: false,
+            entityKind: 'OPERATING',
+        ));
+
+        $this->assertSame('C2', $c2->code);
     }
 }
