@@ -45,39 +45,43 @@ class RoleAssignmentValidityTest extends TestCase
             'last_name'  => 'B',
             'email'      => 'tba@example.com',
             'mobile'     => '09121112233',
+            'user_kind'  => 1,
             'status'     => 1,
             'created_at' => now(),
             'updated_at' => now(),
+            'row_version'=> 1,
         ]);
 
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenantId]);
+        app()->instance('current_tenant_id', $this->tenantId);
 
         $this->svc = app(RoleAssignmentValidityService::class);
     }
 
     private function makeRole(string $code): string
     {
-        $id = (string) Str::uuid();
-        TenantRole::create([
-            'tenant_role_id' => $id,
-            'tenant_id'      => $this->tenantId,
-            'code'           => $code,
-            'name'           => $code,
-            'status'         => 1,
+        $role = TenantRole::create([
+            'tenant_id' => $this->tenantId,
+            'code'      => $code,
+            'name'      => $code,
+            'status'    => 1,
         ]);
 
-        return $id;
+        return (string) $role->tenant_role_id;
     }
 
     private function assign(string $roleId, $from = null, $to = null): void
     {
-        TenantUserRole::create([
+        DB::table('tenant_user_roles')->insert([
             'tenant_user_role_id' => (string) Str::uuid(),
             'tenant_id'           => $this->tenantId,
             'user_id'             => $this->userId,
             'tenant_role_id'      => $roleId,
             'valid_from'          => $from,
             'valid_to'            => $to,
+            'created_at'          => now(),
+            'updated_at'          => now(),
+            'row_version'         => 1,
         ]);
     }
 
