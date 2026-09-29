@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Modules\Organization;
 
+use App\Modules\Organization\Models\Company;
+use App\Modules\Organization\Models\CompanyOwnership;
 use App\Modules\Organization\Services\OwnershipEffectiveService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -29,9 +31,6 @@ class OwnershipEffectiveTest extends TestCase
         parent::setUp();
 
         $this->tenantId = (string) Str::uuid();
-        $this->parentId = (string) Str::uuid();
-        $this->childId = (string) Str::uuid();
-        $this->grandId = (string) Str::uuid();
 
         DB::table('tenants')->insert([
             'tenant_id'   => $this->tenantId,
@@ -43,28 +42,37 @@ class OwnershipEffectiveTest extends TestCase
             'updated_at'  => now(),
         ]);
 
-        foreach ([
-            [$this->parentId, 'PAR'],
-            [$this->childId, 'CHD'],
-            [$this->grandId, 'GRD'],
-        ] as [$id, $code]) {
-            DB::table('erp_companies')->insert([
-                'company_id'  => $id,
-                'tenant_id'   => $this->tenantId,
-                'code'        => $code,
-                'name'        => $code,
-                'legal_name'  => $code.' Legal',
-                'is_active'   => true,
-                'status'      => 'ACTIVE',
-                'entity_kind' => 'OPERATING',
-                'row_version' => 1,
-                'created_at'  => now(),
-                'updated_at'  => now(),
-            ]);
-        }
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenantId]);
+        app()->instance('current_tenant_id', $this->tenantId);
 
-        // Parent owns 80% of Child; remaining 20% minority
-        DB::table('erp_company_ownerships')->insert([
+        $parent = Company::create([
+            'tenant_id'  => $this->tenantId,
+            'code'       => 'PAR',
+            'name'       => 'Parent Co',
+            'legal_name' => 'Parent Legal',
+            'is_active'  => true,
+        ]);
+        $child = Company::create([
+            'tenant_id'  => $this->tenantId,
+            'code'       => 'CHD',
+            'name'       => 'Child Co',
+            'legal_name' => 'Child Legal',
+            'is_active'  => true,
+        ]);
+        $grand = Company::create([
+            'tenant_id'  => $this->tenantId,
+            'code'       => 'GRD',
+            'name'       => 'Grand Co',
+            'legal_name' => 'Grand Legal',
+            'is_active'  => true,
+        ]);
+
+        $this->parentId = (string) $parent->company_id;
+        $this->childId = (string) $child->company_id;
+        $this->grandId = (string) $grand->company_id;
+
+        // Parent owns 80% of Child → minority 20%
+        CompanyOwnership::create([
             'ownership_id'      => (string) Str::uuid(),
             'tenant_id'         => $this->tenantId,
             'company_id'        => $this->childId,
@@ -73,12 +81,10 @@ class OwnershipEffectiveTest extends TestCase
             'relation_type'     => 'EQUITY',
             'status'            => 1,
             'row_version'       => 1,
-            'created_at'        => now(),
-            'updated_at'        => now(),
         ]);
 
-        // Child owns 50% of Grand → Parent effective = 80% * 50% = 40%
-        DB::table('erp_company_ownerships')->insert([
+        // Child owns 50% of Grand → Parent effective = 40%
+        CompanyOwnership::create([
             'ownership_id'      => (string) Str::uuid(),
             'tenant_id'         => $this->tenantId,
             'company_id'        => $this->grandId,
@@ -87,11 +93,7 @@ class OwnershipEffectiveTest extends TestCase
             'relation_type'     => 'EQUITY',
             'status'            => 1,
             'row_version'       => 1,
-            'created_at'        => now(),
-            'updated_at'        => now(),
         ]);
-
-        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenantId]);
 
         $this->svc = app(OwnershipEffectiveService::class);
     }
@@ -134,7 +136,7 @@ class OwnershipEffectiveTest extends TestCase
     #[Test]
     public function over_100_percent_rejected(): void
     {
-        DB::table('erp_company_ownerships')->insert([
+        CompanyOwnership::create([
             'ownership_id'      => (string) Str::uuid(),
             'tenant_id'         => $this->tenantId,
             'company_id'        => $this->childId,
@@ -143,11 +145,8 @@ class OwnershipEffectiveTest extends TestCase
             'relation_type'     => 'EQUITY',
             'status'            => 1,
             'row_version'       => 1,
-            'created_at'        => now(),
-            'updated_at'        => now(),
         ]);
 
-        // 80 + 30 = 110
         $this->expectException(HttpException::class);
         $this->svc->assertOwnershipPercentSane($this->tenantId, $this->childId);
     }
