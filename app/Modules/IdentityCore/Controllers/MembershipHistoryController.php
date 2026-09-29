@@ -17,17 +17,19 @@ class MembershipHistoryController extends Controller
 
     /**
      * List membership history for the current tenant.
-     * Optional query: tenant_user_id, limit.
+     * Optional query: tenant_user_id, limit, reason_code (JOINER|MOVER|LEAVER|...).
      */
     public function index(Request $request): JsonResponse
     {
         try {
             $tenantUserId = $request->query('tenant_user_id');
             $limit = (int) $request->query('limit', 100);
+            $reasonCode = $request->query('reason_code');
 
             $rows = $this->membershipHistoryService->listForTenant(
                 $tenantUserId ? (string) $tenantUserId : null,
-                $limit
+                $limit,
+                $reasonCode ? (string) $reasonCode : null
             );
 
             return response()->json([
@@ -43,9 +45,6 @@ class MembershipHistoryController extends Controller
         }
     }
 
-    /**
-     * List history for one tenant membership.
-     */
     public function byTenantUser(string $tenantUserId): JsonResponse
     {
         try {
