@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
 use App\Modules\IdentityCore\Controllers\SodController;
 use App\Modules\IdentityCore\Controllers\AccessCertificationController;
 use App\Modules\IdentityCore\Controllers\PrivilegedAccessController;
+use App\Modules\IdentityCore\Controllers\ScimController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -51,6 +52,22 @@ Route::prefix('identity')->group(function () {
 
         Route::post('/auth/sso/providers', [SsoController::class, 'upsertProvider'])
             ->middleware('permission:identity.mfa.manage');
+
+        // ID-W3-05 SCIM 2.0 Users (mounted under identity for tenant middleware reuse)
+        Route::prefix('scim/v2')->group(function () {
+            Route::get('/ServiceProviderConfig', [ScimController::class, 'serviceProviderConfig'])
+                ->middleware('permission:identity.user.view');
+            Route::get('/Users', [ScimController::class, 'indexUsers'])
+                ->middleware('permission:identity.user.view');
+            Route::get('/Users/{id}', [ScimController::class, 'showUser'])
+                ->middleware('permission:identity.user.view');
+            Route::post('/Users', [ScimController::class, 'storeUser'])
+                ->middleware('permission:identity.user.create');
+            Route::put('/Users/{id}', [ScimController::class, 'replaceUser'])
+                ->middleware('permission:identity.user.update');
+            Route::delete('/Users/{id}', [ScimController::class, 'destroyUser'])
+                ->middleware('permission:identity.user.delete');
+        });
 
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
@@ -111,7 +128,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.access_cert.certify');
         });
 
-        // ID-W2-02 Privileged / Emergency Access
         Route::prefix('privileged-access')->group(function () {
             Route::get('/', [PrivilegedAccessController::class, 'index'])
                 ->middleware('permission:identity.privileged.view');
