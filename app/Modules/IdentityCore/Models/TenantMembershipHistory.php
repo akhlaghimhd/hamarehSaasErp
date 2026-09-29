@@ -21,6 +21,7 @@ class TenantMembershipHistory extends Model
     const UPDATED_AT = 'updated_at';
 
     protected $fillable = [
+        'history_id',
         'tenant_id',
         'tenant_user_id',
         'previous_status',
@@ -41,9 +42,6 @@ class TenantMembershipHistory extends Model
         'row_version' => 'integer',
     ];
 
-    /**
-     * ارتباط با موجودیت اصلی عضویت (TenantUser)
-     */
     public function tenantUser(): BelongsTo
     {
         return $this->belongsTo(TenantUser::class, 'tenant_user_id', 'tenant_user_id');
