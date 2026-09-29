@@ -24,6 +24,8 @@ class TenantScope extends Model
         'scope_name',
         'scope_type',
         'reference_id',
+        'hierarchy_purpose',
+        'include_subtree',
         'description',
         'is_active',
         'created_by',
@@ -33,13 +35,11 @@ class TenantScope extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
-        'row_version' => 'integer',
+        'is_active'        => 'boolean',
+        'include_subtree'  => 'boolean',
+        'row_version'      => 'integer',
     ];
 
-    /**
-     * کاربرانی که به این محدوده دسترسی دارند
-     */
     public function userAssignments(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(TenantUserScope::class, 'scope_id', 'scope_id');
