@@ -2,14 +2,22 @@
 
 namespace App\Modules\Organization\Models;
 
+use App\Base\Traits\ScopeScoped;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * ORG-W2-04 — BUSINESS_UNIT scope isolation via ScopeScoped.
+ */
 class BusinessUnit extends Model
 {
-    use HasUuids, TenantScoped, SoftDeletes;
+    use HasUuids, TenantScoped, ScopeScoped, SoftDeletes;
+
+    protected static string $scopeType = 'BUSINESS_UNIT';
+
+    protected static string $scopeColumn = 'business_unit_id';
 
     protected $table = 'erp_business_units';
 
@@ -20,6 +28,7 @@ class BusinessUnit extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'business_unit_id',
         'tenant_id',
         'code',
         'name',
