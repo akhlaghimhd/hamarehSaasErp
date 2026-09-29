@@ -147,4 +147,29 @@ class SsoServiceTest extends TestCase
         $this->assertContains('azure_ad', $codes);
         $this->assertNotContains('okta', $codes);
     }
+
+    #[Test]
+    public function saml_begin_authorization_builds_authn_request(): void
+    {
+        $this->sso->upsertProvider($this->tenantId, [
+            'code'                   => 'adfs',
+            'name'                   => 'ADFS',
+            'protocol'               => 'SAML',
+            'issuer'                 => 'https://sp.example.com/metadata',
+            'authorization_endpoint' => 'https://idp.example.com/sso',
+            'client_id'              => 'https://sp.example.com/metadata',
+            'is_enabled'             => true,
+        ]);
+
+        $result = $this->sso->beginAuthorization(
+            $this->tenantId,
+            'adfs',
+            'https://app.example.com/sso/acs'
+        );
+
+        $this->assertSame('SAML', $result['protocol']);
+        $this->assertNotEmpty($result['state']);
+        $this->assertStringContainsString('SAMLRequest=', $result['authorization_url']);
+        $this->assertStringContainsString('RelayState=', $result['authorization_url']);
+    }
 }
