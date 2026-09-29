@@ -27,6 +27,7 @@ class TenantRole extends Model
         'name',
         'description',
         'status',
+        'is_privileged',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -36,8 +37,9 @@ class TenantRole extends Model
     protected function casts(): array
     {
         return [
-            'status'      => 'integer',
-            'row_version' => 'integer',
+            'status'        => 'integer',
+            'is_privileged' => 'boolean',
+            'row_version'   => 'integer',
         ];
     }
 
