@@ -237,6 +237,57 @@ class OrgP5SalesPurchIcTest extends TestCase
     }
 
     #[Test]
+    public function office_and_group_codes_must_be_unique(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(code: 'SP-UQ', name: 'UQ Co'));
+        $so = app(SalesOrganizationService::class)->create('SO-UQ', 'UQ', $co->company_id);
+        $struct = app(SalesStructureService::class);
+
+        $struct->createOffice('OFF-X', 'Office X', $so->sales_org_id);
+        try {
+            $struct->createOffice('OFF-X', 'Office X2', $so->sales_org_id);
+            $this->fail('Expected DomainException for duplicate office code');
+        } catch (DomainException $e) {
+            $this->assertSame('duplicate_office_code', $e->errorCode);
+        }
+
+        $office = $struct->createOffice('OFF-Y', 'Office Y', $so->sales_org_id);
+        $struct->createGroup($office->sales_office_id, 'GX', 'Group X');
+        try {
+            $struct->createGroup($office->sales_office_id, 'GX', 'Group X2');
+            $this->fail('Expected DomainException for duplicate group code');
+        } catch (DomainException $e) {
+            $this->assertSame('duplicate_group_code', $e->errorCode);
+        }
+    }
+
+    #[Test]
+    public function deleting_office_cascades_soft_delete_to_groups(): void
+    {
+        $co = app(CompanyService::class)->createCompany(new CreateCompanyDTO(code: 'SP-CAS', name: 'Cascade Co'));
+        $so = app(SalesOrganizationService::class)->create('SO-CAS', 'CAS', $co->company_id);
+        $struct = app(SalesStructureService::class);
+
+        $office = $struct->createOffice('OFF-CAS', 'Cascade Office', $so->sales_org_id);
+        $g1 = $struct->createGroup($office->sales_office_id, 'G-A', 'Team A');
+        $g2 = $struct->createGroup($office->sales_office_id, 'G-B', 'Team B');
+
+        $struct->softDeleteOffice($office->sales_office_id);
+
+        $this->assertCount(0, $struct->listOffices());
+        $this->assertTrue(
+            \App\Modules\Organization\Models\SalesGroup::onlyTrashed()
+                ->where('sales_group_id', $g1->sales_group_id)
+                ->exists()
+        );
+        $this->assertTrue(
+            \App\Modules\Organization\Models\SalesGroup::onlyTrashed()
+                ->where('sales_group_id', $g2->sales_group_id)
+                ->exists()
+        );
+    }
+
+    #[Test]
     public function intercompany_partner_map_and_rule(): void
     {
         $svcCo = app(CompanyService::class);
