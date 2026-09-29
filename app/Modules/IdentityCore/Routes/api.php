@@ -8,6 +8,7 @@ use App\Modules\IdentityCore\Controllers\AuthController;
 use App\Modules\IdentityCore\Controllers\ScopeController;
 use App\Modules\IdentityCore\Controllers\ProfileController;
 use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
+use App\Modules\IdentityCore\Controllers\SodController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -108,6 +109,18 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.update');
             Route::delete('/{id}', [RoleController::class, 'destroy'])
                 ->middleware('permission:identity.role.delete');
+        });
+
+        // ID-W1-01 SoD matrix
+        Route::prefix('sod-rules')->group(function () {
+            Route::get('/', [SodController::class, 'index'])
+                ->middleware('permission:identity.sod.view');
+            Route::post('/', [SodController::class, 'store'])
+                ->middleware('permission:identity.sod.manage');
+            Route::post('/evaluate', [SodController::class, 'evaluate'])
+                ->middleware('permission:identity.sod.view');
+            Route::delete('/{id}', [SodController::class, 'destroy'])
+                ->middleware('permission:identity.sod.manage');
         });
 
         Route::prefix('scopes')->group(function () {
