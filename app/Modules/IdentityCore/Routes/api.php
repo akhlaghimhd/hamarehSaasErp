@@ -11,6 +11,7 @@ use App\Modules\IdentityCore\Controllers\SsoController;
 use App\Modules\IdentityCore\Controllers\ProfileController;
 use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
 use App\Modules\IdentityCore\Controllers\SodController;
+use App\Modules\IdentityCore\Controllers\AccessCertificationController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -22,7 +23,6 @@ Route::prefix('identity')->group(function () {
     Route::post('/auth/forgot-password/request', [AuthController::class, 'forgotPasswordRequest']);
     Route::post('/auth/forgot-password/confirm', [AuthController::class, 'forgotPasswordConfirm']);
 
-    // ID-W1-04 SSO (public begin/callback + provider list)
     Route::get('/auth/sso/providers', [SsoController::class, 'providers']);
     Route::post('/auth/sso/begin', [SsoController::class, 'begin']);
     Route::post('/auth/sso/callback', [SsoController::class, 'callback']);
@@ -43,13 +43,11 @@ Route::prefix('identity')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
 
-        // ID-W1-03 MFA
         Route::get('/auth/mfa/status', [MfaController::class, 'status']);
         Route::post('/auth/mfa/enable', [MfaController::class, 'beginEnable']);
         Route::post('/auth/mfa/confirm', [MfaController::class, 'confirmEnable']);
         Route::post('/auth/mfa/disable', [MfaController::class, 'disable']);
 
-        // ID-W1-04 SSO admin config
         Route::post('/auth/sso/providers', [SsoController::class, 'upsertProvider'])
             ->middleware('permission:identity.mfa.manage');
 
@@ -93,6 +91,24 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.membership_history.view');
             Route::get('/user/{tenantUserId}', [MembershipHistoryController::class, 'byTenantUser'])
                 ->middleware('permission:identity.membership_history.view');
+        });
+
+        // ID-W2-01 Access Certification
+        Route::prefix('access-certifications')->group(function () {
+            Route::get('/', [AccessCertificationController::class, 'index'])
+                ->middleware('permission:identity.access_cert.view');
+            Route::post('/', [AccessCertificationController::class, 'store'])
+                ->middleware('permission:identity.access_cert.manage');
+            Route::get('/{id}', [AccessCertificationController::class, 'show'])
+                ->middleware('permission:identity.access_cert.view');
+            Route::post('/{id}/open', [AccessCertificationController::class, 'open'])
+                ->middleware('permission:identity.access_cert.manage');
+            Route::get('/{id}/items', [AccessCertificationController::class, 'items'])
+                ->middleware('permission:identity.access_cert.view');
+            Route::post('/{id}/complete', [AccessCertificationController::class, 'complete'])
+                ->middleware('permission:identity.access_cert.manage');
+            Route::post('/items/{itemId}/certify', [AccessCertificationController::class, 'certify'])
+                ->middleware('permission:identity.access_cert.certify');
         });
 
         Route::prefix('roles')->group(function () {
