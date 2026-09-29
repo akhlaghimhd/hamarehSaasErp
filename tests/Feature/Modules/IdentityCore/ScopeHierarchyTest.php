@@ -48,21 +48,27 @@ class ScopeHierarchyTest extends TestCase
     #[Test]
     public function without_subtree_returns_only_reference(): void
     {
+        $ref = (string) Str::uuid();
+
         $ids = $this->svc->expandReference(
             $this->tenantId,
             'COMPANY',
-            'company-root',
+            $ref,
             'LEGAL',
             false
         );
 
-        $this->assertSame(['company-root'], $ids);
+        $this->assertSame([$ref], $ids);
     }
 
     #[Test]
     public function with_subtree_includes_descendant_entities(): void
     {
         $hierarchyId = (string) Str::uuid();
+        $companyRoot = (string) Str::uuid();
+        $companyChild = (string) Str::uuid();
+        $companyGrand = (string) Str::uuid();
+
         DB::table('erp_org_hierarchies')->insert([
             'hierarchy_id' => $hierarchyId,
             'tenant_id'    => $this->tenantId,
@@ -71,6 +77,7 @@ class ScopeHierarchyTest extends TestCase
             'purpose'      => 'LEGAL',
             'version'      => 1,
             'is_active'    => true,
+            'row_version'  => 1,
             'created_at'   => now(),
             'updated_at'   => now(),
         ]);
@@ -86,10 +93,11 @@ class ScopeHierarchyTest extends TestCase
                 'hierarchy_id'   => $hierarchyId,
                 'parent_node_id' => null,
                 'entity_type'    => 'COMPANY',
-                'entity_id'      => 'company-root',
+                'entity_id'      => $companyRoot,
                 'node_origin'    => 'MANUAL',
                 'sort_order'     => 1,
                 'is_active'      => true,
+                'row_version'    => 1,
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ],
@@ -99,10 +107,11 @@ class ScopeHierarchyTest extends TestCase
                 'hierarchy_id'   => $hierarchyId,
                 'parent_node_id' => $rootNodeId,
                 'entity_type'    => 'COMPANY',
-                'entity_id'      => 'company-child',
+                'entity_id'      => $companyChild,
                 'node_origin'    => 'MANUAL',
                 'sort_order'     => 2,
                 'is_active'      => true,
+                'row_version'    => 1,
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ],
@@ -112,10 +121,11 @@ class ScopeHierarchyTest extends TestCase
                 'hierarchy_id'   => $hierarchyId,
                 'parent_node_id' => $childNodeId,
                 'entity_type'    => 'COMPANY',
-                'entity_id'      => 'company-grand',
+                'entity_id'      => $companyGrand,
                 'node_origin'    => 'MANUAL',
                 'sort_order'     => 3,
                 'is_active'      => true,
+                'row_version'    => 1,
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ],
@@ -124,37 +134,40 @@ class ScopeHierarchyTest extends TestCase
         $ids = $this->svc->expandReference(
             $this->tenantId,
             'COMPANY',
-            'company-root',
+            $companyRoot,
             'LEGAL',
             true
         );
 
-        $this->assertContains('company-root', $ids);
-        $this->assertContains('company-child', $ids);
-        $this->assertContains('company-grand', $ids);
+        $this->assertContains($companyRoot, $ids);
+        $this->assertContains($companyChild, $ids);
+        $this->assertContains($companyGrand, $ids);
         $this->assertCount(3, $ids);
     }
 
     #[Test]
     public function expand_scopes_groups_by_type(): void
     {
+        $br1 = (string) Str::uuid();
+        $br2 = (string) Str::uuid();
+
         $result = $this->svc->expandScopes($this->tenantId, [
             [
-                'scope_type'         => 'BRANCH',
-                'reference_id'       => 'br-1',
-                'hierarchy_purpose'  => null,
-                'include_subtree'    => false,
+                'scope_type'        => 'BRANCH',
+                'reference_id'      => $br1,
+                'hierarchy_purpose' => null,
+                'include_subtree'   => false,
             ],
             [
-                'scope_type'         => 'BRANCH',
-                'reference_id'       => 'br-2',
-                'hierarchy_purpose'  => null,
-                'include_subtree'    => false,
+                'scope_type'        => 'BRANCH',
+                'reference_id'      => $br2,
+                'hierarchy_purpose' => null,
+                'include_subtree'   => false,
             ],
         ]);
 
         $this->assertArrayHasKey('BRANCH', $result);
-        $this->assertContains('br-1', $result['BRANCH']);
-        $this->assertContains('br-2', $result['BRANCH']);
+        $this->assertContains($br1, $result['BRANCH']);
+        $this->assertContains($br2, $result['BRANCH']);
     }
 }
