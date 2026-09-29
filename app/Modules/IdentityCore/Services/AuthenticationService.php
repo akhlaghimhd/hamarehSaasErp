@@ -34,7 +34,6 @@ class AuthenticationService
             throw new HttpException(423, 'حساب موقتاً قفل شده است. کمی بعد تلاش کنید.');
         }
 
-        // New users (must_set_password / no hash) cannot use password login — OTP only
         if (!$credential || $credential->password_hash === null || $credential->must_set_password) {
             throw new HttpException(
                 401,
@@ -53,12 +52,38 @@ class AuthenticationService
 
         $this->clearFailedLoginAttempts($credential);
 
+        // ID-W1-03: MFA challenge before full session
+        $user->load('credential');
+        if (app(MfaService::class)->isRequired($user)) {
+            return $this->issueMfaChallengeSession($user, $dto->tenantId);
+        }
+
         return $this->completeLoginForUser($user, $dto->tenantId);
+    }
+
+    public function issueMfaChallengeSession(User $user, ?string $requestedTenantId = null): array
+    {
+        $user->tokens()->where('name', 'mfa_challenge')->delete();
+        $token = $user->createToken('mfa_challenge', ['mfa-challenge'])->plainTextToken;
+
+        return [
+            'requires_mfa'      => true,
+            'mfa_token'         => $token,
+            'token_type'        => 'Bearer',
+            'user'              => [
+                'user_id'    => $user->user_id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'mobile'     => $user->mobile,
+            ],
+            'pending_tenant_id' => $requestedTenantId,
+            'must_set_password' => false,
+        ];
     }
 
     public function completeLoginForUser(User $user, ?string $requestedTenantId = null): array
     {
-        // Force set-password path for first login / must_set_password
         $credential = $user->credential;
         if ($credential && (bool) $credential->must_set_password) {
             return $this->issueSetPasswordSession($user);
@@ -152,16 +177,11 @@ class AuthenticationService
         return $this->completeLoginForUser($user, $tenantId);
     }
 
-    /**
-     * Limited session used only to set password (first login / after OTP when must_set_password).
-     */
     private function issueSetPasswordSession(User $user): array
     {
-        // Revoke any previous set-password tokens for cleanliness
         try {
             $user->tokens()->where('name', 'set_password')->delete();
         } catch (\Throwable) {
-            // ignore
         }
 
         $tokenResult = $user->createToken('set_password', ['set-password']);
@@ -253,7 +273,6 @@ class AuthenticationService
             $permissions = array_values(array_unique(array_merge($permissions, $ownerPerms)));
         }
 
-        // Column on tenant_scopes is reference_id (not resource_id)
         $scopes = DB::table('tenant_user_scopes')
             ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
             ->where('tenant_user_scopes.tenant_id', $tenantIdToLogin)
@@ -331,10 +350,6 @@ class AuthenticationService
         ];
     }
 
-    /**
-     * First-login / limited-token set password. Clears must_set_password and revokes the token.
-     * Caller must ensure the request is authenticated with set-password ability (or equivalent).
-     */
     public function setPassword(User $user, string $newPassword): void
     {
         $credential = $user->credential;
@@ -352,17 +367,12 @@ class AuthenticationService
         $credential->locked_until = null;
         $credential->save();
 
-        // Force re-login: delete current + any set_password tokens
         try {
             $user->tokens()->delete();
         } catch (\Throwable) {
-            // ignore
         }
     }
 
-    /**
-     * Authenticated change-password (profile). Requires current password.
-     */
     public function changePassword(User $user, string $currentPassword, string $newPassword): void
     {
         $credential = $user->credential;
@@ -386,15 +396,10 @@ class AuthenticationService
         $credential->save();
     }
 
-    /**
-     * Forgot-password: set new password after OTP was verified by OtpLoginService (or dedicated confirm).
-     * Does not require prior session; used by forgot-password confirm endpoint.
-     */
     public function resetPasswordByUser(User $user, string $newPassword): void
     {
         $credential = $user->credential;
         if (!$credential) {
-            // Create credential if missing (should be rare)
             $credential = UserCredential::create([
                 'credential_id'       => (string) Str::uuid(),
                 'user_id'             => $user->user_id,
@@ -420,7 +425,6 @@ class AuthenticationService
         try {
             $user->tokens()->delete();
         } catch (\Throwable) {
-            // ignore
         }
     }
 
@@ -485,20 +489,19 @@ class AuthenticationService
                 'password_hash'       => Hash::make($dto->password),
                 'must_set_password'   => false,
                 'authentication_type' => 1,
-                'is_verified'         => false,
+                'is_verified'         => true,
                 'two_factor_enabled'  => false,
                 'failed_login_count'  => 0,
             ]);
 
-            return $user;
+            return $user->load('credential');
         });
     }
 
     private function registerFailedLoginAttempt(UserCredential $credential): void
     {
-        $count = (int) $credential->failed_login_count + 1;
-        $credential->failed_login_count = $count;
-        if ($count >= 5) {
+        $credential->failed_login_count = ((int) $credential->failed_login_count) + 1;
+        if ($credential->failed_login_count >= 5) {
             $credential->locked_until = now()->addMinutes(15);
             $credential->failed_login_count = 0;
         }
@@ -507,10 +510,11 @@ class AuthenticationService
 
     private function clearFailedLoginAttempts(UserCredential $credential): void
     {
-        if ((int) $credential->failed_login_count !== 0 || $credential->locked_until !== null) {
-            $credential->failed_login_count = 0;
-            $credential->locked_until = null;
-            $credential->save();
+        if ((int) $credential->failed_login_count === 0 && $credential->locked_until === null) {
+            return;
         }
+        $credential->failed_login_count = 0;
+        $credential->locked_until = null;
+        $credential->save();
     }
 }
