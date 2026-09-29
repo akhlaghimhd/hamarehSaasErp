@@ -7,6 +7,7 @@ use App\Modules\IdentityCore\Controllers\UserController;
 use App\Modules\IdentityCore\Controllers\ScopeController;
 use App\Modules\IdentityCore\Controllers\AuthController;
 use App\Modules\IdentityCore\Controllers\MfaController;
+use App\Modules\IdentityCore\Controllers\SsoController;
 use App\Modules\IdentityCore\Controllers\ProfileController;
 use App\Modules\IdentityCore\Controllers\MembershipHistoryController;
 use App\Modules\IdentityCore\Controllers\SodController;
@@ -20,6 +21,11 @@ Route::prefix('identity')->group(function () {
 
     Route::post('/auth/forgot-password/request', [AuthController::class, 'forgotPasswordRequest']);
     Route::post('/auth/forgot-password/confirm', [AuthController::class, 'forgotPasswordConfirm']);
+
+    // ID-W1-04 SSO (public begin/callback + provider list)
+    Route::get('/auth/sso/providers', [SsoController::class, 'providers']);
+    Route::post('/auth/sso/begin', [SsoController::class, 'begin']);
+    Route::post('/auth/sso/callback', [SsoController::class, 'callback']);
 
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/auth/select-tenant', [AuthController::class, 'selectTenant']);
@@ -42,6 +48,10 @@ Route::prefix('identity')->group(function () {
         Route::post('/auth/mfa/enable', [MfaController::class, 'beginEnable']);
         Route::post('/auth/mfa/confirm', [MfaController::class, 'confirmEnable']);
         Route::post('/auth/mfa/disable', [MfaController::class, 'disable']);
+
+        // ID-W1-04 SSO admin config
+        Route::post('/auth/sso/providers', [SsoController::class, 'upsertProvider'])
+            ->middleware('permission:identity.mfa.manage');
 
         Route::get('/users', [UserController::class, 'index'])
             ->middleware('permission:identity.user.view');
