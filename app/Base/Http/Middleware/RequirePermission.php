@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use App\Base\Context\TenantContext;
 use App\Base\Support\TenantCache;
+use App\Modules\IdentityCore\Services\RoleInheritanceService;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -16,9 +17,9 @@ class RequirePermission
      * Usage in routes: middleware('permission:identity.role.create')
      *
      * Policy:
-     * - Tenant owner (is_owner on active membership) always passes — does not depend on
-     *   tenant_permissions rows existing or on a cached role→permission map.
-     * - Everyone else is checked against role-assigned permission codes (cached).
+     * - Tenant owner (is_owner on active membership) always passes.
+     * - Everyone else is checked against role-assigned permission codes
+     *   including inherited permissions from parent roles (ID-W2-03).
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
@@ -32,7 +33,6 @@ class RequirePermission
             ], 401);
         }
 
-        // Owner check is never served from the permission-list cache (avoids stale empty lists).
         if ($this->isActiveTenantOwner($tenantId, $userId)) {
             return $next($request);
         }
@@ -73,28 +73,15 @@ class RequirePermission
      */
     private function resolveRolePermissionCodes(string $tenantId, string $userId): array
     {
-        return DB::table('tenant_user_roles')
-            ->join(
-                'tenant_role_permissions',
-                'tenant_user_roles.tenant_role_id',
-                '=',
-                'tenant_role_permissions.tenant_role_id'
-            )
-            ->join(
-                'tenant_permissions',
-                'tenant_role_permissions.tenant_permission_id',
-                '=',
-                'tenant_permissions.tenant_permission_id'
-            )
-            ->where('tenant_user_roles.tenant_id', $tenantId)
-            ->where('tenant_user_roles.user_id', $userId)
-            ->whereNull('tenant_user_roles.deleted_at')
-            ->whereNull('tenant_role_permissions.deleted_at')
-            ->whereNull('tenant_permissions.deleted_at')
-            ->where('tenant_permissions.status', 1)
-            ->pluck('tenant_permissions.code')
+        $roleIds = DB::table('tenant_user_roles')
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->pluck('tenant_role_id')
             ->unique()
             ->values()
-            ->toArray();
+            ->all();
+
+        return app(RoleInheritanceService::class)->permissionCodesForRoles($tenantId, $roleIds);
     }
 }
