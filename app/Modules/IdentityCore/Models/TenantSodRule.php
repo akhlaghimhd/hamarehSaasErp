@@ -37,6 +37,7 @@ class TenantSodRule extends Model
         'severity',
         'enforcement',
         'is_active',
+        'inactive_until',
         'created_by',
         'updated_by',
         'deleted_by',
@@ -46,10 +47,20 @@ class TenantSodRule extends Model
     protected function casts(): array
     {
         return [
-            'severity'  => 'integer',
-            'is_active' => 'boolean',
-            'row_version' => 'integer',
+            'severity'       => 'integer',
+            'is_active'      => 'boolean',
+            'inactive_until' => 'datetime',
+            'row_version'    => 'integer',
         ];
+    }
+
+    public function isEffectivelyActive(): bool
+    {
+        if ($this->inactive_until !== null && $this->inactive_until->isPast()) {
+            return true;
+        }
+
+        return (bool) $this->is_active;
     }
 
     public function roleA(): BelongsTo
