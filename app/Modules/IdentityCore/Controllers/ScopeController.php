@@ -10,6 +10,7 @@ use App\Modules\IdentityCore\DTOs\CreateScopeDTO;
 use App\Modules\IdentityCore\DTOs\UpdateScopeDTO;
 use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Services\ScopeService;
+use App\Base\Exceptions\DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -121,7 +122,7 @@ class ScopeController extends Controller
     {
         try {
             $dto = AssignScopeToUserDTO::fromRequest($request->validated());
-            $this->scopeService->assignScopesToUser($dto);
+            $this->scopeService->assignScopeToUser($dto);
 
             return response()->json([
                 'status'  => 'success',
@@ -136,7 +137,7 @@ class ScopeController extends Controller
     {
         try {
             $dto = AssignScopeToUserDTO::fromRequest($request->validated());
-            $this->scopeService->unassignScopesFromUser($dto);
+            $this->scopeService->unassignScopeFromUser($dto->tenantUserId, $dto->scopeId);
 
             return response()->json([
                 'status'  => 'success',
@@ -150,7 +151,7 @@ class ScopeController extends Controller
     public function userScopes(string $tenantUserId): JsonResponse
     {
         try {
-            $scopes = $this->scopeService->getUserScopes($tenantUserId);
+            $scopes = $this->scopeService->listScopesForUser($tenantUserId);
 
             return response()->json([
                 'status'  => 'success',
@@ -169,6 +170,14 @@ class ScopeController extends Controller
                 'status'  => 'error',
                 'message' => $e->getMessage(),
             ], $e->getStatusCode());
+        }
+
+        if ($e instanceof DomainException) {
+            return response()->json([
+                'status'     => 'error',
+                'message'    => $e->getMessage(),
+                'error_code' => $e->errorCode,
+            ], 422);
         }
 
         $status = 400;

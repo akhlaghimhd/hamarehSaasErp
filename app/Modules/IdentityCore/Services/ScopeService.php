@@ -13,6 +13,7 @@ use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use App\Base\Exceptions\DomainException;
 use Exception;
 
 class ScopeService
@@ -60,6 +61,7 @@ class ScopeService
 
         $this->assertPackAllowsScopeType($tenantId, $dto->scopeType);
         $this->assertReferenceValid($tenantId, $dto->scopeType, $dto->referenceId);
+        $this->assertReferenceNotDuplicate($tenantId, $dto->scopeType, $dto->referenceId);
 
         return DB::transaction(function () use ($dto, $tenantId) {
             $scope = TenantScope::create([
@@ -103,6 +105,7 @@ class ScopeService
             }
 
             $this->assertReferenceValid($tenantId, $scopeType, $referenceId);
+            $this->assertReferenceNotDuplicate($tenantId, $scopeType, $referenceId, $scope->scope_id);
 
             $updateData = array_filter([
                 'scope_name'   => $dto->scopeName,
@@ -270,6 +273,47 @@ class ScopeService
             ->orderBy('scope_name')
             ->get()
             ->all();
+    }
+
+    /**
+     * One structural reference may only map to one scope per type (uq_tenant_scopes_reference).
+     */
+    private function assertReferenceNotDuplicate(
+        string $tenantId,
+        string $scopeType,
+        ?string $referenceId,
+        ?string $exceptScopeId = null
+    ): void {
+        if ($referenceId === null || trim((string) $referenceId) === '') {
+            return;
+        }
+
+        $type = strtoupper(trim($scopeType));
+        $query = TenantScope::withTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('scope_type', $type)
+            ->where('reference_id', $referenceId);
+
+        if ($exceptScopeId) {
+            $query->where('scope_id', '!=', $exceptScopeId);
+        }
+
+        $existing = $query->first();
+        if (!$existing) {
+            return;
+        }
+
+        if (method_exists($existing, 'trashed') && $existing->trashed()) {
+            throw new DomainException(
+                'برای این موجودیت قبلاً محدوده تعریف شده و حذف شده است. از «سطل بازیابی» بازگردانی کنید.',
+                'scope_reference_trashed'
+            );
+        }
+
+        throw new DomainException(
+            'برای این موجودیت مرجع قبلاً محدوده دسترسی ثبت شده است. محدوده تکراری مجاز نیست.',
+            'scope_reference_duplicate'
+        );
     }
 
     private function assertPackAllowsScopeType(string $tenantId, string $scopeType): void
