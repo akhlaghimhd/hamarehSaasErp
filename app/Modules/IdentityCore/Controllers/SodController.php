@@ -15,13 +15,16 @@ class SodController extends Controller
         private readonly SodService $sodService
     ) {}
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $rules = $this->sodService->listRules();
+        $rules = $this->sodService->listRules([
+            'status' => $request->query('status'),
+            'only_trashed' => $request->boolean('only_trashed'),
+        ]);
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'SoD rules retrieved successfully.',
+            'message' => 'فهرست قوانین تفکیک وظایف دریافت شد.',
             'data'    => $rules,
         ], 200);
     }
@@ -44,9 +47,41 @@ class SodController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'SoD rule created successfully.',
+                'message' => 'قانون تفکیک وظایف ثبت شد.',
                 'data'    => $rule->load(['roleA:tenant_role_id,code,name', 'roleB:tenant_role_id,code,name']),
             ], 201);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    public function update(Request $request, string $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'name'           => 'nullable|string|max:200',
+                'description'    => 'nullable|string|max:500',
+                'severity'       => 'nullable|integer|min:1|max:4',
+                'enforcement'    => 'nullable|string|in:BLOCK,WARN,block,warn',
+                'is_active'      => 'nullable|boolean',
+                'inactive_until' => 'nullable|date',
+            ]);
+
+            $rule = $this->sodService->updateRule($id, $validated);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'قانون به‌روزرسانی شد.',
+                'data'    => $rule,
+            ], 200);
         } catch (HttpException $e) {
             return response()->json([
                 'status'  => 'error',
@@ -67,7 +102,7 @@ class SodController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'SoD rule soft-deleted successfully.',
+                'message' => 'قانون به‌صورت نرم حذف شد. می‌توانید از سطل بازیابی آن را بازگردانید.',
             ], 200);
         } catch (HttpException $e) {
             return response()->json([
@@ -82,9 +117,29 @@ class SodController extends Controller
         }
     }
 
-    /**
-     * Dry-run: evaluate a proposed role set without assigning.
-     */
+    public function restore(string $id): JsonResponse
+    {
+        try {
+            $rule = $this->sodService->restoreRule($id);
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'قانون با موفقیت بازگردانی شد.',
+                'data'    => $rule,
+            ], 200);
+        } catch (HttpException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], $e->getStatusCode());
+        } catch (Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
     public function evaluate(Request $request): JsonResponse
     {
         try {
@@ -100,7 +155,7 @@ class SodController extends Controller
                 'status'  => 'success',
                 'message' => $result['has_block']
                     ? 'تعارض مسدودکننده یافت شد.'
-                    : ($result['has_warn'] ? 'هشدار SoD وجود دارد.' : 'تعارضی یافت نشد.'),
+                    : ($result['has_warn'] ? 'هشدار تفکیک وظایف وجود دارد.' : 'تعارضی یافت نشد.'),
                 'data'    => $result,
             ], 200);
         } catch (Exception $e) {
