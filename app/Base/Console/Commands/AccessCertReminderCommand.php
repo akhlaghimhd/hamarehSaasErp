@@ -190,7 +190,7 @@ class AccessCertReminderCommand extends Command
         $permId = $permQ->value('tenant_permission_id');
 
         if (! $permId) {
-            $this->line("Tenant {$tenantId}: permission identity.access_cert.receive_reminder missing — run AccessCertPermissionSeeder.");
+            $this->warn("Tenant {$tenantId}: permission identity.access_cert.receive_reminder MISSING — run: php artisan db:seed --class=AccessCertPermissionSeeder");
 
             return [];
         }
@@ -207,7 +207,7 @@ class AccessCertReminderCommand extends Command
             ->all();
 
         if ($roleIds === []) {
-            $this->line("Tenant {$tenantId}: permission exists but not assigned to any role — seed attaches to tenant-admin.");
+            $this->warn("Tenant {$tenantId}: permission exists but NOT linked to any role — re-run AccessCertPermissionSeeder");
 
             return [];
         }
@@ -228,11 +228,17 @@ class AccessCertReminderCommand extends Command
             $userQ->whereNull('tur.deleted_at');
         }
 
-        return $userQ
+        $userIds = $userQ
             ->pluck('tur.user_id')
             ->map(fn ($id) => (string) $id)
             ->unique()
             ->values()
             ->all();
+
+        if ($userIds === []) {
+            $this->warn("Tenant {$tenantId}: roles hold the permission but no ACTIVE user has those roles");
+        }
+
+        return $userIds;
     }
 }

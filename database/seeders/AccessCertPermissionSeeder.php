@@ -7,12 +7,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-/** ID-W2-01 — ensure access certification permission codes exist for all tenants. */
+/**
+ * ID-W2-01 — ensure access certification permission codes exist for all tenants,
+ * attach them to tenant-admin, and ensure active owners hold tenant-admin.
+ */
 class AccessCertPermissionSeeder extends Seeder
 {
     public function run(): void
     {
         if (!Schema::hasTable('tenant_permissions') || !Schema::hasTable('tenants')) {
+            $this->command?->error('Required tables missing.');
+
             return;
         }
 
@@ -26,6 +31,7 @@ class AccessCertPermissionSeeder extends Seeder
         $tenantIds = DB::table('tenants')->pluck('tenant_id')->map(fn ($id) => (string) $id)->all();
         foreach ($tenantIds as $tenantId) {
             DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+
             foreach ($perms as $perm) {
                 $exists = DB::table('tenant_permissions')
                     ->where('tenant_id', $tenantId)
@@ -48,7 +54,6 @@ class AccessCertPermissionSeeder extends Seeder
                 ]);
             }
 
-            // Attach codes to tenant-admin so reminders reach system admins after seed.
             $roleQ = DB::table('tenant_roles')
                 ->where('tenant_id', $tenantId)
                 ->where('code', 'tenant-admin');
@@ -56,7 +61,13 @@ class AccessCertPermissionSeeder extends Seeder
                 $roleQ->whereNull('deleted_at');
             }
             $roleId = $roleQ->value('tenant_role_id');
-            if ($roleId && Schema::hasTable('tenant_role_permissions')) {
+
+            if (!$roleId) {
+                $this->command?->warn("Tenant {$tenantId}: no tenant-admin role — skip attach");
+                continue;
+            }
+
+            if (Schema::hasTable('tenant_role_permissions')) {
                 $permQ = DB::table('tenant_permissions')
                     ->where('tenant_id', $tenantId)
                     ->whereIn('code', array_column($perms, 'code'));
@@ -64,6 +75,7 @@ class AccessCertPermissionSeeder extends Seeder
                     $permQ->whereNull('deleted_at');
                 }
                 $permIds = $permQ->pluck('tenant_permission_id');
+                $attached = 0;
                 foreach ($permIds as $pid) {
                     $existsQ = DB::table('tenant_role_permissions')
                         ->where('tenant_id', $tenantId)
@@ -83,7 +95,44 @@ class AccessCertPermissionSeeder extends Seeder
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
+                    $attached++;
                 }
+                $this->command?->info("Tenant {$tenantId}: tenant-admin perm links +{$attached}");
+            }
+
+            // Ensure active owners hold tenant-admin so they receive reminders.
+            if (Schema::hasTable('tenant_user_roles') && Schema::hasTable('tenant_users')) {
+                $ownersQ = DB::table('tenant_users')
+                    ->where('tenant_id', $tenantId)
+                    ->where('is_owner', true)
+                    ->where('status', 1);
+                if (Schema::hasColumn('tenant_users', 'deleted_at')) {
+                    $ownersQ->whereNull('deleted_at');
+                }
+                $owners = $ownersQ->pluck('user_id');
+                $assigned = 0;
+                foreach ($owners as $userId) {
+                    $existsQ = DB::table('tenant_user_roles')
+                        ->where('tenant_id', $tenantId)
+                        ->where('user_id', $userId)
+                        ->where('tenant_role_id', $roleId);
+                    if (Schema::hasColumn('tenant_user_roles', 'deleted_at')) {
+                        $existsQ->whereNull('deleted_at');
+                    }
+                    if ($existsQ->exists()) {
+                        continue;
+                    }
+                    DB::table('tenant_user_roles')->insert([
+                        'tenant_user_role_id' => (string) Str::uuid(),
+                        'tenant_id' => $tenantId,
+                        'user_id' => $userId,
+                        'tenant_role_id' => $roleId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $assigned++;
+                }
+                $this->command?->info("Tenant {$tenantId}: owners→tenant-admin +{$assigned}");
             }
         }
     }
