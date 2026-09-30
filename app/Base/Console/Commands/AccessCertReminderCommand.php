@@ -181,44 +181,58 @@ class AccessCertReminderCommand extends Command
             return [];
         }
 
-        $permId = DB::table('tenant_permissions')
+        $permQ = DB::table('tenant_permissions')
             ->where('tenant_id', $tenantId)
-            ->where('code', 'identity.access_cert.receive_reminder')
-            ->whereNull('deleted_at')
-            ->value('tenant_permission_id');
+            ->where('code', 'identity.access_cert.receive_reminder');
+        if (Schema::hasColumn('tenant_permissions', 'deleted_at')) {
+            $permQ->whereNull('deleted_at');
+        }
+        $permId = $permQ->value('tenant_permission_id');
 
         if (! $permId) {
+            $this->line("Tenant {$tenantId}: permission identity.access_cert.receive_reminder missing — run AccessCertPermissionSeeder.");
+
             return [];
         }
 
-        $roleIds = DB::table('tenant_role_permissions')
+        $roleQ = DB::table('tenant_role_permissions')
             ->where('tenant_id', $tenantId)
-            ->where('tenant_permission_id', $permId)
-            ->whereNull('deleted_at')
+            ->where('tenant_permission_id', $permId);
+        if (Schema::hasColumn('tenant_role_permissions', 'deleted_at')) {
+            $roleQ->whereNull('deleted_at');
+        }
+        $roleIds = $roleQ
             ->pluck('tenant_role_id')
             ->map(fn ($id) => (string) $id)
             ->all();
 
         if ($roleIds === []) {
+            $this->line("Tenant {$tenantId}: permission exists but not assigned to any role — seed attaches to tenant-admin.");
+
             return [];
         }
 
-        $userIds = DB::table('tenant_user_roles as tur')
+        $userQ = DB::table('tenant_user_roles as tur')
             ->join('tenant_users as tu', function ($j) use ($tenantId) {
                 $j->on('tu.user_id', '=', 'tur.user_id')
                     ->where('tu.tenant_id', '=', $tenantId)
-                    ->where('tu.status', '=', 1)
-                    ->whereNull('tu.deleted_at');
+                    ->where('tu.status', '=', 1);
+                if (Schema::hasColumn('tenant_users', 'deleted_at')) {
+                    $j->whereNull('tu.deleted_at');
+                }
             })
             ->where('tur.tenant_id', $tenantId)
-            ->whereIn('tur.tenant_role_id', $roleIds)
-            ->whereNull('tur.deleted_at')
+            ->whereIn('tur.tenant_role_id', $roleIds);
+
+        if (Schema::hasColumn('tenant_user_roles', 'deleted_at')) {
+            $userQ->whereNull('tur.deleted_at');
+        }
+
+        return $userQ
             ->pluck('tur.user_id')
             ->map(fn ($id) => (string) $id)
             ->unique()
             ->values()
             ->all();
-
-        return $userIds;
     }
 }

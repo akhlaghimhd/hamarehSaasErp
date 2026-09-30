@@ -49,25 +49,30 @@ class AccessCertPermissionSeeder extends Seeder
             }
 
             // Attach codes to tenant-admin so reminders reach system admins after seed.
-            $roleId = DB::table('tenant_roles')
+            $roleQ = DB::table('tenant_roles')
                 ->where('tenant_id', $tenantId)
-                ->where('code', 'tenant-admin')
-                ->whereNull('deleted_at')
-                ->value('tenant_role_id');
+                ->where('code', 'tenant-admin');
+            if (Schema::hasColumn('tenant_roles', 'deleted_at')) {
+                $roleQ->whereNull('deleted_at');
+            }
+            $roleId = $roleQ->value('tenant_role_id');
             if ($roleId && Schema::hasTable('tenant_role_permissions')) {
-                $permIds = DB::table('tenant_permissions')
+                $permQ = DB::table('tenant_permissions')
                     ->where('tenant_id', $tenantId)
-                    ->whereIn('code', array_column($perms, 'code'))
-                    ->whereNull('deleted_at')
-                    ->pluck('tenant_permission_id');
+                    ->whereIn('code', array_column($perms, 'code'));
+                if (Schema::hasColumn('tenant_permissions', 'deleted_at')) {
+                    $permQ->whereNull('deleted_at');
+                }
+                $permIds = $permQ->pluck('tenant_permission_id');
                 foreach ($permIds as $pid) {
-                    $exists = DB::table('tenant_role_permissions')
+                    $existsQ = DB::table('tenant_role_permissions')
                         ->where('tenant_id', $tenantId)
                         ->where('tenant_role_id', $roleId)
-                        ->where('tenant_permission_id', $pid)
-                        ->whereNull('deleted_at')
-                        ->exists();
-                    if ($exists) {
+                        ->where('tenant_permission_id', $pid);
+                    if (Schema::hasColumn('tenant_role_permissions', 'deleted_at')) {
+                        $existsQ->whereNull('deleted_at');
+                    }
+                    if ($existsQ->exists()) {
                         continue;
                     }
                     DB::table('tenant_role_permissions')->insert([
