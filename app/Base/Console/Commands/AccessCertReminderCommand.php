@@ -8,10 +8,11 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * ID-W2-01b — Remind tenant system admins / owners to open a periodic Access Certification campaign.
+ * ID-W2-01b — Remind users with identity.access_cert.receive_reminder to open a periodic Access Certification campaign.
  *
  * Cadences: 3 months and 6 months (both evaluated).
- * Delivery: event_outbox (identity.access_cert.reminder.v1) for downstream notification channels.
+ * Delivery: event_outbox (identity.access_cert.reminder.v1) to users holding
+ * identity.access_cert.receive_reminder (via any assigned role).
  */
 class AccessCertReminderCommand extends Command
 {
@@ -19,7 +20,7 @@ class AccessCertReminderCommand extends Command
                             {--dry-run : Report only, do not write outbox or settings}
                             {--tenant= : Limit to one tenant UUID}';
 
-    protected $description = 'Emit Access Certification campaign reminders (3/6 month cadence) to tenant owners';
+    protected $description = 'Emit Access Certification campaign reminders (3/6 month cadence) to users with receive_reminder permission';
 
     /** @var list<int> */
     private const CADENCES = [3, 6];
@@ -98,18 +99,10 @@ class AccessCertReminderCommand extends Command
                 }
             }
 
-            $ownerIds = DB::table('tenant_users')
-                ->where('tenant_id', $tenantId)
-                ->where('status', 1)
-                ->whereNull('deleted_at')
-                ->where('is_owner', true)
-                ->pluck('user_id')
-                ->map(fn ($id) => (string) $id)
-                ->values()
-                ->all();
+            $recipientIds = $this->resolveReminderRecipients($tenantId);
 
-            if ($ownerIds === []) {
-                $this->line("Tenant {$tenantId}: no active owner; skip reminder.");
+            if ($recipientIds === []) {
+                $this->line("Tenant {$tenantId}: no user with identity.access_cert.receive_reminder; skip.");
                 continue;
             }
 
@@ -118,14 +111,15 @@ class AccessCertReminderCommand extends Command
                 'cadence_months' => $triggeredCadence,
                 'months_since_last_campaign' => $monthsSince === 999 ? null : $monthsSince,
                 'last_campaign_activity_at' => $lastActivity,
-                'recipient_user_ids' => $ownerIds,
+                'recipient_user_ids' => $recipientIds,
+                'permission_code' => 'identity.access_cert.receive_reminder',
                 'message_fa' => $triggeredCadence >= 6
-                    ? 'بیش از ۶ ماه از آخرین بازبینی دسترسی گذشته است. لطفاً یک کمپین Access Certification جدید ایجاد و باز کنید.'
-                    : 'بیش از ۳ ماه از آخرین بازبینی دسترسی گذشته است. لطفاً یک کمپین Access Certification جدید ایجاد و باز کنید.',
+                    ? 'بیش از ۶ ماه از آخرین بازبینی دسترسی گذشته است. لطفاً یک کمپین بازبینی دسترسی جدید بسازید و آن را باز کنید.'
+                    : 'بیش از ۳ ماه از آخرین بازبینی دسترسی گذشته است. لطفاً یک کمپین بازبینی دسترسی جدید بسازید و آن را باز کنید.',
                 'action_path' => '/dashboard/identity/access-certifications',
             ];
 
-            $this->info("Tenant {$tenantId}: cadence={$triggeredCadence}m owners=".count($ownerIds).($dry ? ' [dry-run]' : ''));
+            $this->info("Tenant {$tenantId}: cadence={$triggeredCadence}m recipients=".count($recipientIds).($dry ? ' [dry-run]' : ''));
 
             if ($dry) {
                 continue;
@@ -152,18 +146,15 @@ class AccessCertReminderCommand extends Command
                         'last_reminder_at' => now(),
                         'last_reminder_cadence_months' => $triggeredCadence,
                         'updated_at' => now(),
-                        'row_version' => DB::raw('row_version + 1'),
                     ]);
                 } else {
                     DB::table('tenant_access_cert_settings')->insert([
                         'tenant_id' => $tenantId,
-                        'preferred_cadence_months' => 3,
                         'reminders_enabled' => true,
                         'last_reminder_at' => now(),
                         'last_reminder_cadence_months' => $triggeredCadence,
                         'created_at' => now(),
                         'updated_at' => now(),
-                        'row_version' => 1,
                     ]);
                 }
             }
@@ -174,5 +165,60 @@ class AccessCertReminderCommand extends Command
         $this->info("Reminders emitted: {$emitted}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Users who hold identity.access_cert.receive_reminder via any active role assignment.
+     *
+     * @return list<string>
+     */
+    private function resolveReminderRecipients(string $tenantId): array
+    {
+        if (! Schema::hasTable('tenant_permissions')
+            || ! Schema::hasTable('tenant_role_permissions')
+            || ! Schema::hasTable('tenant_user_roles')
+            || ! Schema::hasTable('tenant_users')) {
+            return [];
+        }
+
+        $permId = DB::table('tenant_permissions')
+            ->where('tenant_id', $tenantId)
+            ->where('code', 'identity.access_cert.receive_reminder')
+            ->whereNull('deleted_at')
+            ->value('tenant_permission_id');
+
+        if (! $permId) {
+            return [];
+        }
+
+        $roleIds = DB::table('tenant_role_permissions')
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_permission_id', $permId)
+            ->whereNull('deleted_at')
+            ->pluck('tenant_role_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        if ($roleIds === []) {
+            return [];
+        }
+
+        $userIds = DB::table('tenant_user_roles as tur')
+            ->join('tenant_users as tu', function ($j) use ($tenantId) {
+                $j->on('tu.user_id', '=', 'tur.user_id')
+                    ->where('tu.tenant_id', '=', $tenantId)
+                    ->where('tu.status', '=', 1)
+                    ->whereNull('tu.deleted_at');
+            })
+            ->where('tur.tenant_id', $tenantId)
+            ->whereIn('tur.tenant_role_id', $roleIds)
+            ->whereNull('tur.deleted_at')
+            ->pluck('tur.user_id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        return $userIds;
     }
 }
