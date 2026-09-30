@@ -14,7 +14,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * ID-W2-01 — Access Certification campaigns.
  *
  * Lifecycle: DRAFT → open (snapshot members + SoD evaluate) → certify items → COMPLETED.
- * REVOKE_REQUESTED records intent; actual role strip is a follow-up action (not auto).
+ * REVOKE_REQUESTED records intent only; actual role change is done on the member page (not auto).
+ * While OPEN, any item decision may be changed.
  */
 class AccessCertificationService
 {
@@ -189,9 +190,8 @@ class AccessCertificationService
                 throw new HttpException(422, 'فقط کمپین باز قابل تصمیم‌گیری است.');
             }
 
-            if ($item->decision !== TenantAccessCertItem::DECISION_PENDING && $item->decision !== TenantAccessCertItem::DECISION_DEFERRED) {
-                throw new HttpException(422, 'این آیتم قبلاً تصمیم‌گیری شده است.');
-            }
+            // While campaign is OPEN, reviewer may change any prior decision
+            // (APPROVED / REVOKE_REQUESTED / DEFERRED / PENDING).
 
             $item->decision = $decision;
             $item->reviewer_user_id = $reviewerUserId;
@@ -252,8 +252,8 @@ class AccessCertificationService
             'campaign' => $campaign,
             'totals'   => [
                 'items'            => $items->count(),
-                'pending'          => $items->where('decision', TenantAccessCertItem::DECISION_PENDING)->count(),
                 'approved'         => $items->where('decision', TenantAccessCertItem::DECISION_APPROVED)->count(),
+                'pending'          => $items->where('decision', TenantAccessCertItem::DECISION_PENDING)->count(),
                 'revoke_requested' => $items->where('decision', TenantAccessCertItem::DECISION_REVOKE_REQUESTED)->count(),
                 'deferred'         => $items->where('decision', TenantAccessCertItem::DECISION_DEFERRED)->count(),
                 'sod_block'        => $items->where('sod_has_block', true)->count(),
