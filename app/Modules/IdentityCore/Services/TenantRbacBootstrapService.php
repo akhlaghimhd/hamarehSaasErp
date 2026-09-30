@@ -17,6 +17,11 @@ use Illuminate\Support\Str;
  *   unless $forceResyncPermissions is true
  * - Creates missing SoD rules by stable code; does not reactivate soft-deleted
  *   rules the admin intentionally removed
+ *
+ * Eligibility:
+ * - required_feature: only when feature entitlement is enabled (e.g. multi_company)
+ * - permission_codes: attached only when the code exists in tenant catalog
+ * - missing module permissions no longer skip the role itself (workspace must not look empty)
  */
 class TenantRbacBootstrapService
 {
@@ -56,7 +61,7 @@ class TenantRbacBootstrapService
         });
 
         foreach ($defs as $def) {
-            if (!$this->isRoleEligible($def, $permMap, $enabledFeatures)) {
+            if (!$this->isRoleEligible($def, $enabledFeatures)) {
                 $skipped[] = $def['code'];
                 continue;
             }
@@ -141,7 +146,10 @@ class TenantRbacBootstrapService
         ];
     }
 
-    private function isRoleEligible(array $def, array $permMap, array $enabledFeatures): bool
+    /**
+     * Only feature-pack gates skip a role. Missing module permissions no longer hide roles.
+     */
+    private function isRoleEligible(array $def, array $enabledFeatures): bool
     {
         $feature = $def['required_feature'] ?? null;
         if ($feature !== null && $feature !== '') {
@@ -149,20 +157,6 @@ class TenantRbacBootstrapService
                 return false;
             }
             if (!in_array($feature, $enabledFeatures, true)) {
-                return false;
-            }
-        }
-
-        $prefix = $def['required_any_permission_prefix'] ?? null;
-        if ($prefix !== null && $prefix !== '') {
-            $has = false;
-            foreach (array_keys($permMap) as $code) {
-                if (str_starts_with((string) $code, $prefix)) {
-                    $has = true;
-                    break;
-                }
-            }
-            if (!$has) {
                 return false;
             }
         }
