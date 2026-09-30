@@ -14,6 +14,10 @@ class TenantService
     /**
      * Create a new tenant and assign the creating user as owner.
      * Uses IdentityCore TenantUser model (owner of tenant_users table).
+     *
+     * Platform provisions a usable workspace:
+     *  - default system roles + active SoD rules (TenantRbacBootstrapService)
+     *  - primary company + HQ branch (Organization product law)
      */
     public function createTenant(CreateTenantDTO $dto, string $userId): Tenant
     {
@@ -40,6 +44,26 @@ class TenantService
                 'status'         => 1,
                 'created_by'     => $userId,
             ]);
+
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenant->tenant_id]);
+
+            // Platform default workspace: system roles + SoD (feature-aware) + primary company
+            try {
+                app(\App\Modules\IdentityCore\Services\TenantRbacBootstrapService::class)
+                    ->bootstrapTenant($tenant->tenant_id, false);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+            try {
+                app(\App\Modules\Organization\Services\CompanyService::class)
+                    ->ensurePrimaryCompanyForTenant(
+                        $tenant->tenant_id,
+                        $dto->legalName ?: $dto->tenantName,
+                        'HQ'
+                    );
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             $this->logEventOutbox(
                 $tenant->tenant_id,
