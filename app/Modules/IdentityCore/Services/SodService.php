@@ -6,6 +6,7 @@ use App\Modules\IdentityCore\Models\TenantRole;
 use App\Modules\IdentityCore\Models\TenantSodRule;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -257,21 +258,125 @@ class SodService
 
     private function reactivateExpired(string $tenantId): void
     {
-        if (!\Illuminate\Support\Facades\Schema::hasColumn('tenant_sod_rules', 'inactive_until')) {
+        if (!Schema::hasColumn('tenant_sod_rules', 'inactive_until')) {
             return;
         }
 
-        TenantSodRule::query()
+        $expired = TenantSodRule::query()
             ->where('tenant_id', $tenantId)
             ->where('is_active', false)
             ->whereNotNull('inactive_until')
             ->where('inactive_until', '<=', now())
             ->whereNull('deleted_at')
+            ->get(['sod_rule_id', 'code', 'name', 'inactive_until']);
+
+        if ($expired->isEmpty()) {
+            return;
+        }
+
+        $ids = $expired->pluck('sod_rule_id')->all();
+        TenantSodRule::query()
+            ->where('tenant_id', $tenantId)
+            ->whereIn('sod_rule_id', $ids)
             ->update([
                 'is_active' => true,
                 'inactive_until' => null,
                 'updated_at' => now(),
             ]);
+
+        $this->emitSystemNotification($tenantId, [
+            'message_type' => 'sod.rule.auto_reactivated',
+            'channel'      => 'system',
+            'title'        => 'فعال‌سازی خودکار قانون تفکیک وظایف',
+            'body'         => count($ids) === 1
+                ? 'مهلت غیرفعال‌سازی موقت قانون «'.($expired->first()->name ?? '').'» به پایان رسید و قانون دوباره فعال شد.'
+                : count($ids).' قانون تفکیک وظایف پس از پایان مهلت غیرفعال‌سازی موقت، خودکار فعال شدند.',
+            'rules'        => $expired->map(static fn ($r) => [
+                'sod_rule_id' => (string) $r->sod_rule_id,
+                'code'        => $r->code,
+                'name'        => $r->name,
+            ])->values()->all(),
+            'reactivated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    private function emitSystemNotification(string $tenantId, array $payload): void
+    {
+        if (!Schema::hasTable('event_outbox')) {
+            return;
+        }
+
+        $payload['recipient_user_ids'] = $this->resolveSystemNotificationRecipients($tenantId);
+
+        try {
+            DB::table('event_outbox')->insert([
+                'event_id'       => (string) Str::uuid(),
+                'tenant_id'      => $tenantId,
+                'aggregate_type' => 'tenant_sod_rule',
+                'aggregate_id'   => (string) ($payload['rules'][0]['sod_rule_id'] ?? $tenantId),
+                'event_type'     => 'identity.system_notification.v1',
+                'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'status'         => 1,
+                'retry_count'    => 0,
+                'created_at'     => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('system_notification outbox failed', [
+                'tenant_id' => $tenantId,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** @return list<string> */
+    private function resolveSystemNotificationRecipients(string $tenantId): array
+    {
+        $ids = [];
+
+        if (Schema::hasTable('tenant_permissions') && Schema::hasTable('tenant_role_permissions') && Schema::hasTable('tenant_user_roles')) {
+            $permId = DB::table('tenant_permissions')
+                ->where('tenant_id', $tenantId)
+                ->where('code', 'identity.system_notification.receive')
+                ->whereNull('deleted_at')
+                ->value('tenant_permission_id');
+
+            if ($permId) {
+                $roleIds = DB::table('tenant_role_permissions')
+                    ->where('tenant_id', $tenantId)
+                    ->where('tenant_permission_id', $permId)
+                    ->pluck('tenant_role_id')
+                    ->all();
+
+                if ($roleIds !== []) {
+                    $ids = DB::table('tenant_user_roles as tur')
+                        ->join('tenant_users as tu', 'tu.tenant_user_id', '=', 'tur.tenant_user_id')
+                        ->where('tur.tenant_id', $tenantId)
+                        ->whereIn('tur.tenant_role_id', $roleIds)
+                        ->whereNull('tu.deleted_at')
+                        ->where('tu.status', 1)
+                        ->pluck('tu.user_id')
+                        ->map(fn ($id) => (string) $id)
+                        ->unique()
+                        ->values()
+                        ->all();
+                }
+            }
+        }
+
+        if ($ids === [] && Schema::hasTable('tenant_users')) {
+            $ids = DB::table('tenant_users')
+                ->where('tenant_id', $tenantId)
+                ->where('is_owner', true)
+                ->whereNull('deleted_at')
+                ->where('status', 1)
+                ->pluck('user_id')
+                ->map(fn ($id) => (string) $id)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        return $ids;
     }
 
     private function tenantId(): string
