@@ -280,7 +280,6 @@ class ScopeService
             return;
         }
 
-        // Ensure RLS session GUC matches this request (same DB connection).
         try {
             DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
         } catch (\Throwable) {
@@ -318,11 +317,10 @@ class ScopeService
                 continue;
             }
 
-            $base = DB::table($tbl)
+            $active = DB::table($tbl)
                 ->where('tenant_id', $tenantId)
                 ->where($pk, $referenceId);
 
-            $active = clone $base;
             if (Schema::hasColumn($tbl, 'deleted_at')) {
                 $active->whereNull('deleted_at');
             }
@@ -332,8 +330,14 @@ class ScopeService
                 break;
             }
 
-            if (Schema::hasColumn($tbl, 'deleted_at') && $base->exists()) {
-                $softDeleted = true;
+            if (Schema::hasColumn($tbl, 'deleted_at')) {
+                $any = DB::table($tbl)
+                    ->where('tenant_id', $tenantId)
+                    ->where($pk, $referenceId)
+                    ->exists();
+                if ($any) {
+                    $softDeleted = true;
+                }
             }
         }
 
@@ -366,20 +370,25 @@ class ScopeService
         string $eventType,
         array $payload
     ): void {
-        if (!DB::getSchemaBuilder()->hasTable('event_outbox')) {
-            return;
-        }
+        try {
+            if (! Schema::hasTable('event_outbox')) {
+                return;
+            }
 
-        DB::table('event_outbox')->insert([
-            'outbox_id'      => (string) Str::uuid(),
-            'tenant_id'      => $tenantId,
-            'aggregate_type' => $aggregateType,
-            'aggregate_id'   => $aggregateId,
-            'event_type'     => $eventType,
-            'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE),
-            'status'         => 'pending',
-            'created_at'     => now(),
-            'updated_at'     => now(),
-        ]);
+            // Schema: event_id PK, status smallint (1=pending), no updated_at
+            DB::table('event_outbox')->insert([
+                'event_id'       => (string) Str::uuid(),
+                'tenant_id'      => $tenantId,
+                'aggregate_type' => $aggregateType,
+                'aggregate_id'   => $aggregateId,
+                'event_type'     => $eventType,
+                'payload'        => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                'status'         => 1,
+                'retry_count'    => 0,
+                'created_at'     => now(),
+            ]);
+        } catch (\Throwable) {
+            // best-effort — scope mutation must not fail on outbox write
+        }
     }
 }
