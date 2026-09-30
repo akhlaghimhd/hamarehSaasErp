@@ -11,3 +11,6 @@ Artisan::command('inspire', function () {
 Schedule::command('erp:process-outbox --limit=100')->everyMinute()->withoutOverlapping();
 
 Schedule::command('erp:mark-payment-schedules-overdue')->dailyAt('01:00')->withoutOverlapping();
+
+// ID-W2-01b — periodic Access Certification campaign reminders (3/6 month)
+Schedule::command('erp:access-cert-reminders')->dailyAt('08:00')->withoutOverlapping();

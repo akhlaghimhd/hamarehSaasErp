@@ -53,6 +53,9 @@ class ModuleServiceProvider extends ServiceProvider
             Schedule::command('erp:mark-payment-schedules-overdue')
                 ->dailyAt('01:00')
                 ->withoutOverlapping();
+            Schedule::command('erp:access-cert-reminders')
+                ->dailyAt('08:00')
+                ->withoutOverlapping();
         }
     }
 
