@@ -11,6 +11,7 @@ use App\Modules\IdentityCore\Models\TenantUserScope;
 use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Exception;
 
@@ -268,53 +269,85 @@ class ScopeService
 
     private function assertReferenceValid(string $tenantId, string $scopeType, ?string $referenceId): void
     {
-        $type = strtoupper($scopeType);
+        $type = strtoupper(trim($scopeType));
+        $referenceId = is_string($referenceId) ? trim($referenceId) : $referenceId;
 
-        if (in_array($type, self::STRUCTURAL_TYPES, true) && empty($referenceId)) {
+        if (in_array($type, self::STRUCTURAL_TYPES, true) && ($referenceId === null || $referenceId === '')) {
             throw new Exception("برای نوع محدوده {$type} انتخاب موجودیت مرجع (reference_id) الزامی است.");
         }
 
-        if (empty($referenceId)) {
+        if ($referenceId === null || $referenceId === '') {
             return;
         }
 
-        $exists = match ($type) {
-            'COMPANY' => DB::table('erp_companies')
-                ->where('tenant_id', $tenantId)
-                ->where('company_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            'BRANCH' => DB::table('erp_branches')
-                ->where('tenant_id', $tenantId)
-                ->where('branch_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            'DEPARTMENT' => DB::table('erp_departments')
-                ->where('tenant_id', $tenantId)
-                ->where('department_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            'WAREHOUSE' => DB::table('inv_warehouses')
-                ->where('tenant_id', $tenantId)
-                ->where('warehouse_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            'COST_CENTER' => DB::table('cost_centers')
-                ->where('tenant_id', $tenantId)
-                ->where('cost_center_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            'BUSINESS_UNIT' => DB::table('erp_business_units')
-                ->where('tenant_id', $tenantId)
-                ->where('business_unit_id', $referenceId)
-                ->whereNull('deleted_at')
-                ->exists(),
-            default => true,
-        };
-
-        if (!$exists) {
-            throw new Exception("موجودیت مرجع انتخاب‌شده برای نوع {$type} در این سازمان یافت نشد.");
+        // Ensure RLS session GUC matches this request (same DB connection).
+        try {
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+        } catch (\Throwable) {
+            // non-fatal
         }
+
+        $map = [
+            'COMPANY' => ['erp_companies', 'company_id'],
+            'BRANCH' => ['erp_branches', 'branch_id'],
+            'DEPARTMENT' => ['erp_departments', 'department_id'],
+            'WAREHOUSE' => ['inv_warehouses', 'warehouse_id'],
+            'COST_CENTER' => ['erp_cost_centers', 'cost_center_id'],
+            'BUSINESS_UNIT' => ['erp_business_units', 'business_unit_id'],
+        ];
+
+        if (!isset($map[$type])) {
+            return;
+        }
+
+        [$table, $pk] = $map[$type];
+
+        $tables = [$table];
+        if ($type === 'COST_CENTER') {
+            $tables[] = 'cost_centers';
+        }
+
+        $found = false;
+        $softDeleted = false;
+
+        foreach ($tables as $tbl) {
+            if (! Schema::hasTable($tbl)) {
+                continue;
+            }
+            if (! Schema::hasColumn($tbl, $pk)) {
+                continue;
+            }
+
+            $base = DB::table($tbl)
+                ->where('tenant_id', $tenantId)
+                ->where($pk, $referenceId);
+
+            $active = clone $base;
+            if (Schema::hasColumn($tbl, 'deleted_at')) {
+                $active->whereNull('deleted_at');
+            }
+
+            if ($active->exists()) {
+                $found = true;
+                break;
+            }
+
+            if (Schema::hasColumn($tbl, 'deleted_at') && $base->exists()) {
+                $softDeleted = true;
+            }
+        }
+
+        if ($found) {
+            return;
+        }
+
+        if ($softDeleted) {
+            throw new Exception("موجودیت مرجع برای نوع {$type} حذف شده است و قابل استفاده به‌عنوان محدوده نیست.");
+        }
+
+        throw new Exception(
+            "موجودیت مرجع انتخاب‌شده برای نوع {$type} در این سازمان یافت نشد. (شناسه: {$referenceId})"
+        );
     }
 
     private function getTenantId(): string
