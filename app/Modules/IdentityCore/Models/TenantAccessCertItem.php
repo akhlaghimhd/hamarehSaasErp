@@ -29,6 +29,9 @@ class TenantAccessCertItem extends Model
         'tenant_user_id',
         'user_id',
         'role_ids_snapshot',
+        'sod_has_block',
+        'sod_has_warn',
+        'sod_conflicts',
         'decision',
         'reviewer_user_id',
         'decided_at',
@@ -43,6 +46,9 @@ class TenantAccessCertItem extends Model
     {
         return [
             'role_ids_snapshot' => 'array',
+            'sod_conflicts'     => 'array',
+            'sod_has_block'     => 'boolean',
+            'sod_has_warn'      => 'boolean',
             'decided_at'        => 'datetime',
             'row_version'       => 'integer',
             'created_at'        => 'datetime',
