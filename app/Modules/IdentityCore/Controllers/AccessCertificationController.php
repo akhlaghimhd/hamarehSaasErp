@@ -64,6 +64,15 @@ class AccessCertificationController extends Controller
         return response()->json(['data' => $campaign]);
     }
 
+    public function reEvaluate(Request $request, string $id): JsonResponse
+    {
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        $result = $this->cert->reEvaluateCampaign($tenantId, $id, $actor);
+
+        return response()->json(['data' => $result]);
+    }
+
     public function items(Request $request, string $id): JsonResponse
     {
         $tenantId = $this->tenantId($request);
