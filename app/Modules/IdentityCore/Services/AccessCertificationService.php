@@ -89,7 +89,7 @@ class AccessCertificationService
             $campaign = $this->getCampaign($tenantId, $campaignId);
 
             if ($campaign->status !== TenantAccessCertCampaign::STATUS_DRAFT) {
-                throw new HttpException(422, 'فقط کمپین در وضعیت DRAFT قابل باز شدن است.');
+                throw new HttpException(422, 'فقط کمپین در وضعیت پیش‌نویس قابل باز شدن است.');
             }
 
             $sod = app(SodService::class);
@@ -170,7 +170,7 @@ class AccessCertificationService
             TenantAccessCertItem::DECISION_DEFERRED,
         ];
         if (!in_array($decision, $allowed, true)) {
-            throw new HttpException(422, 'decision باید APPROVED، REVOKE_REQUESTED یا DEFERRED باشد.');
+            throw new HttpException(422, 'تصمیم باید تأیید، درخواست لغو نقش یا موکول باشد.');
         }
 
         return DB::transaction(function () use ($tenantId, $itemId, $decision, $reviewerUserId, $note) {
@@ -210,18 +210,23 @@ class AccessCertificationService
             $campaign = $this->getCampaign($tenantId, $campaignId);
 
             if ($campaign->status !== TenantAccessCertCampaign::STATUS_OPEN) {
-                throw new HttpException(422, 'فقط کمپین OPEN قابل تکمیل است.');
+                throw new HttpException(422, 'فقط کمپین باز قابل تکمیل است.');
             }
 
-            $pending = TenantAccessCertItem::query()
+            $pendingItems = TenantAccessCertItem::query()
                 ->where('tenant_id', $tenantId)
                 ->where('campaign_id', $campaignId)
                 ->where('decision', TenantAccessCertItem::DECISION_PENDING)
                 ->whereNull('deleted_at')
-                ->count();
+                ->get(['item_id', 'user_id', 'tenant_user_id']);
+
+            $pending = $pendingItems->count();
 
             if ($pending > 0) {
-                throw new HttpException(422, "هنوز {$pending} آیتم در وضعیت PENDING است.");
+                throw new HttpException(
+                    422,
+                    "هنوز {$pending} عضو بدون تصمیم (در انتظار بررسی) باقی مانده است. ابتدا برای همهٔ ردیف‌ها یکی از گزینه‌های تأیید، درخواست لغو نقش یا موکول را بزنید، سپس کمپین را تکمیل کنید."
+                );
             }
 
             $campaign->status = TenantAccessCertCampaign::STATUS_COMPLETED;
