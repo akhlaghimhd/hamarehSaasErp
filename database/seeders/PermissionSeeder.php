@@ -88,6 +88,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'identity.membership_history.view', 'name' => 'مشاهده تاریخچه عضویت', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
             ['code' => 'identity.sod.view', 'name' => 'مشاهده قوانین تفکیک وظایف', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
             ['code' => 'identity.sod.manage', 'name' => 'مدیریت قوانین تفکیک وظایف', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.system_notification.receive', 'name' => 'دریافت پیام‌های سیستمی', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.mfa.manage', 'name' => 'مدیریت احراز هویت چندمرحله‌ای', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.access_cert.view', 'name' => 'مشاهده گواهی دسترسی', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
             ['code' => 'identity.access_cert.manage', 'name' => 'مدیریت کمپین گواهی دسترسی', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
