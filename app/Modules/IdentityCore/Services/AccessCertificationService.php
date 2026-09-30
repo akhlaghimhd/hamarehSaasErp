@@ -11,9 +11,9 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * ID-W2-01 — Access Certification campaigns (foundation).
+ * ID-W2-01 — Access Certification campaigns.
  *
- * Lifecycle: DRAFT → open (snapshot members) → certify items → COMPLETED.
+ * Lifecycle: DRAFT → open (snapshot members + SoD evaluate) → certify items → COMPLETED.
  * REVOKE_REQUESTED records intent; actual role strip is a follow-up action (not auto).
  */
 class AccessCertificationService
@@ -81,7 +81,7 @@ class AccessCertificationService
     }
 
     /**
-     * Open campaign and generate one item per active membership.
+     * Open campaign, snapshot roles per member, and evaluate active SoD rules.
      */
     public function openCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
     {
@@ -91,6 +91,8 @@ class AccessCertificationService
             if ($campaign->status !== TenantAccessCertCampaign::STATUS_DRAFT) {
                 throw new HttpException(422, 'فقط کمپین در وضعیت DRAFT قابل باز شدن است.');
             }
+
+            $sod = app(SodService::class);
 
             $members = TenantUser::withoutGlobalScopes()
                 ->where('tenant_id', $tenantId)
@@ -103,8 +105,11 @@ class AccessCertificationService
                     ->where('tenant_id', $tenantId)
                     ->where('user_id', $member->user_id)
                     ->pluck('tenant_role_id')
+                    ->map(fn ($id) => (string) $id)
                     ->values()
                     ->all();
+
+                $eval = $sod->evaluateRoleSet($tenantId, $roleIds);
 
                 TenantAccessCertItem::create([
                     'item_id'           => (string) Str::uuid(),
@@ -113,6 +118,9 @@ class AccessCertificationService
                     'tenant_user_id'    => $member->tenant_user_id,
                     'user_id'           => $member->user_id,
                     'role_ids_snapshot' => $roleIds,
+                    'sod_has_block'     => (bool) ($eval['has_block'] ?? false),
+                    'sod_has_warn'      => (bool) ($eval['has_warn'] ?? false),
+                    'sod_conflicts'     => $eval['conflicts'] ?? [],
                     'decision'          => TenantAccessCertItem::DECISION_PENDING,
                     'created_by'        => $actorId,
                     'row_version'       => 1,
@@ -137,6 +145,8 @@ class AccessCertificationService
             ->where('tenant_id', $tenantId)
             ->where('campaign_id', $campaignId)
             ->whereNull('deleted_at')
+            ->orderByDesc('sod_has_block')
+            ->orderByDesc('sod_has_warn')
             ->orderBy('created_at');
 
         if ($decision) {
@@ -241,6 +251,8 @@ class AccessCertificationService
                 'approved'         => $items->where('decision', TenantAccessCertItem::DECISION_APPROVED)->count(),
                 'revoke_requested' => $items->where('decision', TenantAccessCertItem::DECISION_REVOKE_REQUESTED)->count(),
                 'deferred'         => $items->where('decision', TenantAccessCertItem::DECISION_DEFERRED)->count(),
+                'sod_block'        => $items->where('sod_has_block', true)->count(),
+                'sod_warn'         => $items->where('sod_has_warn', true)->count(),
             ],
         ];
     }
