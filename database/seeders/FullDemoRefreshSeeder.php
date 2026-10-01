@@ -9,23 +9,19 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * Full demo refresh for Identity + Organization QA.
- *
- * Large tenant (demo): rich org (≥5 per box) + ~260 users with mixed single/multi roles,
- * intentional SoD conflicts (direct DB assign bypasses assertAssignable).
- *
- * Small tenant (small-co): single company, 28 users, heavy multi-role (high conflict density).
+ * Wipe users/roles/org (KEEP permissions) then seed:
+ * - LARGE demo tenant: rich org + ~260 members + mixed roles + intentional SoD conflicts
+ * - SMALL tenant: single company + ~28 multi-role members (high conflict density)
  *
  *   docker compose exec app php artisan db:seed --class=FullDemoRefreshSeeder
  *
- * Login large: owner@demo.local / Owner123!
- * Login small: owner.small@demo.local / Owner123!
- * Staff password: Staff123!
+ * Large: owner@demo.local / Owner123!
+ * Small: owner.small@demo.local / Owner123!
+ * Staff: Staff123!
  */
 class FullDemoRefreshSeeder extends Seeder
 {
     private const LARGE_TENANT_ID = '3ab77cac-1343-4b13-8e14-0d887aad132a';
-    private const SYSTEM_TENANT_ID = '00000000-0000-0000-0000-000000000001';
     private const SMALL_TENANT_ID = 'a1111111-2222-3333-4444-555555555555';
 
     private const STAFF_PASSWORD = 'Staff123!';
@@ -44,9 +40,7 @@ class FullDemoRefreshSeeder extends Seeder
         'کاظمی', 'شریفی', 'مرادی', 'یوسفی', 'باقری', 'طاهری', 'قاسمی', 'نجفی', 'زمانی', 'فرهادی',
     ];
 
-    /**
-     * @var list<array{0:string,1:string}>
-     */
+    /** @var list<array{0:string,1:string}> */
     private array $conflictPairs = [
         ['accountant', 'purchase'],
         ['accountant-senior', 'purchase-manager'],
@@ -63,28 +57,37 @@ class FullDemoRefreshSeeder extends Seeder
     public function run(): void
     {
         $this->command?->info('=== FullDemoRefreshSeeder START ===');
+        $this->command?->warn('Permissions are KEPT. Users, roles, scopes, SoD, access-cert, org structure will be wiped for demo tenants.');
 
         $this->ensureTenants();
 
+        // Ensure permission catalog exists (does not wipe)
         $this->call(PermissionSeeder::class);
+
+        foreach ([self::LARGE_TENANT_ID, self::SMALL_TENANT_ID] as $tid) {
+            $this->wipeTenantExceptPermissions($tid);
+        }
+
+        // Rebuild roles + SoD from catalog (permissions already present)
         $this->call(TenantDefaultRbacSeeder::class);
         $this->call(AccessCertPermissionSeeder::class);
 
-        $this->purgeTenantIdentity(self::LARGE_TENANT_ID);
+        // LARGE: owner + rich org + mass users
         $this->call(DemoTenantOwnerSeeder::class);
         $this->call(AriaSanatDemoOrgSeeder::class);
         $this->enableOrgFeaturePacks(self::LARGE_TENANT_ID);
-        $this->seedMassUsers(self::LARGE_TENANT_ID, targetCount: 260, multiRoleBias: 0.35, conflictRate: 0.22);
+        $this->seedMassUsers(self::LARGE_TENANT_ID, 260, 0.35, 0.25, 'staff');
 
-        $this->purgeTenantIdentity(self::SMALL_TENANT_ID);
+        // SMALL: owner + single HQ + multi-role heavy
         $this->bootstrapSmallTenant();
-        $this->seedMassUsers(self::SMALL_TENANT_ID, targetCount: 28, multiRoleBias: 0.95, conflictRate: 0.55, emailPrefix: 'small');
+        $this->seedMassUsers(self::SMALL_TENANT_ID, 28, 0.95, 0.55, 'small');
 
         $this->printSummary();
         $this->command?->info('=== FullDemoRefreshSeeder DONE ===');
-        $this->command?->info('Large login: owner@demo.local / Owner123!');
-        $this->command?->info('Small login: owner.small@demo.local / Owner123!');
-        $this->command?->info('Staff password: Staff123!');
+        $this->command?->info('Large: owner@demo.local / Owner123!');
+        $this->command?->info('Small: owner.small@demo.local / Owner123!');
+        $this->command?->info('Staff: Staff123!');
+        $this->command?->warn('Re-login required after seed.');
     }
 
     private function ensureTenants(): void
@@ -120,6 +123,98 @@ class FullDemoRefreshSeeder extends Seeder
         }
     }
 
+    /**
+     * Hard wipe identity+org for tenant. NEVER touches tenant_permissions.
+     */
+    private function wipeTenantExceptPermissions(string $tenantId): void
+    {
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
+
+        try {
+            DB::statement('SET LOCAL row_security = off');
+        } catch (\Throwable) {
+        }
+
+        $fkRelaxed = false;
+        try {
+            DB::statement("SET session_replication_role = 'replica'");
+            $fkRelaxed = true;
+        } catch (\Throwable $e) {
+            $this->command?->warn('Could not set session_replication_role: '.$e->getMessage());
+        }
+
+        // NEVER include tenant_permissions
+        $tables = [
+            'tenant_access_cert_items',
+            'tenant_access_cert_campaigns',
+            'tenant_access_cert_settings',
+            'tenant_membership_histories',
+            'tenant_user_scopes',
+            'tenant_scopes',
+            'tenant_sod_rules',
+            'tenant_privileged_access_requests',
+            'tenant_privileged_access_grants',
+            'tenant_role_assignment_requests',
+            'tenant_user_roles',
+            'tenant_role_permissions',
+            'tenant_roles',
+            'tenant_users',
+            'erp_org_hierarchy_nodes',
+            'erp_org_hierarchies',
+            'erp_company_ownerships',
+            'erp_company_bank_accounts',
+            'erp_company_officers',
+            'erp_company_fiscal_assignments',
+            'erp_business_unit_companies',
+            'erp_branch_warehouse_maps',
+            'erp_ic_partners',
+            'erp_ic_rules',
+            'erp_sales_orgs',
+            'erp_purch_orgs',
+            'erp_cost_centers',
+            'erp_departments',
+            'erp_business_units',
+            'erp_branches',
+            'erp_companies',
+        ];
+
+        foreach ($tables as $table) {
+            if (!Schema::hasTable($table) || !Schema::hasColumn($table, 'tenant_id')) {
+                continue;
+            }
+            try {
+                $n = DB::affectingStatement("DELETE FROM {$table} WHERE tenant_id = ?", [$tenantId]);
+                $this->command?->info("  wipe {$table}: {$n}");
+            } catch (\Throwable $e) {
+                $this->command?->warn("  wipe {$table} failed: ".$e->getMessage());
+                if (Schema::hasColumn($table, 'deleted_at')) {
+                    try {
+                        $n = DB::table($table)->where('tenant_id', $tenantId)->update([
+                            'deleted_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                        $this->command?->info("  soft-wipe {$table}: {$n}");
+                    } catch (\Throwable $e2) {
+                        $this->command?->warn("  soft-wipe {$table} failed: ".$e2->getMessage());
+                    }
+                }
+            }
+        }
+
+        if ($fkRelaxed) {
+            try {
+                DB::statement("SET session_replication_role = 'origin'");
+            } catch (\Throwable) {
+            }
+        }
+
+        $permCount = (int) DB::table('tenant_permissions')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->count();
+        $this->command?->info("Tenant {$tenantId} wipe done. permissions still={$permCount}");
+    }
+
     private function enableOrgFeaturePacks(string $tenantId): void
     {
         try {
@@ -130,72 +225,6 @@ class FullDemoRefreshSeeder extends Seeder
         } catch (\Throwable $e) {
             $this->command?->warn('Feature pack enable skipped: '.$e->getMessage());
         }
-    }
-
-    /**
-     * Clear memberships / role links / cert data for a tenant.
-     * Prefer hard delete in FK-safe order; fall back to soft-delete on failure.
-     */
-    private function purgeTenantIdentity(string $tenantId): void
-    {
-        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
-
-        // Best-effort: seeder often runs as a role that can relax RLS for maintenance.
-        try {
-            DB::statement('SET LOCAL row_security = off');
-        } catch (\Throwable $e) {
-            // ignore if not permitted
-        }
-
-        // Child → parent order (only tables that exist).
-        $deleteOrder = [
-            'tenant_access_cert_items',
-            'tenant_access_cert_campaigns',
-            'tenant_access_cert_settings',
-            'tenant_membership_histories',
-            'membership_histories',
-            'tenant_user_membership_histories',
-            'tenant_user_scopes',
-            'tenant_role_assignment_requests',
-            'tenant_privileged_access_requests',
-            'tenant_user_roles',
-            'tenant_users',
-        ];
-
-        foreach ($deleteOrder as $table) {
-            if (!Schema::hasTable($table)) {
-                continue;
-            }
-            if (!Schema::hasColumn($table, 'tenant_id')) {
-                continue;
-            }
-
-            try {
-                // Raw delete avoids some query-builder / global-scope surprises.
-                $affected = DB::affectingStatement(
-                    "DELETE FROM {$table} WHERE tenant_id = ?",
-                    [$tenantId]
-                );
-                $this->command?->info("  purge {$table}: deleted {$affected}");
-            } catch (\Throwable $e) {
-                $this->command?->warn("  hard delete {$table} failed: ".$e->getMessage());
-
-                // Soft-delete fallback when available.
-                if (Schema::hasColumn($table, 'deleted_at')) {
-                    try {
-                        $affected = DB::table($table)
-                            ->where('tenant_id', $tenantId)
-                            ->whereNull('deleted_at')
-                            ->update(['deleted_at' => now(), 'updated_at' => now()]);
-                        $this->command?->info("  soft-delete {$table}: {$affected}");
-                    } catch (\Throwable $e2) {
-                        $this->command?->warn("  soft-delete {$table} also failed: ".$e2->getMessage());
-                    }
-                }
-            }
-        }
-
-        $this->command?->info("Purged identity data for tenant {$tenantId}");
     }
 
     private function bootstrapSmallTenant(): void
@@ -233,83 +262,58 @@ class FullDemoRefreshSeeder extends Seeder
 
         $userId = $this->upsertUser('owner.small@demo.local', '09120000001', 'مالک', 'شرکت‌کوچک');
         $this->upsertCredential($userId, self::OWNER_PASSWORD);
-        $this->upsertMembership($tenantId, $userId, isOwner: true);
+        $this->upsertMembership($tenantId, $userId, true);
         $adminRoleId = $this->roleIdByCode($tenantId, 'tenant-admin');
         if ($adminRoleId) {
             $this->assignRoleDb($tenantId, $userId, $adminRoleId);
         }
 
         if (Schema::hasTable('erp_companies')) {
-            $companyId = null;
-            $existing = DB::table('erp_companies')
-                ->where('tenant_id', $tenantId)
-                ->whereNull('deleted_at')
-                ->orderBy('created_at')
-                ->first();
-            if ($existing) {
-                $companyId = (string) $existing->company_id;
-                $upd = ['name' => 'شرکت کوچک نمونه', 'updated_at' => now()];
-                if (Schema::hasColumn('erp_companies', 'is_primary')) {
-                    $upd['is_primary'] = true;
-                }
-                if (Schema::hasColumn('erp_companies', 'legal_name')) {
-                    $upd['legal_name'] = 'شرکت کوچک نمونه';
-                }
-                DB::table('erp_companies')->where('company_id', $companyId)->update($upd);
-            } else {
-                $companyId = (string) Str::uuid();
-                $row = [
-                    'company_id' => $companyId,
+            $companyId = (string) Str::uuid();
+            $row = [
+                'company_id' => $companyId,
+                'tenant_id' => $tenantId,
+                'code' => 'HQ',
+                'name' => 'شرکت کوچک نمونه',
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+                'row_version' => 1,
+            ];
+            if (Schema::hasColumn('erp_companies', 'legal_name')) {
+                $row['legal_name'] = 'شرکت کوچک نمونه';
+            }
+            if (Schema::hasColumn('erp_companies', 'is_primary')) {
+                $row['is_primary'] = true;
+            }
+            if (Schema::hasColumn('erp_companies', 'entity_kind')) {
+                $row['entity_kind'] = 'OPERATING';
+            }
+            if (Schema::hasColumn('erp_companies', 'status')) {
+                $row['status'] = 1;
+            }
+            DB::table('erp_companies')->insert($row);
+
+            if (Schema::hasTable('erp_branches')) {
+                $br = [
+                    'branch_id' => (string) Str::uuid(),
                     'tenant_id' => $tenantId,
+                    'company_id' => $companyId,
                     'code' => 'HQ',
-                    'name' => 'شرکت کوچک نمونه',
+                    'name' => 'دفتر مرکزی',
                     'is_active' => true,
+                    'row_version' => 1,
                     'created_at' => now(),
                     'updated_at' => now(),
-                    'row_version' => 1,
                 ];
-                if (Schema::hasColumn('erp_companies', 'legal_name')) {
-                    $row['legal_name'] = 'شرکت کوچک نمونه';
+                if (Schema::hasColumn('erp_branches', 'branch_kind')) {
+                    $br['branch_kind'] = 'OFFICE';
                 }
-                if (Schema::hasColumn('erp_companies', 'is_primary')) {
-                    $row['is_primary'] = true;
-                }
-                if (Schema::hasColumn('erp_companies', 'entity_kind')) {
-                    $row['entity_kind'] = 'OPERATING';
-                }
-                if (Schema::hasColumn('erp_companies', 'status')) {
-                    $row['status'] = 1;
-                }
-                DB::table('erp_companies')->insert($row);
-            }
-
-            if (Schema::hasTable('erp_branches') && $companyId) {
-                $br = DB::table('erp_branches')
-                    ->where('tenant_id', $tenantId)
-                    ->where('company_id', $companyId)
-                    ->whereNull('deleted_at')
-                    ->first();
-                if (!$br) {
-                    $brRow = [
-                        'branch_id' => (string) Str::uuid(),
-                        'tenant_id' => $tenantId,
-                        'company_id' => $companyId,
-                        'code' => 'HQ',
-                        'name' => 'دفتر مرکزی',
-                        'is_active' => true,
-                        'row_version' => 1,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ];
-                    if (Schema::hasColumn('erp_branches', 'branch_kind')) {
-                        $brRow['branch_kind'] = 'OFFICE';
-                    }
-                    DB::table('erp_branches')->insert($brRow);
-                }
+                DB::table('erp_branches')->insert($br);
             }
         }
 
-        $this->command?->info('Small tenant bootstrapped: '.$tenantId);
+        $this->command?->info('Small tenant bootstrapped');
     }
 
     private function seedMassUsers(
@@ -317,7 +321,7 @@ class FullDemoRefreshSeeder extends Seeder
         int $targetCount,
         float $multiRoleBias,
         float $conflictRate,
-        string $emailPrefix = 'staff'
+        string $emailPrefix
     ): void {
         DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
@@ -325,10 +329,10 @@ class FullDemoRefreshSeeder extends Seeder
             ->where('tenant_id', $tenantId)
             ->whereNull('deleted_at')
             ->where('status', 1)
-            ->get(['tenant_role_id', 'code', 'name']);
+            ->get(['tenant_role_id', 'code']);
 
         if ($roles->isEmpty()) {
-            $this->command?->warn("No roles for {$tenantId} — skip mass users");
+            $this->command?->error("No roles for {$tenantId} after bootstrap — cannot seed users");
 
             return;
         }
@@ -342,37 +346,37 @@ class FullDemoRefreshSeeder extends Seeder
 
         $i = 0;
         foreach ($roles as $r) {
-            $i++;
             $code = (string) $r->code;
             if ($code === 'tenant-admin') {
                 continue;
             }
+            $i++;
             $email = sprintf('%s.%s.%03d@demo.local', $emailPrefix, preg_replace('/[^a-z0-9]+/i', '', $code), $i);
             $fn = $this->firstNames[$i % count($this->firstNames)];
             $ln = $this->lastNames[$i % count($this->lastNames)];
-            $mobile = sprintf('09%09d', 120000000 + $i + (abs(crc32($tenantId)) % 100000));
-            $userId = $this->upsertUser($email, $mobile, $fn, $ln.'-'.$code);
+            $mobile = sprintf('09%09d', 300000000 + $i + (abs(crc32($tenantId.$emailPrefix)) % 90000));
+            $userId = $this->upsertUser($email, $mobile, $fn, $ln);
             $this->upsertCredential($userId, self::STAFF_PASSWORD);
-            $this->upsertMembership($tenantId, $userId, isOwner: false);
+            $this->upsertMembership($tenantId, $userId, false);
             $this->assignRoleDb($tenantId, $userId, (string) $r->tenant_role_id);
         }
 
         $current = (int) DB::table('tenant_users')->where('tenant_id', $tenantId)->whereNull('deleted_at')->count();
-        $created = 0;
         $conflictsForced = 0;
+        $created = 0;
 
         for ($n = $current + 1; $n <= $targetCount; $n++) {
             $email = sprintf('%s.u%04d@demo.local', $emailPrefix, $n);
             $fn = $this->firstNames[$n % count($this->firstNames)];
-            $ln = $this->lastNames[($n * 3) % count($this->lastNames)];
-            $mobile = sprintf('09%09d', 200000000 + $n + (abs(crc32($tenantId.$emailPrefix)) % 50000));
+            $ln = $this->lastNames[($n * 7) % count($this->lastNames)];
+            $mobile = sprintf('09%09d', 400000000 + $n + (abs(crc32($tenantId)) % 80000));
             $userId = $this->upsertUser($email, $mobile, $fn, $ln);
             $this->upsertCredential($userId, self::STAFF_PASSWORD);
-            $this->upsertMembership($tenantId, $userId, isOwner: false);
+            $this->upsertMembership($tenantId, $userId, false);
 
             $assigned = [];
 
-            if (mt_rand() / mt_getrandmax() < $conflictRate) {
+            if ((mt_rand() / mt_getrandmax()) < $conflictRate) {
                 $pair = $this->conflictPairs[$n % count($this->conflictPairs)];
                 foreach ($pair as $code) {
                     if (isset($roleByCode[$code])) {
@@ -391,11 +395,12 @@ class FullDemoRefreshSeeder extends Seeder
                 $assigned[$rid] = true;
             }
 
-            if (mt_rand() / mt_getrandmax() < $multiRoleBias) {
+            if ((mt_rand() / mt_getrandmax()) < $multiRoleBias) {
                 $extra = mt_rand(1, min(4, count($roleIds)));
-                shuffle($roleIds);
+                $shuffled = $roleIds;
+                shuffle($shuffled);
                 $added = 0;
-                foreach ($roleIds as $rid) {
+                foreach ($shuffled as $rid) {
                     if (isset($assigned[$rid])) {
                         continue;
                     }
@@ -407,15 +412,14 @@ class FullDemoRefreshSeeder extends Seeder
                     }
                 }
             }
-
             $created++;
         }
 
         $this->ensureAllPermissionsUsed($tenantId, $roleByCode);
 
         $members = (int) DB::table('tenant_users')->where('tenant_id', $tenantId)->whereNull('deleted_at')->count();
-        $assignments = (int) DB::table('tenant_user_roles')->where('tenant_id', $tenantId)->whereNull('deleted_at')->count();
-        $this->command?->info("Tenant {$tenantId}: members={$members} role_links={$assignments} forced_conflict_users≈{$conflictsForced} new≈{$created}");
+        $links = (int) DB::table('tenant_user_roles')->where('tenant_id', $tenantId)->whereNull('deleted_at')->count();
+        $this->command?->info("Tenant {$tenantId}: members={$members} role_links={$links} conflict_users≈{$conflictsForced} filled+={$created}");
     }
 
     /** @param array<string, string> $roleByCode */
@@ -425,7 +429,7 @@ class FullDemoRefreshSeeder extends Seeder
             return;
         }
 
-        $allPermIds = DB::table('tenant_permissions')
+        $all = DB::table('tenant_permissions')
             ->where('tenant_id', $tenantId)
             ->whereNull('deleted_at')
             ->where('status', 1)
@@ -440,44 +444,34 @@ class FullDemoRefreshSeeder extends Seeder
             ->unique()
             ->all();
 
-        $missing = array_values(array_diff($allPermIds, $used));
+        $missing = array_values(array_diff($all, $used));
         if ($missing === []) {
             return;
         }
 
-        $targetRoleId = $roleByCode['tenant-admin']
+        $target = $roleByCode['tenant-admin']
             ?? $roleByCode['identity-manager']
-            ?? (DB::table('tenant_roles')->where('tenant_id', $tenantId)->whereNull('deleted_at')->value('tenant_role_id'));
+            ?? (string) DB::table('tenant_roles')->where('tenant_id', $tenantId)->whereNull('deleted_at')->value('tenant_role_id');
 
-        if (!$targetRoleId) {
+        if (!$target) {
             return;
         }
 
         $rows = [];
         foreach ($missing as $pid) {
-            $exists = DB::table('tenant_role_permissions')
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_role_id', $targetRoleId)
-                ->where('tenant_permission_id', $pid)
-                ->exists();
-            if ($exists) {
-                continue;
-            }
             $rows[] = [
                 'tenant_role_permission_id' => (string) Str::uuid(),
                 'tenant_id' => $tenantId,
-                'tenant_role_id' => (string) $targetRoleId,
+                'tenant_role_id' => $target,
                 'tenant_permission_id' => $pid,
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
         }
-        foreach (array_chunk($rows, 100) as $chunk) {
+        foreach (array_chunk($rows, 80) as $chunk) {
             DB::table('tenant_role_permissions')->insert($chunk);
         }
-        if ($rows !== []) {
-            $this->command?->info('Attached '.count($rows)." unused permissions to role {$targetRoleId}");
-        }
+        $this->command?->info('Attached '.count($rows)." unused perms to tenant-admin on {$tenantId}");
     }
 
     private function upsertUser(string $email, string $mobile, string $first, string $last): string
@@ -587,12 +581,12 @@ class FullDemoRefreshSeeder extends Seeder
 
     private function assignRoleDb(string $tenantId, string $userId, string $roleId): void
     {
-        $q = DB::table('tenant_user_roles')
+        $existing = DB::table('tenant_user_roles')
             ->where('tenant_id', $tenantId)
             ->where('user_id', $userId)
-            ->where('tenant_role_id', $roleId);
+            ->where('tenant_role_id', $roleId)
+            ->first();
 
-        $existing = $q->first();
         if ($existing) {
             if (Schema::hasColumn('tenant_user_roles', 'deleted_at') && !empty($existing->deleted_at)) {
                 DB::table('tenant_user_roles')
@@ -617,22 +611,19 @@ class FullDemoRefreshSeeder extends Seeder
     private function printSummary(): void
     {
         foreach ([self::LARGE_TENANT_ID => 'LARGE', self::SMALL_TENANT_ID => 'SMALL'] as $tid => $label) {
-            $members = Schema::hasTable('tenant_users')
-                ? (int) DB::table('tenant_users')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
-                : 0;
-            $roles = Schema::hasTable('tenant_roles')
-                ? (int) DB::table('tenant_roles')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
-                : 0;
-            $perms = Schema::hasTable('tenant_permissions')
-                ? (int) DB::table('tenant_permissions')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
-                : 0;
+            $members = (int) DB::table('tenant_users')->where('tenant_id', $tid)->whereNull('deleted_at')->count();
+            $roles = (int) DB::table('tenant_roles')->where('tenant_id', $tid)->whereNull('deleted_at')->count();
+            $perms = (int) DB::table('tenant_permissions')->where('tenant_id', $tid)->whereNull('deleted_at')->count();
             $companies = Schema::hasTable('erp_companies')
                 ? (int) DB::table('erp_companies')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
                 : 0;
             $branches = Schema::hasTable('erp_branches')
                 ? (int) DB::table('erp_branches')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
                 : 0;
-            $this->command?->info("[{$label}] members={$members} roles={$roles} perms={$perms} companies={$companies} branches={$branches}");
+            $sod = Schema::hasTable('tenant_sod_rules')
+                ? (int) DB::table('tenant_sod_rules')->where('tenant_id', $tid)->whereNull('deleted_at')->count()
+                : 0;
+            $this->command?->info("[{$label}] members={$members} roles={$roles} perms={$perms} companies={$companies} branches={$branches} sod={$sod}");
         }
     }
 }
