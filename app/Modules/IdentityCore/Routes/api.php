@@ -147,6 +147,10 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.privileged.approve');
             Route::post('/{id}/extend', [PrivilegedAccessController::class, 'extend'])
                 ->middleware('permission:identity.privileged.approve');
+            Route::post('/{id}/reactivate', [PrivilegedAccessController::class, 'reactivate'])
+                ->middleware('permission:identity.privileged.approve');
+            Route::put('/{id}', [PrivilegedAccessController::class, 'update'])
+                ->middleware('permission:identity.privileged.approve');
             Route::post('/mark-role', [PrivilegedAccessController::class, 'markRole'])
                 ->middleware('permission:identity.privileged.approve');
         });
