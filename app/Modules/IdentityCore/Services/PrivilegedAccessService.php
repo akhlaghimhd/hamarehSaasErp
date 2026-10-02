@@ -20,8 +20,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * Active grants materialize as tenant_user_roles rows for the duration;
  * revoke/expire removes that assignment.
  *
- * SoD: approver must not be the requester or the beneficiary (no self-approve),
- * except tenant owners (is_owner) who may approve any pending grant including their own.
+ * SoD: non-owner may not approve a grant where they are the beneficiary (user_id).
+ * Requesting a grant for another user and then approving it is allowed (admin workflow).
+ * Tenant owners (is_owner) may approve any pending grant including their own.
  */
 class PrivilegedAccessService
 {
@@ -315,16 +316,21 @@ class PrivilegedAccessService
         string $approverUserId,
         string $tenantId
     ): void {
+        // Only block when the approver is the beneficiary (self-grant).
+        // Requesting for another user and approving is a normal admin workflow.
+        if ($approverUserId !== (string) $grant->user_id) {
+            return;
+        }
+
+        // Beneficiary is approving their own grant → only tenant owner may do this.
         if ($this->isTenantOwner($tenantId, $approverUserId)) {
             return;
         }
 
-        if ($approverUserId === (string) $grant->user_id) {
-            throw new HttpException(422, 'تأیید دسترسی اضطراری برای خودتان مجاز نیست (مگر مالک سازمان).');
-        }
-        if ($grant->requested_by && $approverUserId === (string) $grant->requested_by) {
-            throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند همان درخواست را تأیید کند (مگر مالک سازمان).');
-        }
+        throw new HttpException(
+            422,
+            'تأیید دسترسی اضطراری برای خودتان مجاز نیست (مگر مالک سازمان).'
+        );
     }
 
     private function isTenantOwner(string $tenantId, string $userId): bool
