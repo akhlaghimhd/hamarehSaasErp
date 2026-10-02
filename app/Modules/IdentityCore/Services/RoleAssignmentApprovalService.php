@@ -12,7 +12,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * ID-W3-02 — Request / approve / reject role assignments.
- * Privileged roles always require approval; non-privileged can still be requested.
+ * Supports GRANT and REVOKE so existing access stays active until revoke is approved.
  */
 class RoleAssignmentApprovalService
 {
@@ -38,8 +38,17 @@ class RoleAssignmentApprovalService
         string $requestedBy,
         ?string $reason = null,
         ?string $validFrom = null,
-        ?string $validTo = null
+        ?string $validTo = null,
+        string $requestAction = TenantRoleAssignmentRequest::ACTION_GRANT
     ): TenantRoleAssignmentRequest {
+        $requestAction = strtoupper($requestAction);
+        if (!in_array($requestAction, [
+            TenantRoleAssignmentRequest::ACTION_GRANT,
+            TenantRoleAssignmentRequest::ACTION_REVOKE,
+        ], true)) {
+            throw new HttpException(422, 'نوع درخواست نامعتبر است.');
+        }
+
         $role = TenantRole::query()
             ->where('tenant_id', $tenantId)
             ->where('tenant_role_id', $roleId)
@@ -52,8 +61,10 @@ class RoleAssignmentApprovalService
 
         $this->validity->assertValidWindow($validFrom, $validTo);
 
-        $existing = $this->validity->effectiveRoleIds($tenantId, $userId);
-        $this->sod->assertAssignable($tenantId, array_values(array_unique(array_merge($existing, [$roleId]))));
+        if ($requestAction === TenantRoleAssignmentRequest::ACTION_GRANT) {
+            $existing = $this->validity->effectiveRoleIds($tenantId, $userId);
+            $this->sod->assertAssignable($tenantId, array_values(array_unique(array_merge($existing, [$roleId]))));
+        }
 
         $pendingExists = TenantRoleAssignmentRequest::query()
             ->where('tenant_id', $tenantId)
@@ -67,13 +78,14 @@ class RoleAssignmentApprovalService
         }
 
         return DB::transaction(function () use (
-            $tenantId, $userId, $roleId, $requestedBy, $reason, $validFrom, $validTo
+            $tenantId, $userId, $roleId, $requestedBy, $reason, $validFrom, $validTo, $requestAction
         ) {
             $req = TenantRoleAssignmentRequest::create([
                 'request_id'     => (string) Str::uuid(),
                 'tenant_id'      => $tenantId,
                 'user_id'        => $userId,
                 'tenant_role_id' => $roleId,
+                'request_action' => $requestAction,
                 'status'         => TenantRoleAssignmentRequest::STATUS_PENDING,
                 'valid_from'     => $validFrom,
                 'valid_to'       => $validTo,
@@ -87,6 +99,7 @@ class RoleAssignmentApprovalService
                 'request_id'     => $req->request_id,
                 'user_id'        => $userId,
                 'tenant_role_id' => $roleId,
+                'request_action' => $requestAction,
             ]);
 
             return $req;
@@ -118,32 +131,47 @@ class RoleAssignmentApprovalService
                 throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند خودش درخواست را تأیید کند.');
             }
 
-            $existing = $this->validity->effectiveRoleIds($tenantId, $req->user_id);
-            $this->sod->assertAssignable(
-                $tenantId,
-                array_values(array_unique(array_merge($existing, [$req->tenant_role_id])))
-            );
+            $action = strtoupper((string) ($req->request_action ?? TenantRoleAssignmentRequest::ACTION_GRANT));
 
-            $already = DB::table('tenant_user_roles')
-                ->where('tenant_id', $tenantId)
-                ->where('user_id', $req->user_id)
-                ->where('tenant_role_id', $req->tenant_role_id)
-                ->whereNull('deleted_at')
-                ->exists();
+            if ($action === TenantRoleAssignmentRequest::ACTION_REVOKE) {
+                DB::table('tenant_user_roles')
+                    ->where('tenant_id', $tenantId)
+                    ->where('user_id', $req->user_id)
+                    ->where('tenant_role_id', $req->tenant_role_id)
+                    ->whereNull('deleted_at')
+                    ->update([
+                        'deleted_at' => now(),
+                        'deleted_by' => $reviewedBy,
+                        'updated_at' => now(),
+                    ]);
+            } else {
+                $existing = $this->validity->effectiveRoleIds($tenantId, $req->user_id);
+                $this->sod->assertAssignable(
+                    $tenantId,
+                    array_values(array_unique(array_merge($existing, [$req->tenant_role_id])))
+                );
 
-            if (!$already) {
-                DB::table('tenant_user_roles')->insert([
-                    'tenant_user_role_id' => (string) Str::uuid(),
-                    'tenant_id'           => $tenantId,
-                    'user_id'             => $req->user_id,
-                    'tenant_role_id'      => $req->tenant_role_id,
-                    'valid_from'          => $req->valid_from,
-                    'valid_to'            => $req->valid_to,
-                    'created_by'          => $reviewedBy,
-                    'created_at'          => now(),
-                    'updated_at'          => now(),
-                    'row_version'         => 1,
-                ]);
+                $already = DB::table('tenant_user_roles')
+                    ->where('tenant_id', $tenantId)
+                    ->where('user_id', $req->user_id)
+                    ->where('tenant_role_id', $req->tenant_role_id)
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if (!$already) {
+                    DB::table('tenant_user_roles')->insert([
+                        'tenant_user_role_id' => (string) Str::uuid(),
+                        'tenant_id'           => $tenantId,
+                        'user_id'             => $req->user_id,
+                        'tenant_role_id'      => $req->tenant_role_id,
+                        'valid_from'          => $req->valid_from,
+                        'valid_to'            => $req->valid_to,
+                        'created_by'          => $reviewedBy,
+                        'created_at'          => now(),
+                        'updated_at'          => now(),
+                        'row_version'         => 1,
+                    ]);
+                }
             }
 
             $req->update([
@@ -161,6 +189,7 @@ class RoleAssignmentApprovalService
                 'request_id'     => $req->request_id,
                 'user_id'        => $req->user_id,
                 'tenant_role_id' => $req->tenant_role_id,
+                'request_action' => $action,
             ]);
 
             return $req->fresh();
