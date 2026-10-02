@@ -35,13 +35,18 @@ class TenantScope extends Model
     ];
 
     protected $casts = [
-        'is_active'        => 'boolean',
-        'include_subtree'  => 'boolean',
-        'row_version'      => 'integer',
+        'is_active'       => 'boolean',
+        'include_subtree' => 'boolean',
+        'row_version'     => 'integer',
     ];
 
     public function userAssignments(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(TenantUserScope::class, 'scope_id', 'scope_id');
+    }
+
+    public function members(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(TenantScopeMember::class, 'scope_id', 'scope_id');
     }
 }
