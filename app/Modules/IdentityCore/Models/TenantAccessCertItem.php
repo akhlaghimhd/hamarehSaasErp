@@ -13,6 +13,8 @@ class TenantAccessCertItem extends Model
     public const DECISION_APPROVED = 'APPROVED';
     public const DECISION_REVOKE_REQUESTED = 'REVOKE_REQUESTED';
     public const DECISION_DEFERRED = 'DEFERRED';
+    /** Gap was fixed (roles changed) and confirmed on re-evaluate — keep for audit/report. */
+    public const DECISION_RESOLVED = 'RESOLVED';
 
     protected $table = 'tenant_access_cert_items';
 
