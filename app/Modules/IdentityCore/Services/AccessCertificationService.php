@@ -14,27 +14,52 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * Access Certification — gap-focused remediation.
  * open: only SoD issues; reEvaluate: refresh after role fixes.
  * Resolved gaps are KEPT (decision=RESOLVED) so reports remain a full audit trail.
+ * Archive = soft-delete of COMPLETED campaigns (list stays light).
  */
 class AccessCertificationService
 {
-    public function listCampaigns(string $tenantId): Collection
+    /**
+     * @param  string  $scope  active|archived|all
+     */
+    public function listCampaigns(string $tenantId, string $scope = 'active'): Collection
     {
-        return TenantAccessCertCampaign::query()
-            ->where('tenant_id', $tenantId)
-            ->whereNull('deleted_at')
-            ->orderByDesc('created_at')
-            ->get();
+        $scope = strtolower(trim($scope));
+        if (! in_array($scope, ['active', 'archived', 'all'], true)) {
+            $scope = 'active';
+        }
+
+        $q = TenantAccessCertCampaign::query()->where('tenant_id', $tenantId);
+
+        if ($scope === 'archived') {
+            $q->onlyTrashed();
+        } elseif ($scope === 'all') {
+            $q->withTrashed();
+        } else {
+            $q->whereNull('deleted_at');
+        }
+
+        return $q->orderByDesc('created_at')->get()->map(function (TenantAccessCertCampaign $c) {
+            $c->setAttribute('is_archived', $c->trashed());
+
+            return $c;
+        });
     }
 
-    public function getCampaign(string $tenantId, string $campaignId): TenantAccessCertCampaign
+    public function getCampaign(string $tenantId, string $campaignId, bool $withTrashed = false): TenantAccessCertCampaign
     {
-        $campaign = TenantAccessCertCampaign::query()
+        $q = TenantAccessCertCampaign::query()
             ->where('tenant_id', $tenantId)
-            ->where('campaign_id', $campaignId)
-            ->whereNull('deleted_at')
-            ->first();
+            ->where('campaign_id', $campaignId);
 
-        if (!$campaign) {
+        if ($withTrashed) {
+            $q->withTrashed();
+        } else {
+            $q->whereNull('deleted_at');
+        }
+
+        $campaign = $q->first();
+
+        if (! $campaign) {
             throw new HttpException(404, 'کمپین گواهی دسترسی یافت نشد.');
         }
 
@@ -56,10 +81,10 @@ class AccessCertificationService
             $code = 'ac-'.now()->format('Ymd').'-'.Str::lower(Str::random(4));
         }
 
-        if (!preg_match('/^[a-z0-9_\-]{2,80}$/', $code)) {
+        if (! preg_match('/^[a-z0-9_\-]{2,80}$/', $code)) {
             throw new HttpException(
                 422,
-                'کد کمپین نامعتبر است. فقط حروف انگلیسی، عدد، خط تیره (-) و زیرخط (_) بین ۲ تا ۸۰ کاراکتر مجاز است. مثال: q3-1404'
+                'کد کمپین نامعتبر است. فقط حروف انگلیسی، عدد، خط تیره (-) و زیرخط (_) بین ۲ تا ۸۰ کاراکتر مجاز است.'
             );
         }
 
@@ -105,6 +130,46 @@ class AccessCertificationService
         $code = trim($code, '-_');
 
         return $code;
+    }
+
+    /** بایگانی کمپین پایان‌یافته (soft-delete) */
+    public function archiveCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
+    {
+        return DB::transaction(function () use ($tenantId, $campaignId, $actorId) {
+            $campaign = $this->getCampaign($tenantId, $campaignId);
+
+            if ($campaign->status !== TenantAccessCertCampaign::STATUS_COMPLETED) {
+                throw new HttpException(422, 'فقط کمپین پایان‌یافته را می‌توان بایگانی کرد.');
+            }
+
+            $campaign->updated_by = $actorId;
+            $campaign->deleted_by = $actorId;
+            $campaign->row_version = ((int) $campaign->row_version) + 1;
+            $campaign->save();
+            $campaign->delete();
+
+            return $campaign->fresh([''] ) ?? $campaign;
+        });
+    }
+
+    /** خروج از بایگانی */
+    public function unarchiveCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
+    {
+        return DB::transaction(function () use ($tenantId, $campaignId, $actorId) {
+            $campaign = $this->getCampaign($tenantId, $campaignId, true);
+
+            if (! $campaign->trashed()) {
+                throw new HttpException(422, 'این کمپین بایگانی نیست.');
+            }
+
+            $campaign->restore();
+            $campaign->deleted_by = null;
+            $campaign->updated_by = $actorId;
+            $campaign->row_version = ((int) $campaign->row_version) + 1;
+            $campaign->save();
+
+            return $campaign->fresh();
+        });
     }
 
     public function openCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
@@ -174,9 +239,7 @@ class AccessCertificationService
                 $seenUsers[$uid] = true;
                 $decision = strtoupper((string) ($item->decision ?? 'PENDING'));
 
-                // Gap no longer present → keep row for audit, mark RESOLVED (do NOT soft-delete).
-                if (!isset($issueByUser[$uid])) {
-                    // Already closed decisions (exception / deferred) stay as-is if gap gone.
+                if (! isset($issueByUser[$uid])) {
                     if (in_array($decision, [
                         TenantAccessCertItem::DECISION_APPROVED,
                         TenantAccessCertItem::DECISION_DEFERRED,
@@ -199,7 +262,6 @@ class AccessCertificationService
 
                 $row = $issueByUser[$uid];
 
-                // Still an issue: refresh snapshot; re-open only if was in-progress fix queue.
                 $item->role_ids_snapshot = $row['role_ids'];
                 $item->sod_has_block = $row['has_block'];
                 $item->sod_has_warn = $row['has_warn'];
@@ -207,7 +269,6 @@ class AccessCertificationService
 
                 if ($decision === TenantAccessCertItem::DECISION_REVOKE_REQUESTED
                     || $decision === TenantAccessCertItem::DECISION_RESOLVED) {
-                    // Fix attempt failed or gap returned → back to pending work.
                     $item->decision = TenantAccessCertItem::DECISION_PENDING;
                     $item->decided_at = null;
                     $item->decision_note = null;
@@ -259,7 +320,7 @@ class AccessCertificationService
 
     public function listItems(string $tenantId, string $campaignId, ?string $decision = null): Collection
     {
-        $this->getCampaign($tenantId, $campaignId);
+        $this->getCampaign($tenantId, $campaignId, true);
 
         $q = TenantAccessCertItem::query()
             ->where('tenant_id', $tenantId)
@@ -289,7 +350,7 @@ class AccessCertificationService
             TenantAccessCertItem::DECISION_REVOKE_REQUESTED,
             TenantAccessCertItem::DECISION_DEFERRED,
         ];
-        if (!in_array($decision, $allowed, true)) {
+        if (! in_array($decision, $allowed, true)) {
             throw new HttpException(422, 'تصمیم باید پذیرش استثنا، در حال اصلاح یا موکول باشد.');
         }
 
@@ -300,7 +361,7 @@ class AccessCertificationService
                 ->whereNull('deleted_at')
                 ->first();
 
-            if (!$item) {
+            if (! $item) {
                 throw new HttpException(404, 'آیتم گواهی یافت نشد.');
             }
 
@@ -363,7 +424,7 @@ class AccessCertificationService
 
     public function campaignSummary(string $tenantId, string $campaignId): array
     {
-        $campaign = $this->getCampaign($tenantId, $campaignId);
+        $campaign = $this->getCampaign($tenantId, $campaignId, true);
         $items = TenantAccessCertItem::query()
             ->where('tenant_id', $tenantId)
             ->where('campaign_id', $campaignId)
@@ -410,7 +471,7 @@ class AccessCertificationService
             $hasBlock = (bool) ($eval['has_block'] ?? false);
             $hasWarn = (bool) ($eval['has_warn'] ?? false);
 
-            if (!$hasBlock && !$hasWarn) {
+            if (! $hasBlock && ! $hasWarn) {
                 continue;
             }
 
