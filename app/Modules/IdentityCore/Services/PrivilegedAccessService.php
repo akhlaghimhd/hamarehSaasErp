@@ -38,7 +38,34 @@ class PrivilegedAccessService
             $q->where('status', strtoupper($status));
         }
 
-        return $q->get();
+        $grants = $q->get();
+
+        $userIds = $grants->pluck('user_id')->filter()->unique()->values()->all();
+        $usersById = [];
+        if ($userIds !== []) {
+            $rows = DB::table('users')
+                ->whereIn('user_id', $userIds)
+                ->get(['user_id', 'first_name', 'last_name', 'email', 'mobile']);
+            foreach ($rows as $row) {
+                $name = trim(implode(' ', array_filter([(string) ($row->first_name ?? ''), (string) ($row->last_name ?? '')])));
+                $usersById[(string) $row->user_id] = [
+                    'user_display_name' => $name !== '' ? $name : (string) ($row->email ?? $row->mobile ?? ''),
+                    'user_mobile'       => $row->mobile,
+                    'user_email'        => $row->email,
+                ];
+            }
+        }
+
+        foreach ($grants as $grant) {
+            $info = $usersById[(string) $grant->user_id] ?? null;
+            if ($info) {
+                $grant->setAttribute('user_display_name', $info['user_display_name']);
+                $grant->setAttribute('user_mobile', $info['user_mobile']);
+                $grant->setAttribute('user_email', $info['user_email']);
+            }
+        }
+
+        return $grants;
     }
 
     public function requestGrant(
