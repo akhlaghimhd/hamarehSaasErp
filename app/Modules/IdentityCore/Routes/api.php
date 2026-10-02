@@ -156,8 +156,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.privileged.approve');
         });
 
-        // Tenant identity policy settings (customer-controlled dual approval)
-        // TEMP surface — move to system settings page later (product decision).
         Route::get('/settings/identity', [IdentitySettingsController::class, 'show'])
             ->middleware('permission:identity.user.view');
         Route::put('/settings/identity', [IdentitySettingsController::class, 'update'])
@@ -174,10 +172,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.approve');
         });
 
-        /*
-         * Static paths (assign, user/...) MUST be registered before /{id}
-         * otherwise "assign" is captured as {id} and POST is rejected.
-         */
         Route::prefix('roles')->group(function () {
             Route::get('/', [RoleController::class, 'index'])
                 ->middleware('permission:identity.role.view');
@@ -210,11 +204,23 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.permission.update');
         });
 
+        /*
+         * Static paths (assign / unassign / user/...) MUST be before /{id}
+         * otherwise "assign" is captured as {id} and POST is rejected.
+         */
         Route::prefix('scopes')->group(function () {
             Route::get('/', [ScopeController::class, 'index'])
                 ->middleware('permission:identity.scope.view');
             Route::post('/', [ScopeController::class, 'store'])
                 ->middleware('permission:identity.scope.create');
+
+            Route::post('/assign', [ScopeController::class, 'assign'])
+                ->middleware('permission:identity.scope.assign');
+            Route::post('/unassign', [ScopeController::class, 'unassign'])
+                ->middleware('permission:identity.scope.assign');
+            Route::get('/user/{tenantUserId}', [ScopeController::class, 'userScopes'])
+                ->middleware('permission:identity.scope.view');
+
             Route::get('/{id}', [ScopeController::class, 'show'])
                 ->middleware('permission:identity.scope.view');
             Route::put('/{id}', [ScopeController::class, 'update'])
@@ -223,10 +229,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.scope.delete');
             Route::post('/{id}/restore', [ScopeController::class, 'restore'])
                 ->middleware('permission:identity.scope.update');
-            Route::post('/user/{userId}', [ScopeController::class, 'assignToUser'])
-                ->middleware('permission:identity.scope.assign');
-            Route::get('/user/{userId}', [ScopeController::class, 'listForUser'])
-                ->middleware('permission:identity.scope.view');
         });
 
         Route::prefix('sod-rules')->group(function () {

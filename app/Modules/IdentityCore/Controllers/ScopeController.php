@@ -123,6 +123,7 @@ class ScopeController extends Controller
     {
         try {
             $dto = AssignScopeToUserDTO::fromRequest($request->validated());
+            app(HoldingAccessService::class)->assertCanManageTenantUser($dto->tenantUserId);
             $this->scopeService->assignScopeToUser($dto);
 
             return response()->json([
