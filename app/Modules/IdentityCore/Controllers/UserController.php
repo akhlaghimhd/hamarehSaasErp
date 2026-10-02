@@ -37,7 +37,15 @@ class UserController extends Controller
             $limit = null;
         }
 
-        $users = $this->userService->listTenantUsers($filter, $search, $limit);
+        if (is_string($search) && mb_strlen(trim($search)) >= 2) {
+            $users = $this->userService->searchTenantUsers(
+                trim($search),
+                $limit ?? 25,
+                $filter
+            );
+        } else {
+            $users = $this->userService->listTenantUsers($filter);
+        }
 
         return response()->json([
             'status'  => 'success',
