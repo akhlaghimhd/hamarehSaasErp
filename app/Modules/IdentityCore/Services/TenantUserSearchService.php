@@ -3,6 +3,7 @@
 namespace App\Modules\IdentityCore\Services;
 
 use App\Modules\IdentityCore\Models\TenantUser;
+use App\Base\Services\HoldingAccessService;
 use Illuminate\Database\Eloquent\Collection;
 use Exception;
 
@@ -29,6 +30,8 @@ class TenantUserSearchService
         if ($membershipFilter === 'deleted') {
             $query->onlyTrashed();
         }
+
+        app(HoldingAccessService::class)->constrainTenantUsersQuery($query);
 
         return $query
             ->whereHas('user', function ($uq) use ($like) {
