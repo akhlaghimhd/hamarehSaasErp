@@ -16,6 +16,9 @@ class TenantRoleAssignmentRequest extends Model
     public const STATUS_REJECTED = 'REJECTED';
     public const STATUS_CANCELLED = 'CANCELLED';
 
+    public const ACTION_GRANT = 'GRANT';
+    public const ACTION_REVOKE = 'REVOKE';
+
     protected $table = 'tenant_role_assignment_requests';
     protected $primaryKey = 'request_id';
     public $incrementing = false;
@@ -26,6 +29,7 @@ class TenantRoleAssignmentRequest extends Model
         'tenant_id',
         'user_id',
         'tenant_role_id',
+        'request_action',
         'status',
         'valid_from',
         'valid_to',
@@ -45,8 +49,8 @@ class TenantRoleAssignmentRequest extends Model
         return [
             'valid_from'  => 'datetime',
             'valid_to'    => 'datetime',
-            'reviewed_at' => 'datetime',
             'row_version' => 'integer',
+            'reviewed_at' => 'datetime',
         ];
     }
 
