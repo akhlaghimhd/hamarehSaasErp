@@ -157,6 +157,7 @@ Route::prefix('identity')->group(function () {
         });
 
         // Tenant identity policy settings (customer-controlled dual approval)
+        // TEMP surface — move to system settings page later (product decision).
         Route::get('/settings/identity', [IdentitySettingsController::class, 'show'])
             ->middleware('permission:identity.user.view');
         Route::put('/settings/identity', [IdentitySettingsController::class, 'update'])
@@ -168,9 +169,9 @@ Route::prefix('identity')->group(function () {
             Route::post('/', [RoleAssignmentApprovalController::class, 'store'])
                 ->middleware('permission:identity.role.assign');
             Route::post('/{id}/approve', [RoleAssignmentApprovalController::class, 'approve'])
-                ->middleware('permission:identity.role.assign');
+                ->middleware('permission:identity.role.approve');
             Route::post('/{id}/reject', [RoleAssignmentApprovalController::class, 'reject'])
-                ->middleware('permission:identity.role.assign');
+                ->middleware('permission:identity.role.approve');
         });
 
         /*
