@@ -49,9 +49,18 @@ class AccessCertificationService
         ?string $ownerUserId = null,
         ?string $actorId = null
     ): TenantAccessCertCampaign {
-        $code = strtolower(trim($code));
-        if ($code === '' || !preg_match('/^[a-z0-9_\-]{2,80}$/', $code)) {
-            throw new HttpException(422, 'کد کمپین نامعتبر است.');
+        $code = $this->normalizeCampaignCode($code);
+
+        // Auto-generate when blank after normalize (e.g. Persian-only input)
+        if ($code === '') {
+            $code = 'ac-'.now()->format('Ymd').'-'.Str::lower(Str::random(4));
+        }
+
+        if (!preg_match('/^[a-z0-9_\-]{2,80}$/', $code)) {
+            throw new HttpException(
+                422,
+                'کد کمپین نامعتبر است. فقط حروف انگلیسی، عدد، خط تیره (-) و زیرخط (_) بین ۲ تا ۸۰ کاراکتر مجاز است. مثال: q3-1404'
+            );
         }
 
         $exists = TenantAccessCertCampaign::query()
@@ -61,7 +70,12 @@ class AccessCertificationService
             ->exists();
 
         if ($exists) {
-            throw new HttpException(422, 'کد کمپین تکراری است.');
+            throw new HttpException(422, 'کد کمپین تکراری است. یک کد دیگر وارد کنید.');
+        }
+
+        $name = trim($name);
+        if ($name === '') {
+            throw new HttpException(422, 'نام کمپین الزامی است.');
         }
 
         return TenantAccessCertCampaign::create([
@@ -76,6 +90,24 @@ class AccessCertificationService
             'created_by'    => $actorId,
             'row_version'   => 1,
         ]);
+    }
+
+    /**
+     * Lowercase, map Persian/Arabic digits, spaces→-, strip other chars.
+     */
+    private function normalizeCampaignCode(string $code): string
+    {
+        $code = trim($code);
+        $fa = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹', '٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        $en = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        $code = str_replace($fa, $en, $code);
+        $code = strtolower($code);
+        $code = preg_replace('/\s+/', '-', $code) ?? $code;
+        $code = preg_replace('/[^a-z0-9_\-]/', '', $code) ?? $code;
+        $code = preg_replace('/-+/', '-', $code) ?? $code;
+        $code = trim($code, '-_');
+
+        return $code;
     }
 
     public function openCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
