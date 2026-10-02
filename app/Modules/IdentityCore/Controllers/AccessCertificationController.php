@@ -24,20 +24,39 @@ class AccessCertificationController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'code'          => ['required', 'string', 'max:80'],
-            'name'          => ['required', 'string', 'max:200'],
-            'description'   => ['nullable', 'string', 'max:500'],
-            'due_at'        => ['nullable', 'date'],
-            'owner_user_id' => ['nullable', 'uuid'],
-        ]);
+        $data = $request->validate(
+            [
+                'code'          => ['nullable', 'string', 'max:80'],
+                'name'          => ['required', 'string', 'max:200'],
+                'description'   => ['nullable', 'string', 'max:500'],
+                'due_at'        => ['nullable', 'date'],
+                'owner_user_id' => ['nullable', 'uuid'],
+            ],
+            [
+                'name.required' => 'نام کمپین الزامی است.',
+                'name.string'   => 'نام کمپین باید متن باشد.',
+                'name.max'      => 'نام کمپین حداکثر ۲۰۰ کاراکتر است.',
+                'code.string'   => 'کد کمپین باید متن باشد.',
+                'code.max'      => 'کد کمپین حداکثر ۸۰ کاراکتر است.',
+                'description.max' => 'توضیحات حداکثر ۵۰۰ کاراکتر است.',
+                'due_at.date'   => 'تاریخ سررسید معتبر نیست.',
+                'owner_user_id.uuid' => 'شناسه مالک معتبر نیست.',
+            ],
+            [
+                'code'          => 'کد',
+                'name'          => 'نام',
+                'description'   => 'توضیحات',
+                'due_at'        => 'تاریخ سررسید',
+                'owner_user_id' => 'مالک',
+            ]
+        );
 
         $tenantId = $this->tenantId($request);
         $actor = optional($request->user())->user_id;
 
         $campaign = $this->cert->createCampaign(
             $tenantId,
-            $data['code'],
+            (string) ($data['code'] ?? ''),
             $data['name'],
             $data['description'] ?? null,
             $data['due_at'] ?? null,
@@ -85,10 +104,21 @@ class AccessCertificationController extends Controller
 
     public function certify(Request $request, string $itemId): JsonResponse
     {
-        $data = $request->validate([
-            'decision' => ['required', 'string', 'in:APPROVED,REVOKE_REQUESTED,DEFERRED'],
-            'note'     => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validate(
+            [
+                'decision' => ['required', 'string', 'in:APPROVED,REVOKE_REQUESTED,DEFERRED'],
+                'note'     => ['nullable', 'string', 'max:500'],
+            ],
+            [
+                'decision.required' => 'تصمیم الزامی است.',
+                'decision.in'       => 'تصمیم انتخاب‌شده معتبر نیست.',
+                'note.max'          => 'یادداشت حداکثر ۵۰۰ کاراکتر است.',
+            ],
+            [
+                'decision' => 'تصمیم',
+                'note'     => 'یادداشت',
+            ]
+        );
 
         $tenantId = $this->tenantId($request);
         $reviewer = optional($request->user())->user_id;
@@ -123,7 +153,7 @@ class AccessCertificationController extends Controller
             $tenantId = (string) ($request->header('X-Tenant-Id') ?? '');
         }
         if ($tenantId === '') {
-            throw new HttpException(400, 'tenant context الزامی است.');
+            throw new HttpException(400, 'شناسه سازمان (tenant) الزامی است.');
         }
 
         return $tenantId;
