@@ -10,6 +10,7 @@ use App\Modules\IdentityCore\DTOs\CreateScopeDTO;
 use App\Modules\IdentityCore\DTOs\UpdateScopeDTO;
 use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Services\ScopeService;
+use App\Base\Services\HoldingAccessService;
 use App\Base\Exceptions\DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -137,7 +138,10 @@ class ScopeController extends Controller
     {
         try {
             $dto = AssignScopeToUserDTO::fromRequest($request->validated());
-            $this->scopeService->unassignScopeFromUser($dto->tenantUserId, $dto->scopeId);
+            app(HoldingAccessService::class)->assertCanManageTenantUser($dto->tenantUserId);
+            foreach ($dto->scopeIds as $scopeId) {
+                $this->scopeService->unassignScopeFromUser($dto->tenantUserId, (string) $scopeId);
+            }
 
             return response()->json([
                 'status'  => 'success',
