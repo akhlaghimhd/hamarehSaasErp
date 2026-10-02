@@ -156,11 +156,23 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.assign');
         });
 
+        /*
+         * Static paths (assign, user/...) MUST be registered before /{id}
+         * otherwise "assign" is captured as {id} and POST is rejected.
+         */
         Route::prefix('roles')->group(function () {
             Route::get('/', [RoleController::class, 'index'])
                 ->middleware('permission:identity.role.view');
             Route::post('/', [RoleController::class, 'store'])
                 ->middleware('permission:identity.role.create');
+
+            Route::post('/assign', [RoleController::class, 'assign'])
+                ->middleware('permission:identity.role.assign');
+            Route::get('/user/{userId}', [RoleController::class, 'userRoles'])
+                ->middleware('permission:identity.role.view');
+            Route::post('/user/{userId}', [RoleController::class, 'assignFromPath'])
+                ->middleware('permission:identity.role.assign');
+
             Route::get('/{id}', [RoleController::class, 'show'])
                 ->middleware('permission:identity.role.view');
             Route::put('/{id}', [RoleController::class, 'update'])
@@ -169,10 +181,6 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.role.delete');
             Route::post('/{id}/permissions', [RoleController::class, 'assignPermissions'])
                 ->middleware('permission:identity.role.assign-permissions');
-            Route::get('/user/{userId}', [RoleController::class, 'userRoles'])
-                ->middleware('permission:identity.role.view');
-            Route::post('/user/{userId}', [RoleController::class, 'assignRole'])
-                ->middleware('permission:identity.role.assign');
         });
 
         Route::prefix('permissions')->group(function () {
