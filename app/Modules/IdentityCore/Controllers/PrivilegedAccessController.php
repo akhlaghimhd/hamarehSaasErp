@@ -117,6 +117,58 @@ class PrivilegedAccessController extends Controller
         return response()->json(['data' => $grant]);
     }
 
+    public function reactivate(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'duration_minutes' => ['required', 'integer', 'min:5', 'max:43200'],
+            'tenant_role_id'   => ['nullable', 'uuid'],
+            'reason'           => ['nullable', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        if (!$actor) {
+            throw new HttpException(401, 'کاربر احراز هویت نشده است.');
+        }
+
+        $grant = $this->service->reactivate(
+            $tenantId,
+            $id,
+            (int) $data['duration_minutes'],
+            $actor,
+            $data['tenant_role_id'] ?? null,
+            $data['reason'] ?? null
+        );
+
+        return response()->json(['data' => $grant]);
+    }
+
+    public function update(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'tenant_role_id'   => ['nullable', 'uuid'],
+            'duration_minutes' => ['nullable', 'integer', 'min:5', 'max:43200'],
+            'reason'           => ['nullable', 'string', 'min:5', 'max:500'],
+        ]);
+
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        if (!$actor) {
+            throw new HttpException(401, 'کاربر احراز هویت نشده است.');
+        }
+
+        $grant = $this->service->updateGrant(
+            $tenantId,
+            $id,
+            $actor,
+            $data['tenant_role_id'] ?? null,
+            isset($data['duration_minutes']) ? (int) $data['duration_minutes'] : null,
+            $data['reason'] ?? null
+        );
+
+        return response()->json(['data' => $grant]);
+    }
+
     public function markRole(Request $request): JsonResponse
     {
         $data = $request->validate([
