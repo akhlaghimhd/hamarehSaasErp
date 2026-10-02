@@ -78,20 +78,21 @@ class LoadUserScopesMiddleware
 
     public static function forget(string $tenantId, string $userId): void
     {
-        $key = sprintf('sec_ctx:%s:%s', $tenantId, $userId);
-        unset(self::$requestMemo[$tenantId.'|'.$userId]);
-        try {
-            if (self::cacheUsable()) {
-                Cache::forget($key);
+        $memoKey = $tenantId.'|'.$userId;
+        unset(self::$requestMemo[$memoKey]);
+
+        if (self::cacheUsable()) {
+            try {
+                Cache::forget('identity:load_scopes:'.$tenantId.':'.$userId);
+            } catch (Throwable) {
+                // ignore
             }
-        } catch (Throwable) {
-            // ignore
         }
     }
 
     private function loadPayload(string $tenantId, string $userId): ?array
     {
-        $cacheKey = sprintf('sec_ctx:%s:%s', $tenantId, $userId);
+        $cacheKey = 'identity:load_scopes:'.$tenantId.':'.$userId;
 
         if (self::cacheUsable()) {
             try {
@@ -117,10 +118,6 @@ class LoadUserScopesMiddleware
         return $payload;
     }
 
-    /**
-     * file cache on Docker bind-mount is pathologically slow on Win/Mac.
-     * Only use redis/memcached/array for hot-path caching.
-     */
     private static function cacheUsable(): bool
     {
         $store = (string) config('cache.default');
@@ -168,10 +165,12 @@ class LoadUserScopesMiddleware
             })
             ->toArray();
 
+        $scopes = $this->attachScopeMemberReferences($tenantId, $scopes);
+
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantId)
-            ->where('tenant_user_roles.user_id', $userId)
+            ->where('tenant_user_roles.tenant_user_id', $tenantUser->tenant_user_id)
             ->whereNull('tenant_user_roles.deleted_at')
             ->whereNull('tenant_roles.deleted_at')
             ->where('tenant_roles.status', 1)
@@ -209,7 +208,6 @@ class LoadUserScopesMiddleware
                 ->toArray();
         }
 
-        // Same policy as login: owner gets full active catalog for this tenant.
         if ($isOwner) {
             $ownerPerms = DB::table('tenant_permissions')
                 ->where('tenant_id', $tenantId)
@@ -230,6 +228,55 @@ class LoadUserScopesMiddleware
             'roles'          => $roles,
             'permissions'    => $permissions,
         ];
+    }
+
+    /**
+     * Expand multi-member scopes: attach reference_ids (same type only).
+     *
+     * @param  list<array<string,mixed>>  $scopes
+     * @return list<array<string,mixed>>
+     */
+    private function attachScopeMemberReferences(string $tenantId, array $scopes): array
+    {
+        if ($scopes === []) {
+            return [];
+        }
+
+        $scopeIds = [];
+        foreach ($scopes as $s) {
+            if (!empty($s['scope_id'])) {
+                $scopeIds[] = (string) $s['scope_id'];
+            }
+        }
+
+        $grouped = [];
+        if ($scopeIds !== [] && \Illuminate\Support\Facades\Schema::hasTable('tenant_scope_members')) {
+            $rows = DB::table('tenant_scope_members')
+                ->where('tenant_id', $tenantId)
+                ->whereIn('scope_id', $scopeIds)
+                ->whereNull('deleted_at')
+                ->orderBy('created_at')
+                ->get(['scope_id', 'reference_id']);
+
+            foreach ($rows as $row) {
+                $grouped[(string) $row->scope_id][] = (string) $row->reference_id;
+            }
+        }
+
+        foreach ($scopes as &$s) {
+            $sid = (string) ($s['scope_id'] ?? '');
+            $refs = $grouped[$sid] ?? [];
+            if ($refs === [] && !empty($s['reference_id'])) {
+                $refs = [(string) $s['reference_id']];
+            }
+            $s['reference_ids'] = array_values(array_unique($refs));
+            if ($refs !== []) {
+                $s['reference_id'] = $refs[0];
+            }
+        }
+        unset($s);
+
+        return $scopes;
     }
 
     public function terminate($request, $response): void
