@@ -80,17 +80,29 @@ class RoleController extends Controller
     /**
      * POST /identity/roles/assign
      * Body: { user_id, role_ids: string[] }
+     * When tenant dual-approval is ON: queues GRANT/REVOKE requests (202).
      */
     public function assign(AssignRoleRequest $request): JsonResponse
     {
         try {
             $dto = AssignRoleToUserDTO::fromRequest($request->validated());
-            // ADR-ID-ORG-003: delegated admin cannot assign roles outside company circle
             app(HoldingAccessService::class)->assertCanManageUserId($dto->userId);
-            $this->roleService->assignRoleToUser($dto);
+            $result = $this->roleService->assignRoleToUser($dto);
+
+            if (($result['mode'] ?? 'direct') === 'pending') {
+                return response()->json([
+                    'status'  => 'pending',
+                    'mode'    => 'pending',
+                    'message' => 'تغییر نقش‌ها به‌صورت درخواست معلق ثبت شد و پس از تأیید اعمال می‌شود. دسترسی‌های قبلی کاربر تا تأیید، فعال می‌ماند.',
+                    'data'    => [
+                        'pending_count' => $result['pending_count'] ?? 0,
+                    ],
+                ], 202);
+            }
 
             return response()->json([
                 'status'  => 'success',
+                'mode'    => 'direct',
                 'message' => 'نقش با موفقیت به کاربر تخصیص داده شد.',
             ], 200);
         } catch (\RuntimeException $e) {
@@ -101,10 +113,6 @@ class RoleController extends Controller
         }
     }
 
-    /**
-     * POST /identity/roles/user/{userId}
-     * user_id from route is merged in AssignRoleRequest::prepareForValidation.
-     */
     public function assignFromPath(AssignRoleRequest $request, string $userId): JsonResponse
     {
         return $this->assign($request);
