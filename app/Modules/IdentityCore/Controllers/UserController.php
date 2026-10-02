@@ -8,6 +8,7 @@ use App\Modules\IdentityCore\Requests\UpdateTenantUserRequest;
 use App\Modules\IdentityCore\DTOs\CreateTenantUserDTO;
 use App\Modules\IdentityCore\DTOs\UpdateTenantUserDTO;
 use App\Modules\IdentityCore\Services\UserService;
+use App\Modules\IdentityCore\Services\TenantUserSearchService;
 use App\Modules\IdentityCore\Services\OrganizationalEmailService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class UserController extends Controller
 {
     public function __construct(
         private readonly UserService $userService,
+        private readonly TenantUserSearchService $tenantUserSearchService,
         private readonly OrganizationalEmailService $organizationalEmailService,
     ) {}
 
@@ -38,7 +40,7 @@ class UserController extends Controller
         }
 
         if (is_string($search) && mb_strlen(trim($search)) >= 2) {
-            $users = $this->userService->searchTenantUsers(
+            $users = $this->tenantUserSearchService->search(
                 trim($search),
                 $limit ?? 25,
                 $filter
