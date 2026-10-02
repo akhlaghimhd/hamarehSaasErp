@@ -13,6 +13,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 /**
  * Access Certification — gap-focused remediation.
  * open: only SoD issues; reEvaluate: refresh after role fixes.
+ * Resolved gaps are KEPT (decision=RESOLVED) so reports remain a full audit trail.
  */
 class AccessCertificationService
 {
@@ -51,7 +52,6 @@ class AccessCertificationService
     ): TenantAccessCertCampaign {
         $code = $this->normalizeCampaignCode($code);
 
-        // Auto-generate when blank after normalize (e.g. Persian-only input)
         if ($code === '') {
             $code = 'ac-'.now()->format('Ymd').'-'.Str::lower(Str::random(4));
         }
@@ -92,9 +92,6 @@ class AccessCertificationService
         ]);
     }
 
-    /**
-     * Lowercase, map Persian/Arabic digits, spaces→-, strip other chars.
-     */
     private function normalizeCampaignCode(string $code): string
     {
         $code = trim($code);
@@ -177,9 +174,23 @@ class AccessCertificationService
                 $seenUsers[$uid] = true;
                 $decision = strtoupper((string) ($item->decision ?? 'PENDING'));
 
+                // Gap no longer present → keep row for audit, mark RESOLVED (do NOT soft-delete).
                 if (!isset($issueByUser[$uid])) {
-                    $item->deleted_at = now();
-                    $item->deleted_by = $actorId;
+                    // Already closed decisions (exception / deferred) stay as-is if gap gone.
+                    if (in_array($decision, [
+                        TenantAccessCertItem::DECISION_APPROVED,
+                        TenantAccessCertItem::DECISION_DEFERRED,
+                        TenantAccessCertItem::DECISION_RESOLVED,
+                    ], true)) {
+                        continue;
+                    }
+
+                    $item->decision = TenantAccessCertItem::DECISION_RESOLVED;
+                    $item->reviewer_user_id = $actorId ?: $item->reviewer_user_id;
+                    $item->decided_at = now();
+                    if (empty($item->decision_note)) {
+                        $item->decision_note = 'رفع‌شده با اصلاح نقش پس از بررسی مجدد';
+                    }
                     $item->row_version = ((int) $item->row_version) + 1;
                     $item->save();
                     $resolved++;
@@ -187,13 +198,21 @@ class AccessCertificationService
                 }
 
                 $row = $issueByUser[$uid];
+
+                // Still an issue: refresh snapshot; re-open only if was in-progress fix queue.
                 $item->role_ids_snapshot = $row['role_ids'];
                 $item->sod_has_block = $row['has_block'];
                 $item->sod_has_warn = $row['has_warn'];
                 $item->sod_conflicts = $row['conflicts'];
-                if ($decision === TenantAccessCertItem::DECISION_REVOKE_REQUESTED) {
+
+                if ($decision === TenantAccessCertItem::DECISION_REVOKE_REQUESTED
+                    || $decision === TenantAccessCertItem::DECISION_RESOLVED) {
+                    // Fix attempt failed or gap returned → back to pending work.
                     $item->decision = TenantAccessCertItem::DECISION_PENDING;
+                    $item->decided_at = null;
+                    $item->decision_note = null;
                 }
+
                 $item->row_version = ((int) $item->row_version) + 1;
                 $item->save();
                 $updated++;
@@ -360,6 +379,7 @@ class AccessCertificationService
                 'approved'         => $items->where('decision', TenantAccessCertItem::DECISION_APPROVED)->count(),
                 'revoke_requested' => $items->where('decision', TenantAccessCertItem::DECISION_REVOKE_REQUESTED)->count(),
                 'deferred'         => $items->where('decision', TenantAccessCertItem::DECISION_DEFERRED)->count(),
+                'resolved'         => $items->where('decision', TenantAccessCertItem::DECISION_RESOLVED)->count(),
                 'sod_block'        => $items->where('sod_has_block', true)->count(),
                 'sod_warn'         => $items->where('sod_has_warn', true)->count(),
             ],
