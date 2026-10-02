@@ -23,7 +23,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class PrivilegedAccessService
 {
-    public const MAX_DURATION_MINUTES = 480; // 8h hard cap
+    /** Presets: 1h, 8h (work day), 7d, 30d */
+    public const MAX_DURATION_MINUTES = 43200; // 30 days hard cap
 
     public function listGrants(string $tenantId, ?string $status = null): Collection
     {
@@ -49,9 +50,8 @@ class PrivilegedAccessService
         int $durationMinutes = 60,
         ?string $requestedBy = null
     ): TenantPrivilegedGrant {
-        $reason = trim($reason);
-        if ($reason === '' || mb_strlen($reason) < 5) {
-            throw new HttpException(422, 'دلیل درخواست دسترسی ممتاز الزامی است (حداقل ۵ کاراکتر).');
+        if (strlen(trim($reason)) < 5) {
+            throw new HttpException(422, 'دلیل درخواست الزامی است (حداقل ۵ کاراکتر).');
         }
 
         $durationMinutes = max(5, min($durationMinutes, self::MAX_DURATION_MINUTES));
@@ -119,15 +119,18 @@ class PrivilegedAccessService
             $ends = $starts->copy()->addMinutes((int) $grant->duration_minutes);
 
             $grant->status = TenantPrivilegedGrant::STATUS_ACTIVE;
-            $grant->approved_by = $approverUserId;
-            $grant->approved_at = $starts;
             $grant->starts_at = $starts;
             $grant->ends_at = $ends;
-            $grant->row_version = ((int) $grant->row_version) + 1;
+            $grant->approved_by = $approverUserId;
+            $grant->approved_at = $starts;
+            $grant->updated_by = $approverUserId;
+            $grant->row_version = (int) $grant->row_version + 1;
             $grant->save();
 
-            $this->materializeRoleAssignment($tenantId, $grant->user_id, $grant->tenant_role_id);
-            $this->forgetUserCaches($tenantId, $grant->user_id);
+            $this->materializeAssignment($tenantId, $grant);
+
+            TenantCache::forgetTenant($tenantId);
+            LoadUserScopesMiddleware::bumpPermissionVersion($tenantId);
 
             return $grant->fresh();
         });
@@ -136,6 +139,7 @@ class PrivilegedAccessService
     public function deny(string $tenantId, string $grantId, string $actorId, ?string $note = null): TenantPrivilegedGrant
     {
         $grant = $this->findGrant($tenantId, $grantId);
+
         if ($grant->status !== TenantPrivilegedGrant::STATUS_PENDING) {
             throw new HttpException(422, 'فقط درخواست PENDING قابل رد است.');
         }
@@ -144,7 +148,8 @@ class PrivilegedAccessService
         $grant->revoked_by = $actorId;
         $grant->revoked_at = now();
         $grant->revoke_reason = $note;
-        $grant->row_version = ((int) $grant->row_version) + 1;
+        $grant->updated_by = $actorId;
+        $grant->row_version = (int) $grant->row_version + 1;
         $grant->save();
 
         return $grant->fresh();
@@ -167,19 +172,19 @@ class PrivilegedAccessService
             $grant->revoked_by = $actorId;
             $grant->revoked_at = now();
             $grant->revoke_reason = $reason;
-            $grant->row_version = ((int) $grant->row_version) + 1;
+            $grant->updated_by = $actorId;
+            $grant->row_version = (int) $grant->row_version + 1;
             $grant->save();
 
-            $this->removeRoleAssignment($tenantId, $grant->user_id, $grant->tenant_role_id);
-            $this->forgetUserCaches($tenantId, $grant->user_id);
+            $this->dematerializeAssignment($tenantId, $grant);
+
+            TenantCache::forgetTenant($tenantId);
+            LoadUserScopesMiddleware::bumpPermissionVersion($tenantId);
 
             return $grant->fresh();
         });
     }
 
-    /**
-     * Expire ACTIVE grants past ends_at; returns number expired.
-     */
     public function expireStale(string $tenantId): int
     {
         $stale = TenantPrivilegedGrant::query()
@@ -190,20 +195,23 @@ class PrivilegedAccessService
             ->whereNull('deleted_at')
             ->get();
 
-        $count = 0;
+        $n = 0;
         foreach ($stale as $grant) {
-            DB::transaction(function () use ($grant, $tenantId, &$count) {
+            DB::transaction(function () use ($grant, $tenantId, &$n) {
                 $grant->status = TenantPrivilegedGrant::STATUS_EXPIRED;
-                $grant->row_version = ((int) $grant->row_version) + 1;
+                $grant->row_version = (int) $grant->row_version + 1;
                 $grant->save();
-
-                $this->removeRoleAssignment($tenantId, $grant->user_id, $grant->tenant_role_id);
-                $this->forgetUserCaches($tenantId, $grant->user_id);
-                $count++;
+                $this->dematerializeAssignment($tenantId, $grant);
+                $n++;
             });
         }
 
-        return $count;
+        if ($n > 0) {
+            TenantCache::forgetTenant($tenantId);
+            LoadUserScopesMiddleware::bumpPermissionVersion($tenantId);
+        }
+
+        return $n;
     }
 
     public function markRolePrivileged(string $tenantId, string $roleId, bool $flag = true): TenantRole
@@ -219,46 +227,72 @@ class PrivilegedAccessService
         }
 
         $role->is_privileged = $flag;
-        $role->row_version = ((int) ($role->row_version ?? 1)) + 1;
+        $role->row_version = (int) $role->row_version + 1;
         $role->save();
+
+        TenantCache::forgetTenant($tenantId);
 
         return $role->fresh();
     }
 
     /**
-     * Active privileged grants for a user at a point in time (for document audit correlation).
+     * Active privileged grants for a user (for auth effective permissions).
      *
      * @return list<TenantPrivilegedGrant>
      */
-    public function activeGrantsForUserAt(
-        string $tenantId,
-        string $userId,
-        $at = null
-    ): array {
-        $at = $at ? \Carbon\Carbon::parse($at) : now();
+    public function activeGrantsForUser(string $tenantId, string $userId): Collection
+    {
+        $this->expireStale($tenantId);
 
         return TenantPrivilegedGrant::query()
             ->where('tenant_id', $tenantId)
             ->where('user_id', $userId)
             ->where('status', TenantPrivilegedGrant::STATUS_ACTIVE)
-            ->whereNotNull('starts_at')
-            ->whereNotNull('ends_at')
-            ->where('starts_at', '<=', $at)
-            ->where('ends_at', '>', $at)
             ->whereNull('deleted_at')
-            ->orderByDesc('starts_at')
-            ->get()
-            ->all();
+            ->where(function ($q) {
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
+            })
+            ->get();
+    }
+
+    private function materializeAssignment(string $tenantId, TenantPrivilegedGrant $grant): void
+    {
+        $exists = TenantUserRole::query()
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $grant->user_id)
+            ->where('tenant_role_id', $grant->tenant_role_id)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        TenantUserRole::create([
+            'tenant_user_role_id' => (string) Str::uuid(),
+            'tenant_id'           => $tenantId,
+            'user_id'             => $grant->user_id,
+            'tenant_role_id'      => $grant->tenant_role_id,
+            'assigned_by'         => $grant->approved_by,
+            'row_version'         => 1,
+        ]);
+    }
+
+    private function dematerializeAssignment(string $tenantId, TenantPrivilegedGrant $grant): void
+    {
+        TenantUserRole::query()
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $grant->user_id)
+            ->where('tenant_role_id', $grant->tenant_role_id)
+            ->delete();
     }
 
     private function assertNotSelfApprove(TenantPrivilegedGrant $grant, string $approverUserId): void
     {
-        if ($approverUserId === (string) $grant->requested_by) {
-            throw new HttpException(422, 'تأییدکننده نمی‌تواند همان درخواست‌کننده باشد (جلوگیری از self-approve).');
-        }
-
         if ($approverUserId === (string) $grant->user_id) {
-            throw new HttpException(422, 'ذینفع گرنت نمی‌تواند خودش آن را تأیید کند.');
+            throw new HttpException(422, 'تأیید دسترسی اضطراری برای خودتان مجاز نیست.');
+        }
+        if ($grant->requested_by && $approverUserId === (string) $grant->requested_by) {
+            throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند همان درخواست را تأیید کند.');
         }
     }
 
@@ -271,48 +305,9 @@ class PrivilegedAccessService
             ->first();
 
         if (!$grant) {
-            throw new HttpException(404, 'گرنت دسترسی ممتاز یافت نشد.');
+            throw new HttpException(404, 'گرنت یافت نشد.');
         }
 
         return $grant;
-    }
-
-    private function materializeRoleAssignment(string $tenantId, string $userId, string $roleId): void
-    {
-        $exists = TenantUserRole::query()
-            ->where('tenant_id', $tenantId)
-            ->where('user_id', $userId)
-            ->where('tenant_role_id', $roleId)
-            ->exists();
-
-        if ($exists) {
-            return;
-        }
-
-        TenantUserRole::create([
-            'tenant_user_role_id' => (string) Str::uuid(),
-            'tenant_id'           => $tenantId,
-            'user_id'             => $userId,
-            'tenant_role_id'      => $roleId,
-        ]);
-    }
-
-    private function removeRoleAssignment(string $tenantId, string $userId, string $roleId): void
-    {
-        TenantUserRole::query()
-            ->where('tenant_id', $tenantId)
-            ->where('user_id', $userId)
-            ->where('tenant_role_id', $roleId)
-            ->delete();
-    }
-
-    private function forgetUserCaches(string $tenantId, string $userId): void
-    {
-        try {
-            TenantCache::forget('identity', "user_permissions:{$userId}", $tenantId);
-            LoadUserScopesMiddleware::forget($tenantId, $userId);
-        } catch (\Throwable $e) {
-            // ignore cache backend issues in foundation
-        }
     }
 }
