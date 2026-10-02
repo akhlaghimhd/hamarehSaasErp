@@ -15,6 +15,7 @@ use App\Modules\IdentityCore\Controllers\AccessCertificationController;
 use App\Modules\IdentityCore\Controllers\PrivilegedAccessController;
 use App\Modules\IdentityCore\Controllers\ScimController;
 use App\Modules\IdentityCore\Controllers\RoleAssignmentApprovalController;
+use App\Modules\IdentityCore\Controllers\IdentitySettingsController;
 use App\Base\Http\Middleware\TenantContextMiddleware;
 
 Route::prefix('identity')->group(function () {
@@ -154,6 +155,12 @@ Route::prefix('identity')->group(function () {
             Route::post('/mark-role', [PrivilegedAccessController::class, 'markRole'])
                 ->middleware('permission:identity.privileged.approve');
         });
+
+        // Tenant identity policy settings (customer-controlled dual approval)
+        Route::get('/settings/identity', [IdentitySettingsController::class, 'show'])
+            ->middleware('permission:identity.user.view');
+        Route::put('/settings/identity', [IdentitySettingsController::class, 'update'])
+            ->middleware('permission:identity.user.update');
 
         Route::prefix('role-assignment-requests')->group(function () {
             Route::get('/', [RoleAssignmentApprovalController::class, 'index'])
