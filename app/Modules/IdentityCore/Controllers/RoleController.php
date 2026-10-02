@@ -13,7 +13,6 @@ use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Services\RoleService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class RoleController extends Controller
 {
@@ -88,31 +87,17 @@ class RoleController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Role assigned to user successfully.',
+            'message' => 'نقش با موفقیت به کاربر تخصیص داده شد.',
         ], 200);
     }
 
     /**
      * POST /identity/roles/user/{userId}
-     * Merges path userId into body for AssignRoleRequest validation.
+     * user_id from route is merged in AssignRoleRequest::prepareForValidation.
      */
-    public function assignFromPath(Request $request, string $userId): JsonResponse
+    public function assignFromPath(AssignRoleRequest $request, string $userId): JsonResponse
     {
-        $request->merge(['user_id' => $userId]);
-
-        /** @var AssignRoleRequest $form */
-        $form = app(AssignRoleRequest::class);
-        $form->setContainer(app())->setRedirector(app('redirect'));
-        $form->replace($request->all());
-        $form->validateResolved();
-
-        $dto = AssignRoleToUserDTO::fromRequest($form->validated());
-        $this->roleService->assignRoleToUser($dto);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Role assigned to user successfully.',
-        ], 200);
+        return $this->assign($request);
     }
 
     public function userRoles(string $userId): JsonResponse
