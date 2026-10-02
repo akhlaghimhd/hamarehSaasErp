@@ -8,6 +8,7 @@ use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
 use App\Modules\IdentityCore\Models\TenantScope;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantUserScope;
+use App\Modules\IdentityCore\Models\TenantScopeMember;
 use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use App\Base\Context\TenantContext;
 use Illuminate\Support\Facades\DB;
@@ -43,35 +44,56 @@ class ScopeService
             $query->where('scope_type', strtoupper($scopeType));
         }
 
-        return $query->get()->all();
+        $scopes = $query->get()->all();
+
+        return $this->hydrateReferenceIds($scopes);
     }
 
     public function getScope(string $scopeId): TenantScope
     {
         $tenantId = $this->getTenantId();
 
-        return TenantScope::where('tenant_id', $tenantId)
+        $scope = TenantScope::where('tenant_id', $tenantId)
             ->where('scope_id', $scopeId)
             ->firstOrFail();
+
+        $hydrated = $this->hydrateReferenceIds([$scope]);
+
+        return $hydrated[0];
     }
 
     public function createScope(CreateScopeDTO $dto): TenantScope
     {
         $tenantId = $this->getTenantId();
+        $type = strtoupper($dto->scopeType);
 
-        $this->assertPackAllowsScopeType($tenantId, $dto->scopeType);
-        $this->assertReferenceValid($tenantId, $dto->scopeType, $dto->referenceId);
-        $this->assertReferenceNotDuplicate($tenantId, $dto->scopeType, $dto->referenceId);
+        $this->assertPackAllowsScopeType($tenantId, $type);
 
-        return DB::transaction(function () use ($dto, $tenantId) {
+        $referenceIds = array_values(array_unique(array_filter($dto->referenceIds)));
+        if (in_array($type, self::STRUCTURAL_TYPES, true) && $referenceIds === []) {
+            throw new DomainException(
+                'برای محدوده ساختاری باید حداقل یک موجودیت مرجع هم‌نوع انتخاب شود.',
+                'scope_reference_required'
+            );
+        }
+
+        foreach ($referenceIds as $rid) {
+            $this->assertReferenceValid($tenantId, $type, $rid);
+        }
+
+        return DB::transaction(function () use ($dto, $tenantId, $type, $referenceIds) {
+            $primary = $referenceIds[0] ?? null;
+
             $scope = TenantScope::create([
                 'tenant_id'    => $tenantId,
                 'scope_name'   => $dto->scopeName,
-                'scope_type'   => strtoupper($dto->scopeType),
-                'reference_id' => $dto->referenceId,
+                'scope_type'   => $type,
+                'reference_id' => $primary,
                 'description'  => $dto->description,
                 'is_active'    => $dto->isActive,
             ]);
+
+            $this->syncScopeMembers($tenantId, $scope->scope_id, $referenceIds);
 
             $this->logEventOutbox(
                 $tenantId,
@@ -79,14 +101,17 @@ class ScopeService
                 $scope->scope_id,
                 'identity.scope.created.v1',
                 [
-                    'scope_id'     => $scope->scope_id,
-                    'scope_name'   => $scope->scope_name,
-                    'scope_type'   => $scope->scope_type,
-                    'reference_id' => $scope->reference_id,
+                    'scope_id'      => $scope->scope_id,
+                    'scope_name'    => $scope->scope_name,
+                    'scope_type'    => $scope->scope_type,
+                    'reference_id'  => $primary,
+                    'reference_ids' => $referenceIds,
                 ]
             );
 
-            return $scope;
+            $hydrated = $this->hydrateReferenceIds([$scope->fresh()]);
+
+            return $hydrated[0];
         });
     }
 
@@ -95,28 +120,47 @@ class ScopeService
         $tenantId = $this->getTenantId();
 
         return DB::transaction(function () use ($dto, $tenantId) {
-            $scope = TenantScope::where('scope_id', $dto->scopeId)->firstOrFail();
+            $scope = TenantScope::where('tenant_id', $tenantId)
+                ->where('scope_id', $dto->scopeId)
+                ->firstOrFail();
 
             $scopeType = $dto->scopeType !== null ? strtoupper($dto->scopeType) : $scope->scope_type;
-            $referenceId = $dto->referenceId !== null ? $dto->referenceId : $scope->reference_id;
 
             if ($dto->scopeType !== null) {
                 $this->assertPackAllowsScopeType($tenantId, $scopeType);
             }
 
-            $this->assertReferenceValid($tenantId, $scopeType, $referenceId);
-            $this->assertReferenceNotDuplicate($tenantId, $scopeType, $referenceId, $scope->scope_id);
+            $referenceIds = $dto->referenceIds;
+            if ($referenceIds !== null) {
+                $referenceIds = array_values(array_unique(array_filter($referenceIds)));
+                if (in_array(strtoupper($scopeType), self::STRUCTURAL_TYPES, true) && $referenceIds === []) {
+                    throw new DomainException(
+                        'برای محدوده ساختاری باید حداقل یک موجودیت مرجع هم‌نوع انتخاب شود.',
+                        'scope_reference_required'
+                    );
+                }
+                foreach ($referenceIds as $rid) {
+                    $this->assertReferenceValid($tenantId, $scopeType, $rid);
+                }
+            }
 
             $updateData = array_filter([
-                'scope_name'   => $dto->scopeName,
-                'scope_type'   => $dto->scopeType !== null ? strtoupper($dto->scopeType) : null,
-                'reference_id' => $dto->referenceId,
-                'description'  => $dto->description,
-                'is_active'    => $dto->isActive,
+                'scope_name'  => $dto->scopeName,
+                'scope_type'  => $dto->scopeType !== null ? strtoupper($dto->scopeType) : null,
+                'description' => $dto->description,
+                'is_active'   => $dto->isActive,
             ], fn ($value) => !is_null($value));
+
+            if ($referenceIds !== null) {
+                $updateData['reference_id'] = $referenceIds[0] ?? null;
+            }
 
             if (!empty($updateData)) {
                 $scope->update($updateData);
+            }
+
+            if ($referenceIds !== null) {
+                $this->syncScopeMembers($tenantId, $scope->scope_id, $referenceIds);
             }
 
             $this->logEventOutbox(
@@ -125,14 +169,17 @@ class ScopeService
                 $scope->scope_id,
                 'identity.scope.updated.v1',
                 [
-                    'scope_id'     => $scope->scope_id,
-                    'scope_name'   => $scope->scope_name,
-                    'scope_type'   => $scope->scope_type,
-                    'reference_id' => $scope->reference_id,
+                    'scope_id'      => $scope->scope_id,
+                    'scope_name'    => $scope->scope_name,
+                    'scope_type'    => $scope->scope_type,
+                    'reference_id'  => $scope->reference_id,
+                    'reference_ids' => $referenceIds,
                 ]
             );
 
-            return $scope->fresh();
+            $hydrated = $this->hydrateReferenceIds([$scope->fresh()]);
+
+            return $hydrated[0];
         });
     }
 
@@ -187,43 +234,46 @@ class ScopeService
 
         $this->assertTenantUserBelongsToTenant($tenantId, $dto->tenantUserId);
 
-        $scope = TenantScope::where('tenant_id', $tenantId)
-            ->where('scope_id', $dto->scopeId)
-            ->where('is_active', true)
-            ->firstOrFail();
+        foreach ($dto->scopeIds as $scopeId) {
+            $scope = TenantScope::where('tenant_id', $tenantId)
+                ->where('scope_id', $scopeId)
+                ->where('is_active', true)
+                ->firstOrFail();
 
-        DB::transaction(function () use ($dto, $tenantId, $scope) {
-            $existing = TenantUserScope::withoutGlobalScopes()
-                ->where('tenant_id', $tenantId)
-                ->where('tenant_user_id', $dto->tenantUserId)
-                ->where('scope_id', $dto->scopeId)
-                ->first();
+            DB::transaction(function () use ($dto, $tenantId, $scope, $scopeId) {
+                $existing = TenantUserScope::withoutGlobalScopes()
+                    ->where('tenant_id', $tenantId)
+                    ->where('tenant_user_id', $dto->tenantUserId)
+                    ->where('scope_id', $scopeId)
+                    ->first();
 
-            if ($existing) {
-                if ($existing->deleted_at) {
-                    $existing->restore();
+                if ($existing) {
+                    if ($existing->deleted_at) {
+                        $existing->restore();
+                    }
+
+                    return;
                 }
-                return;
-            }
 
-            TenantUserScope::create([
-                'tenant_id'      => $tenantId,
-                'tenant_user_id' => $dto->tenantUserId,
-                'scope_id'       => $dto->scopeId,
-            ]);
-
-            $this->logEventOutbox(
-                $tenantId,
-                'tenant_user_scopes',
-                $dto->tenantUserId,
-                'identity.scope.assigned.v1',
-                [
+                TenantUserScope::create([
+                    'tenant_id'      => $tenantId,
                     'tenant_user_id' => $dto->tenantUserId,
-                    'scope_id'       => $scope->scope_id,
-                    'scope_type'     => $scope->scope_type,
-                ]
-            );
-        });
+                    'scope_id'       => $scopeId,
+                ]);
+
+                $this->logEventOutbox(
+                    $tenantId,
+                    'tenant_user_scopes',
+                    $dto->tenantUserId,
+                    'identity.scope.assigned.v1',
+                    [
+                        'tenant_user_id' => $dto->tenantUserId,
+                        'scope_id'       => $scope->scope_id,
+                        'scope_type'     => $scope->scope_type,
+                    ]
+                );
+            });
+        }
     }
 
     public function unassignScopeFromUser(string $tenantUserId, string $scopeId): void
@@ -261,7 +311,7 @@ class ScopeService
     {
         $tenantId = $this->getTenantId();
 
-        return TenantScope::query()
+        $scopes = TenantScope::query()
             ->where('tenant_scopes.tenant_id', $tenantId)
             ->whereIn('tenant_scopes.scope_id', function ($q) use ($tenantId, $tenantUserId) {
                 $q->select('scope_id')
@@ -273,106 +323,168 @@ class ScopeService
             ->orderBy('scope_name')
             ->get()
             ->all();
+
+        return $this->hydrateReferenceIds($scopes);
     }
 
-    /**
-     * One structural reference may only map to one scope per type (uq_tenant_scopes_reference).
-     */
     private function assertReferenceNotDuplicate(
         string $tenantId,
         string $scopeType,
         ?string $referenceId,
         ?string $exceptScopeId = null
     ): void {
-        if ($referenceId === null || trim((string) $referenceId) === '') {
-            return;
-        }
-
-        $type = strtoupper(trim($scopeType));
-        $query = TenantScope::withTrashed()
-            ->where('tenant_id', $tenantId)
-            ->where('scope_type', $type)
-            ->where('reference_id', $referenceId);
-
-        if ($exceptScopeId) {
-            $query->where('scope_id', '!=', $exceptScopeId);
-        }
-
-        $existing = $query->first();
-        if (!$existing) {
-            return;
-        }
-
-        if (method_exists($existing, 'trashed') && $existing->trashed()) {
-            throw new DomainException(
-                'برای این موجودیت قبلاً محدوده تعریف شده و حذف شده است. از «سطل بازیابی» بازگردانی کنید.',
-                'scope_reference_trashed'
-            );
-        }
-
-        throw new DomainException(
-            'برای این موجودیت مرجع قبلاً محدوده دسترسی ثبت شده است. محدوده تکراری مجاز نیست.',
-            'scope_reference_duplicate'
-        );
+        return;
     }
 
-    private function assertPackAllowsScopeType(string $tenantId, string $scopeType): void
+    private function syncScopeMembers(string $tenantId, string $scopeId, array $referenceIds): void
     {
-        $type = strtoupper($scopeType);
-        $features = app(FeatureCatalogService::class);
+        $referenceIds = array_values(array_unique(array_filter($referenceIds)));
 
-        if ($type === 'BUSINESS_UNIT') {
-            $features->assertEnabled($tenantId, FeatureCatalogService::CODE_MULTI_BUSINESS_UNIT);
+        $existing = TenantScopeMember::withTrashed()
+            ->where('tenant_id', $tenantId)
+            ->where('scope_id', $scopeId)
+            ->get();
+
+        $keep = [];
+        foreach ($existing as $row) {
+            $rid = (string) $row->reference_id;
+            if (in_array($rid, $referenceIds, true)) {
+                if ($row->trashed()) {
+                    $row->restore();
+                }
+                $keep[] = $rid;
+            } else {
+                if (!$row->trashed()) {
+                    $row->delete();
+                }
+            }
         }
+
+        foreach ($referenceIds as $rid) {
+            if (in_array($rid, $keep, true)) {
+                continue;
+            }
+            TenantScopeMember::create([
+                'tenant_id'    => $tenantId,
+                'scope_id'     => $scopeId,
+                'reference_id' => $rid,
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<TenantScope>  $scopes
+     * @return list<TenantScope>
+     */
+    private function hydrateReferenceIds(array $scopes): array
+    {
+        if ($scopes === []) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($scopes as $s) {
+            $ids[] = (string) $s->scope_id;
+        }
+
+        $grouped = [];
+        if (Schema::hasTable('tenant_scope_members')) {
+            $rows = TenantScopeMember::query()
+                ->whereIn('scope_id', $ids)
+                ->whereNull('deleted_at')
+                ->orderBy('created_at')
+                ->get(['scope_id', 'reference_id']);
+
+            foreach ($rows as $row) {
+                $grouped[(string) $row->scope_id][] = (string) $row->reference_id;
+            }
+        }
+
+        foreach ($scopes as $s) {
+            $sid = (string) $s->scope_id;
+            $refs = $grouped[$sid] ?? [];
+            if ($refs === [] && !empty($s->reference_id)) {
+                $refs = [(string) $s->reference_id];
+            }
+            $s->setAttribute('reference_ids', array_values(array_unique($refs)));
+            if ($refs !== [] && empty($s->reference_id)) {
+                $s->setAttribute('reference_id', $refs[0]);
+            }
+        }
+
+        return $scopes;
     }
 
     private function assertTenantUserBelongsToTenant(string $tenantId, string $tenantUserId): void
     {
-        $tenantUser = TenantUser::withoutGlobalScopes()
+        $exists = TenantUser::query()
             ->where('tenant_id', $tenantId)
             ->where('tenant_user_id', $tenantUserId)
             ->whereNull('deleted_at')
-            ->first();
+            ->exists();
 
-        if (!$tenantUser) {
-            throw new Exception('tenant_user_id is invalid for the current tenant.');
+        if (!$exists) {
+            throw new Exception('کاربر عضویت در این سازمان یافت نشد.');
+        }
+    }
+
+    private function assertPackAllowsScopeType(string $tenantId, string $scopeType): void
+    {
+        $type = strtoupper(trim($scopeType));
+        if ($type === 'CUSTOM' || $type === '') {
+            return;
+        }
+
+        $packMap = [
+            'COMPANY'       => 'multi_company',
+            'BRANCH'        => 'multi_branch',
+            'BUSINESS_UNIT' => 'multi_business_unit',
+        ];
+
+        if (!isset($packMap[$type])) {
+            return;
+        }
+
+        try {
+            $catalog = app(FeatureCatalogService::class);
+            if (method_exists($catalog, 'tenantHasFeature') && !$catalog->tenantHasFeature($tenantId, $packMap[$type])) {
+                throw new DomainException(
+                    "برای تعریف محدوده از نوع {$type} باید بسته ویژگی مربوط فعال باشد.",
+                    'scope_feature_pack_required'
+                );
+            }
+        } catch (DomainException $e) {
+            throw $e;
+        } catch (\Throwable) {
+            // feature catalog optional
         }
     }
 
     private function assertReferenceValid(string $tenantId, string $scopeType, ?string $referenceId): void
     {
-        $type = strtoupper(trim($scopeType));
-        $referenceId = is_string($referenceId) ? trim($referenceId) : $referenceId;
-
-        if (in_array($type, self::STRUCTURAL_TYPES, true) && ($referenceId === null || $referenceId === '')) {
-            throw new Exception("برای نوع محدوده {$type} انتخاب موجودیت مرجع (reference_id) الزامی است.");
-        }
-
-        if ($referenceId === null || $referenceId === '') {
+        if ($referenceId === null || trim((string) $referenceId) === '') {
             return;
         }
 
-        try {
-            DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
-        } catch (\Throwable) {
-            // non-fatal
+        $type = strtoupper(trim($scopeType));
+        if (!in_array($type, self::STRUCTURAL_TYPES, true)) {
+            return;
         }
 
-        $map = [
-            'COMPANY' => ['erp_companies', 'company_id'],
-            'BRANCH' => ['erp_branches', 'branch_id'],
-            'DEPARTMENT' => ['erp_departments', 'department_id'],
-            'WAREHOUSE' => ['inv_warehouses', 'warehouse_id'],
-            'COST_CENTER' => ['erp_cost_centers', 'cost_center_id'],
+        $pkMap = [
+            'COMPANY'       => ['erp_companies', 'company_id'],
+            'BRANCH'        => ['erp_branches', 'branch_id'],
+            'WAREHOUSE'     => ['inv_warehouses', 'warehouse_id'],
+            'DEPARTMENT'    => ['erp_departments', 'department_id'],
+            'COST_CENTER'   => ['erp_cost_centers', 'cost_center_id'],
             'BUSINESS_UNIT' => ['erp_business_units', 'business_unit_id'],
         ];
 
-        if (!isset($map[$type])) {
+        if (!isset($pkMap[$type])) {
             return;
         }
 
-        [$table, $pk] = $map[$type];
-
+        [$table, $pk] = $pkMap[$type];
         $tables = [$table];
         if ($type === 'COST_CENTER') {
             $tables[] = 'cost_centers';
@@ -432,6 +544,7 @@ class ScopeService
         if (!$tenantId) {
             throw new Exception('Tenant context is not set.');
         }
+
         return $tenantId;
     }
 
