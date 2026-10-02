@@ -28,7 +28,16 @@ class UserController extends Controller
             $filter = 'active';
         }
 
-        $users = $this->userService->listTenantUsers($filter);
+        $search = $request->query('q');
+        $search = is_string($search) ? $search : null;
+
+        $limitRaw = $request->query('limit');
+        $limit = is_numeric($limitRaw) ? (int) $limitRaw : null;
+        if ($limit !== null && $limit < 1) {
+            $limit = null;
+        }
+
+        $users = $this->userService->listTenantUsers($filter, $search, $limit);
 
         return response()->json([
             'status'  => 'success',
