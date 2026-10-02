@@ -95,6 +95,28 @@ class PrivilegedAccessController extends Controller
         return response()->json(['data' => $grant]);
     }
 
+    public function extend(Request $request, string $id): JsonResponse
+    {
+        $data = $request->validate([
+            'duration_minutes' => ['required', 'integer', 'min:5', 'max:43200'],
+        ]);
+
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        if (!$actor) {
+            throw new HttpException(401, 'کاربر احراز هویت نشده است.');
+        }
+
+        $grant = $this->service->extend(
+            $tenantId,
+            $id,
+            (int) $data['duration_minutes'],
+            $actor
+        );
+
+        return response()->json(['data' => $grant]);
+    }
+
     public function markRole(Request $request): JsonResponse
     {
         $data = $request->validate([
