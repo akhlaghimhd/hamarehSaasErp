@@ -80,7 +80,7 @@ class RoleController extends Controller
     /**
      * POST /identity/roles/assign
      * Body: { user_id, role_ids: string[] }
-     * When tenant dual-approval is ON: queues GRANT/REVOKE requests (202).
+     * When dual-approval ON and RoleService returns pending array → 202.
      */
     public function assign(AssignRoleRequest $request): JsonResponse
     {
@@ -89,7 +89,8 @@ class RoleController extends Controller
             app(HoldingAccessService::class)->assertCanManageUserId($dto->userId);
             $result = $this->roleService->assignRoleToUser($dto);
 
-            if (($result['mode'] ?? 'direct') === 'pending') {
+            // Dual-approval path returns array{mode, pending_count, role}
+            if (is_array($result) && (($result['mode'] ?? '') === 'pending')) {
                 return response()->json([
                     'status'  => 'pending',
                     'mode'    => 'pending',
@@ -102,7 +103,7 @@ class RoleController extends Controller
 
             return response()->json([
                 'status'  => 'success',
-                'mode'    => 'direct',
+                'mode'    => is_array($result) ? ($result['mode'] ?? 'direct') : 'direct',
                 'message' => 'نقش با موفقیت به کاربر تخصیص داده شد.',
             ], 200);
         } catch (\RuntimeException $e) {
