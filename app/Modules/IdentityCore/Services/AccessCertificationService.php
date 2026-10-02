@@ -12,15 +12,11 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Access Certification — gap-focused remediation.
- * open: only SoD issues; reEvaluate: refresh after role fixes.
- * Resolved gaps are KEPT (decision=RESOLVED) so reports remain a full audit trail.
- * Archive = soft-delete of COMPLETED campaigns (list stays light).
+ * Archive = soft-delete of COMPLETED campaigns.
  */
 class AccessCertificationService
 {
-    /**
-     * @param  string  $scope  active|archived|all
-     */
+    /** @param  string  $scope  active|archived|all */
     public function listCampaigns(string $tenantId, string $scope = 'active'): Collection
     {
         $scope = strtolower(trim($scope));
@@ -127,12 +123,10 @@ class AccessCertificationService
         $code = preg_replace('/\s+/', '-', $code) ?? $code;
         $code = preg_replace('/[^a-z0-9_\-]/', '', $code) ?? $code;
         $code = preg_replace('/-+/', '-', $code) ?? $code;
-        $code = trim($code, '-_');
 
-        return $code;
+        return trim($code, '-_');
     }
 
-    /** بایگانی کمپین پایان‌یافته (soft-delete) */
     public function archiveCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
     {
         return DB::transaction(function () use ($tenantId, $campaignId, $actorId) {
@@ -148,11 +142,10 @@ class AccessCertificationService
             $campaign->save();
             $campaign->delete();
 
-            return $campaign->fresh([''] ) ?? $campaign;
+            return $campaign;
         });
     }
 
-    /** خروج از بایگانی */
     public function unarchiveCampaign(string $tenantId, string $campaignId, ?string $actorId = null): TenantAccessCertCampaign
     {
         return DB::transaction(function () use ($tenantId, $campaignId, $actorId) {
@@ -261,7 +254,6 @@ class AccessCertificationService
                 }
 
                 $row = $issueByUser[$uid];
-
                 $item->role_ids_snapshot = $row['role_ids'];
                 $item->sod_has_block = $row['has_block'];
                 $item->sod_has_warn = $row['has_warn'];
