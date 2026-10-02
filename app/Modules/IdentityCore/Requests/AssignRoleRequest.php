@@ -13,24 +13,41 @@ class AssignRoleRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $routeUserId = $this->route('userId');
+        if (is_string($routeUserId) && $routeUserId !== '' && !$this->filled('user_id')) {
+            $this->merge(['user_id' => $routeUserId]);
+        }
+    }
+
     public function rules(): array
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         return [
-            // کاربر حتماً باید عضو همین Tenant باشد
             'user_id' => [
-                'required', 
-                'uuid', 
+                'required',
+                'uuid',
                 Rule::exists('tenant_users', 'user_id')
-                    ->where('tenant_id', $tenantId)
-            ], 
+                    ->where('tenant_id', $tenantId),
+            ],
             'role_ids' => ['required', 'array', 'min:1'],
             'role_ids.*' => [
-                'uuid', 
+                'uuid',
                 Rule::exists('tenant_roles', 'tenant_role_id')
-                    ->where('tenant_id', $tenantId)
-            ]
+                    ->where('tenant_id', $tenantId),
+            ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'user_id.required' => 'شناسه کاربر الزامی است.',
+            'user_id.exists' => 'کاربر در این سازمان یافت نشد.',
+            'role_ids.required' => 'حداقل یک نقش باید انتخاب شود.',
+            'role_ids.*.exists' => 'یکی از نقش‌های انتخاب‌شده معتبر نیست.',
         ];
     }
 }
