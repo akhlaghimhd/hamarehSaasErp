@@ -90,11 +90,6 @@ class HoldingAccessService
         }
 
         $companyIds = $this->actorCompanyIds();
-        if ($companyIds === []) {
-            $query->whereRaw('1 = 0');
-
-            return $query;
-        }
 
         return $this->whereTenantUserInCompanies($query, $tenantId, $companyIds);
     }
@@ -105,36 +100,23 @@ class HoldingAccessService
             return;
         }
 
-        $tenantId = $this->currentTenantId();
-        $exists = TenantUser::query()
-            ->where('tenant_id', $tenantId)
-            ->where('tenant_user_id', $tenantUserId);
-
-        $this->constrainTenantUsersQuery($exists);
-
-        if (!$exists->exists()) {
-            throw new RuntimeException('شما اجازه مدیریت این کاربر را در محدوده شرکت خود ندارید.');
-        }
-    }
-
-    public function assertCanManageUserId(string $userId): void
-    {
-        if ($this->isGroupWideActor()) {
+        $companyIds = $this->actorCompanyIds();
+        if ($companyIds === []) {
             return;
         }
 
         $tenantId = $this->currentTenantId();
-        $tu = TenantUser::query()
+        $exists = TenantUser::query()
             ->where('tenant_id', $tenantId)
-            ->where('user_id', $userId)
-            ->whereNull('deleted_at')
-            ->first();
+            ->where('tenant_user_id', $tenantUserId)
+            ->where(function ($q) use ($tenantId, $companyIds) {
+                $this->whereTenantUserInCompanies($q, $tenantId, $companyIds);
+            })
+            ->exists();
 
-        if (!$tu) {
-            throw new RuntimeException('کاربر سازمان یافت نشد.');
+        if (!$exists) {
+            throw new RuntimeException('دسترسی به این عضو در محدوده شرکت شما مجاز نیست.');
         }
-
-        $this->assertCanManageTenantUser((string) $tu->tenant_user_id);
     }
 
     public function canManageTenantUser(string $tenantUserId): bool
@@ -169,7 +151,16 @@ class HoldingAccessService
                 ->whereNull('tenant_scopes.deleted_at')
                 ->where('tenant_scopes.is_active', true)
                 ->whereRaw('UPPER(tenant_scopes.scope_type) = ?', ['COMPANY'])
-                ->whereIn('tenant_scopes.reference_id', $companyIds);
+                ->where(function ($w) use ($companyIds) {
+                    $w->whereIn('tenant_scopes.reference_id', $companyIds)
+                        ->orWhereExists(function ($ex) use ($companyIds) {
+                            $ex->selectRaw('1')
+                                ->from('tenant_scope_members')
+                                ->whereColumn('tenant_scope_members.scope_id', 'tenant_scopes.scope_id')
+                                ->whereNull('tenant_scope_members.deleted_at')
+                                ->whereIn('tenant_scope_members.reference_id', $companyIds);
+                        });
+                });
         });
 
         return $query;
