@@ -6,18 +6,14 @@ class ScopeContext
 {
     protected static ?ScopeContext $instance = null;
 
-    /** @var array<string> لیست scope_idهای کاربر جاری */
+    /** @var array<string> */
     protected array $scopeIds = [];
 
-    /** @var array<array> لیست کامل Scopeها (شامل type و reference_id) */
+    /** @var array<array> */
     protected array $scopes = [];
 
-    /** @var string|null tenant_user_id کاربر جاری */
     protected ?string $tenantUserId = null;
 
-    /**
-     * Get the singleton instance of ScopeContext
-     */
     public static function getInstance(): self
     {
         if (self::$instance === null) {
@@ -26,23 +22,16 @@ class ScopeContext
         return self::$instance;
     }
 
-    /**
-     * Reset the singleton instance (useful for testing)
-     */
     public static function resetInstance(): void
     {
         self::$instance = null;
     }
 
     /**
-     * تنظیم Scopeهای کاربر جاری
-     *
-     * @param array $scopes آرایه‌ای از رکوردهای Scope (باید شامل scope_id, scope_type, reference_id باشد)
-     * @param string|null $tenantUserId
+     * @param array $scopes records with scope_id, scope_type, reference_id and optional reference_ids
      */
     public function setScopes(array $scopes, ?string $tenantUserId = null): self
     {
-        // Normalize scope_type to uppercase at ingestion
         $this->scopes = array_map(function ($scope) {
             if (is_array($scope) && isset($scope['scope_type'])) {
                 $scope['scope_type'] = strtoupper((string) $scope['scope_type']);
@@ -56,41 +45,26 @@ class ScopeContext
         return $this;
     }
 
-    /**
-     * دریافت لیست scope_idها
-     */
     public function getScopeIds(): array
     {
         return $this->scopeIds;
     }
 
-    /**
-     * دریافت لیست کامل Scopeها
-     */
     public function getScopes(): array
     {
         return $this->scopes;
     }
 
-    /**
-     * دریافت tenant_user_id کاربر جاری
-     */
     public function getTenantUserId(): ?string
     {
         return $this->tenantUserId;
     }
 
-    /**
-     * بررسی اینکه کاربر حداقل یک Scope دارد یا نه
-     */
     public function hasScopes(): bool
     {
         return !empty($this->scopeIds);
     }
 
-    /**
-     * دریافت Scopeهای یک نوع خاص (مثلاً BRANCH یا WAREHOUSE)
-     */
     public function getScopesByType(string $scopeType): array
     {
         $type = strtoupper($scopeType);
@@ -101,28 +75,48 @@ class ScopeContext
         ));
     }
 
-    /**
-     * دریافت reference_idهای یک نوع خاص
-     */
     public function getReferenceIdsByType(string $scopeType): array
     {
         $filtered = $this->getScopesByType($scopeType);
+        $ids = [];
 
-        return array_values(array_filter(array_column($filtered, 'reference_id')));
+        foreach ($filtered as $scope) {
+            $multi = $scope['reference_ids'] ?? null;
+            if (is_array($multi) && $multi !== []) {
+                foreach ($multi as $rid) {
+                    if ($rid !== null && $rid !== '') {
+                        $ids[] = (string) $rid;
+                    }
+                }
+                continue;
+            }
+            if (!empty($scope['reference_id'])) {
+                $ids[] = (string) $scope['reference_id'];
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
-    /**
-     * بررسی اینکه کاربر به یک reference_id خاص دسترسی دارد یا نه
-     */
     public function hasAccessTo(string $scopeType, string $referenceId): bool
     {
         $type = strtoupper($scopeType);
+        $want = (string) $referenceId;
 
         foreach ($this->scopes as $scope) {
-            if (
-                strtoupper((string) ($scope['scope_type'] ?? '')) === $type &&
-                ($scope['reference_id'] ?? null) === $referenceId
-            ) {
+            if (strtoupper((string) ($scope['scope_type'] ?? '')) !== $type) {
+                continue;
+            }
+            $multi = $scope['reference_ids'] ?? null;
+            if (is_array($multi) && $multi !== []) {
+                foreach ($multi as $rid) {
+                    if ((string) $rid === $want) {
+                        return true;
+                    }
+                }
+                continue;
+            }
+            if (($scope['reference_id'] ?? null) !== null && (string) $scope['reference_id'] === $want) {
                 return true;
             }
         }
