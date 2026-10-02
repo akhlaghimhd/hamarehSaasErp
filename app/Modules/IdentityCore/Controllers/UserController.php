@@ -39,6 +39,9 @@ class UserController extends Controller
             $limit = null;
         }
 
+        $companyId = $request->query('company_id');
+        $companyId = is_string($companyId) && trim($companyId) !== '' ? trim($companyId) : null;
+
         if (is_string($search) && mb_strlen(trim($search)) >= 2) {
             $users = $this->tenantUserSearchService->search(
                 trim($search),
@@ -47,6 +50,25 @@ class UserController extends Controller
             );
         } else {
             $users = $this->userService->listTenantUsers($filter);
+        }
+
+        // ADR-ID-ORG-003 H3: optional per-company filter for group-wide actors
+        if ($companyId !== null) {
+            $users = collect($users)->filter(function ($tu) use ($companyId) {
+                $tenantUserId = (string) (is_array($tu) ? ($tu['tenant_user_id'] ?? '') : ($tu->tenant_user_id ?? ''));
+                if ($tenantUserId === '') {
+                    return false;
+                }
+                return \Illuminate\Support\Facades\DB::table('tenant_user_scopes')
+                    ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
+                    ->where('tenant_user_scopes.tenant_user_id', $tenantUserId)
+                    ->whereNull('tenant_user_scopes.deleted_at')
+                    ->whereNull('tenant_scopes.deleted_at')
+                    ->where('tenant_scopes.is_active', true)
+                    ->whereRaw('UPPER(tenant_scopes.scope_type) = ?', ['COMPANY'])
+                    ->where('tenant_scopes.reference_id', $companyId)
+                    ->exists();
+            })->values();
         }
 
         return response()->json([
