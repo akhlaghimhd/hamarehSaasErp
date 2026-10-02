@@ -154,85 +154,87 @@ return Application::configure(basePath: dirname(__DIR__))
  *
  * @param  array<string, array<int, string>>  $errors
  */
-function self_persian_validation_message(array $errors): string
-{
-    $attrLabels = [
-        'code' => 'کد',
-        'name' => 'نام',
-        'email' => 'ایمیل',
-        'password' => 'رمز عبور',
-        'mobile' => 'موبایل',
-        'first_name' => 'نام',
-        'last_name' => 'نام خانوادگی',
-        'description' => 'توضیحات',
-        'decision' => 'تصمیم',
-        'note' => 'یادداشت',
-        'status' => 'وضعیت',
-        'role_ids' => 'نقش‌ها',
-        'user_id' => 'کاربر',
-        'permission_ids' => 'مجوزها',
-        'parent_role_id' => 'نقش والد',
-        'due_at' => 'تاریخ سررسید',
-        'scope_type' => 'نوع محدوده',
-        'entity_id' => 'موجودیت',
-    ];
+if (! function_exists('self_persian_validation_message')) {
+    function self_persian_validation_message(array $errors): string
+    {
+        $attrLabels = [
+            'code' => 'کد',
+            'name' => 'نام',
+            'email' => 'ایمیل',
+            'password' => 'رمز عبور',
+            'mobile' => 'موبایل',
+            'first_name' => 'نام',
+            'last_name' => 'نام خانوادگی',
+            'description' => 'توضیحات',
+            'decision' => 'تصمیم',
+            'note' => 'یادداشت',
+            'status' => 'وضعیت',
+            'role_ids' => 'نقش‌ها',
+            'user_id' => 'کاربر',
+            'permission_ids' => 'مجوزها',
+            'parent_role_id' => 'نقش والد',
+            'due_at' => 'تاریخ سررسید',
+            'scope_type' => 'نوع محدوده',
+            'entity_id' => 'موجودیت',
+        ];
 
-    $firstKey = array_key_first($errors);
-    if ($firstKey === null) {
+        $firstKey = array_key_first($errors);
+        if ($firstKey === null) {
+            return 'لطفاً اطلاعات فرم را بررسی و اصلاح کنید.';
+        }
+
+        $firstMsg = $errors[$firstKey][0] ?? '';
+        // Already Persian from FormRequest / validate() messages
+        if (is_string($firstMsg) && preg_match('/[\x{0600}-\x{06FF}]/u', $firstMsg)) {
+            return $firstMsg;
+        }
+
+        $label = $attrLabels[$firstKey] ?? 'این فیلد';
+        $lower = strtolower((string) $firstMsg);
+
+        if (str_contains($lower, 'required')) {
+            return "{$label} الزامی است.";
+        }
+        if (str_contains($lower, 'must be a string') || str_contains($lower, 'string')) {
+            return "{$label} باید متن باشد.";
+        }
+        if (str_contains($lower, 'must be an integer') || str_contains($lower, 'integer')) {
+            return "{$label} باید عدد صحیح باشد.";
+        }
+        if (str_contains($lower, 'must be a number') || str_contains($lower, 'numeric')) {
+            return "{$label} باید عدد باشد.";
+        }
+        if (str_contains($lower, 'may not be greater') || str_contains($lower, 'max')) {
+            return "{$label} بیش از حد مجاز است.";
+        }
+        if (str_contains($lower, 'must be at least') || str_contains($lower, 'min')) {
+            return "{$label} کمتر از حد مجاز است.";
+        }
+        if (str_contains($lower, 'must be a valid') || str_contains($lower, 'format') || str_contains($lower, 'uuid')) {
+            return "{$label} قالب معتبری ندارد.";
+        }
+        if (str_contains($lower, 'has already been taken') || str_contains($lower, 'unique')) {
+            return "{$label} تکراری است.";
+        }
+        if (str_contains($lower, 'does not exist') || str_contains($lower, 'exists')) {
+            return "{$label} در سامانه یافت نشد.";
+        }
+        if (str_contains($lower, 'must be accepted')) {
+            return "{$label} باید تأیید شود.";
+        }
+        if (str_contains($lower, 'confirmed')) {
+            return "تأیید {$label} با مقدار واردشده یکسان نیست.";
+        }
+        if (str_contains($lower, 'email')) {
+            return 'ایمیل معتبر نیست.';
+        }
+        if (str_contains($lower, 'date')) {
+            return "{$label} تاریخ معتبری نیست.";
+        }
+        if (str_contains($lower, 'in:')) {
+            return "مقدار {$label} مجاز نیست.";
+        }
+
         return 'لطفاً اطلاعات فرم را بررسی و اصلاح کنید.';
     }
-
-    $firstMsg = $errors[$firstKey][0] ?? '';
-    // Already Persian from FormRequest / validate() messages
-    if (is_string($firstMsg) && preg_match('/[\x{0600}-\x{06FF}]/u', $firstMsg)) {
-        return $firstMsg;
-    }
-
-    $label = $attrLabels[$firstKey] ?? 'این فیلد';
-    $lower = strtolower((string) $firstMsg);
-
-    if (str_contains($lower, 'required')) {
-        return "{$label} الزامی است.";
-    }
-    if (str_contains($lower, 'must be a string') || str_contains($lower, 'string')) {
-        return "{$label} باید متن باشد.";
-    }
-    if (str_contains($lower, 'must be an integer') || str_contains($lower, 'integer')) {
-        return "{$label} باید عدد صحیح باشد.";
-    }
-    if (str_contains($lower, 'must be a number') || str_contains($lower, 'numeric')) {
-        return "{$label} باید عدد باشد.";
-    }
-    if (str_contains($lower, 'may not be greater') || str_contains($lower, 'max')) {
-        return "{$label} بیش از حد مجاز است.";
-    }
-    if (str_contains($lower, 'must be at least') || str_contains($lower, 'min')) {
-        return "{$label} کمتر از حد مجاز است.";
-    }
-    if (str_contains($lower, 'must be a valid') || str_contains($lower, 'format') || str_contains($lower, 'uuid')) {
-        return "{$label} قالب معتبری ندارد.";
-    }
-    if (str_contains($lower, 'has already been taken') || str_contains($lower, 'unique')) {
-        return "{$label} تکراری است.";
-    }
-    if (str_contains($lower, 'does not exist') || str_contains($lower, 'exists')) {
-        return "{$label} در سامانه یافت نشد.";
-    }
-    if (str_contains($lower, 'must be accepted')) {
-        return "{$label} باید تأیید شود.";
-    }
-    if (str_contains($lower, 'confirmed')) {
-        return "تأیید {$label} با مقدار واردشده یکسان نیست.";
-    }
-    if (str_contains($lower, 'email')) {
-        return 'ایمیل معتبر نیست.';
-    }
-    if (str_contains($lower, 'date')) {
-        return "{$label} تاریخ معتبری نیست.";
-    }
-    if (str_contains($lower, 'in:')) {
-        return "مقدار {$label} مجاز نیست.";
-    }
-
-    return 'لطفاً اطلاعات فرم را بررسی و اصلاح کنید.';
 }
