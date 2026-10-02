@@ -167,10 +167,11 @@ class LoadUserScopesMiddleware
 
         $scopes = $this->attachScopeMemberReferences($tenantId, $scopes);
 
+        // tenant_user_roles links platform user_id (not tenant_user_id) — see migration 2026_01_01_000014
         $roleRows = DB::table('tenant_user_roles')
             ->join('tenant_roles', 'tenant_user_roles.tenant_role_id', '=', 'tenant_roles.tenant_role_id')
             ->where('tenant_user_roles.tenant_id', $tenantId)
-            ->where('tenant_user_roles.tenant_user_id', $tenantUser->tenant_user_id)
+            ->where('tenant_user_roles.user_id', $userId)
             ->whereNull('tenant_user_roles.deleted_at')
             ->whereNull('tenant_roles.deleted_at')
             ->where('tenant_roles.status', 1)
