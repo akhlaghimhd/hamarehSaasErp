@@ -30,7 +30,7 @@ class PrivilegedAccessController extends Controller
             'user_id'           => ['required', 'uuid'],
             'tenant_role_id'    => ['required', 'uuid'],
             'reason'            => ['required', 'string', 'min:5', 'max:500'],
-            'duration_minutes'  => ['nullable', 'integer', 'min:5', 'max:480'],
+            'duration_minutes'  => ['nullable', 'integer', 'min:5', 'max:43200'],
         ]);
 
         $tenantId = $this->tenantId($request);
