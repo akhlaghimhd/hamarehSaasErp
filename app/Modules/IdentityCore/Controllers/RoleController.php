@@ -83,15 +83,22 @@ class RoleController extends Controller
      */
     public function assign(AssignRoleRequest $request): JsonResponse
     {
-        $dto = AssignRoleToUserDTO::fromRequest($request->validated());
-        // ADR-ID-ORG-003: delegated admin cannot assign roles outside company circle
-        app(HoldingAccessService::class)->assertCanManageUserId($dto->userId);
-        $this->roleService->assignRoleToUser($dto);
+        try {
+            $dto = AssignRoleToUserDTO::fromRequest($request->validated());
+            // ADR-ID-ORG-003: delegated admin cannot assign roles outside company circle
+            app(HoldingAccessService::class)->assertCanManageUserId($dto->userId);
+            $this->roleService->assignRoleToUser($dto);
 
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'نقش با موفقیت به کاربر تخصیص داده شد.',
-        ], 200);
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'نقش با موفقیت به کاربر تخصیص داده شد.',
+            ], 200);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 403);
+        }
     }
 
     /**
