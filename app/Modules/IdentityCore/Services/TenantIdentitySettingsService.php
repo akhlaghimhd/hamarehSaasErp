@@ -8,49 +8,53 @@ use Illuminate\Support\Str;
 
 /**
  * Tenant-owned identity policy settings (not SaaS feature packs).
- * Customer toggles dual-control for role grant/revoke from system settings.
+ * Customer toggles dual-control independently for role assign and privileged access.
  */
 class TenantIdentitySettingsService
 {
     public const KEY_REQUIRE_ROLE_ASSIGNMENT_APPROVAL = 'require_role_assignment_approval';
 
+    public const KEY_REQUIRE_PRIVILEGED_ACCESS_APPROVAL = 'require_privileged_access_approval';
+
     public const GROUP_IDENTITY = 'IDENTITY';
 
     public function requireRoleAssignmentApproval(?string $tenantId = null): bool
     {
-        $tenantId = $tenantId ?: $this->currentTenantId();
-        if ($tenantId === '') {
-            return false;
-        }
-
-        $row = TenantSetting::query()
-            ->where('tenant_id', $tenantId)
-            ->where('setting_key', self::KEY_REQUIRE_ROLE_ASSIGNMENT_APPROVAL)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if (!$row || $row->setting_value === null || $row->setting_value === '') {
-            return false; // default OFF — current direct path
-        }
-
-        $v = strtolower(trim((string) $row->setting_value));
-
-        return in_array($v, ['1', 'true', 'yes', 'on'], true);
+        return $this->boolSetting(self::KEY_REQUIRE_ROLE_ASSIGNMENT_APPROVAL, false, $tenantId);
     }
 
     /**
-     * @return array{require_role_assignment_approval: bool}
+     * Default ON — privileged grants stay pending until approved.
+     * When OFF, requestGrant auto-activates without a second step.
+     */
+    public function requirePrivilegedAccessApproval(?string $tenantId = null): bool
+    {
+        return $this->boolSetting(self::KEY_REQUIRE_PRIVILEGED_ACCESS_APPROVAL, true, $tenantId);
+    }
+
+    /**
+     * @return array{
+     *   require_role_assignment_approval: bool,
+     *   require_privileged_access_approval: bool
+     * }
      */
     public function getIdentitySettings(?string $tenantId = null): array
     {
         return [
             'require_role_assignment_approval' => $this->requireRoleAssignmentApproval($tenantId),
+            'require_privileged_access_approval' => $this->requirePrivilegedAccessApproval($tenantId),
         ];
     }
 
     /**
-     * @param  array{require_role_assignment_approval?: bool|string|int}  $payload
-     * @return array{require_role_assignment_approval: bool}
+     * @param  array{
+     *   require_role_assignment_approval?: bool|string|int,
+     *   require_privileged_access_approval?: bool|string|int
+     * }  $payload
+     * @return array{
+     *   require_role_assignment_approval: bool,
+     *   require_privileged_access_approval: bool
+     * }
      */
     public function updateIdentitySettings(array $payload, ?string $tenantId = null, ?string $actorId = null): array
     {
@@ -70,7 +74,40 @@ class TenantIdentitySettingsService
             );
         }
 
+        if (array_key_exists('require_privileged_access_approval', $payload)) {
+            $on = filter_var($payload['require_privileged_access_approval'], FILTER_VALIDATE_BOOLEAN);
+            $this->upsert(
+                $tenantId,
+                self::KEY_REQUIRE_PRIVILEGED_ACCESS_APPROVAL,
+                $on ? 'true' : 'false',
+                self::GROUP_IDENTITY,
+                $actorId
+            );
+        }
+
         return $this->getIdentitySettings($tenantId);
+    }
+
+    protected function boolSetting(string $key, bool $default, ?string $tenantId = null): bool
+    {
+        $tenantId = $tenantId ?: $this->currentTenantId();
+        if ($tenantId === '') {
+            return $default;
+        }
+
+        $row = TenantSetting::query()
+            ->where('tenant_id', $tenantId)
+            ->where('setting_key', $key)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$row || $row->setting_value === null || $row->setting_value === '') {
+            return $default;
+        }
+
+        $v = strtolower(trim((string) $row->setting_value));
+
+        return in_array($v, ['1', 'true', 'yes', 'on'], true);
     }
 
     protected function upsert(
