@@ -126,6 +126,10 @@ Route::prefix('identity')->group(function () {
                 ->middleware('permission:identity.access_cert.view');
             Route::post('/{id}/complete', [AccessCertificationController::class, 'complete'])
                 ->middleware('permission:identity.access_cert.manage');
+            Route::post('/{id}/archive', [AccessCertificationController::class, 'archive'])
+                ->middleware('permission:identity.access_cert.manage');
+            Route::post('/{id}/unarchive', [AccessCertificationController::class, 'unarchive'])
+                ->middleware('permission:identity.access_cert.manage');
             Route::post('/items/{itemId}/certify', [AccessCertificationController::class, 'certify'])
                 ->middleware('permission:identity.access_cert.certify');
         });

@@ -18,8 +18,9 @@ class AccessCertificationController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tenantId = $this->tenantId($request);
+        $scope = (string) $request->query('scope', 'active');
 
-        return response()->json(['data' => $this->cert->listCampaigns($tenantId)]);
+        return response()->json(['data' => $this->cert->listCampaigns($tenantId, $scope)]);
     }
 
     public function store(Request $request): JsonResponse
@@ -122,7 +123,7 @@ class AccessCertificationController extends Controller
 
         $tenantId = $this->tenantId($request);
         $reviewer = optional($request->user())->user_id;
-        if (!$reviewer) {
+        if (! $reviewer) {
             throw new HttpException(401, 'کاربر احراز هویت نشده است.');
         }
 
@@ -142,6 +143,29 @@ class AccessCertificationController extends Controller
         $tenantId = $this->tenantId($request);
         $actor = optional($request->user())->user_id;
         $campaign = $this->cert->completeCampaign($tenantId, $id, $actor);
+
+        return response()->json(['data' => $campaign]);
+    }
+
+    public function archive(Request $request, string $id): JsonResponse
+    {
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        $campaign = $this->cert->archiveCampaign($tenantId, $id, $actor);
+
+        return response()->json([
+            'data' => [
+                'campaign_id' => $campaign->campaign_id,
+                'archived'    => true,
+            ],
+        ]);
+    }
+
+    public function unarchive(Request $request, string $id): JsonResponse
+    {
+        $tenantId = $this->tenantId($request);
+        $actor = optional($request->user())->user_id;
+        $campaign = $this->cert->unarchiveCampaign($tenantId, $id, $actor);
 
         return response()->json(['data' => $campaign]);
     }
