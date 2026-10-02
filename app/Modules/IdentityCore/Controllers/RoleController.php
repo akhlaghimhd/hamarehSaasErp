@@ -12,6 +12,7 @@ use App\Modules\IdentityCore\DTOs\UpdateRoleDTO;
 use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\DTOs\AssignPermissionsToRoleDTO;
 use App\Modules\IdentityCore\Services\RoleService;
+use App\Base\Services\HoldingAccessService;
 use Illuminate\Http\JsonResponse;
 
 class RoleController extends Controller
@@ -83,6 +84,8 @@ class RoleController extends Controller
     public function assign(AssignRoleRequest $request): JsonResponse
     {
         $dto = AssignRoleToUserDTO::fromRequest($request->validated());
+        // ADR-ID-ORG-003: delegated admin cannot assign roles outside company circle
+        app(HoldingAccessService::class)->assertCanManageUserId($dto->userId);
         $this->roleService->assignRoleToUser($dto);
 
         return response()->json([
