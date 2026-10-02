@@ -282,7 +282,7 @@ class PrivilegedAccessService
         $role->row_version = (int) $role->row_version + 1;
         $role->save();
 
-        TenantCache::forgetTenant($tenantId);
+        TenantCache::flushTenant($tenantId);
 
         return $role->fresh();
     }
@@ -322,7 +322,6 @@ class PrivilegedAccessService
             return;
         }
 
-        // Beneficiary is approving their own grant → only tenant owner may do this.
         if ($this->isTenantOwner($tenantId, $approverUserId)) {
             return;
         }
@@ -376,7 +375,6 @@ class PrivilegedAccessService
             'tenant_id'           => $tenantId,
             'user_id'             => $userId,
             'tenant_role_id'      => $roleId,
-            'row_version'         => 1,
         ]);
     }
 
@@ -391,7 +389,7 @@ class PrivilegedAccessService
 
     private function forgetUserCaches(string $tenantId, string $userId): void
     {
-        TenantCache::forgetTenant($tenantId);
-        LoadUserScopesMiddleware::bumpPermissionVersion($tenantId);
+        TenantCache::flushTenant($tenantId);
+        LoadUserScopesMiddleware::forget($tenantId, $userId);
     }
 }
