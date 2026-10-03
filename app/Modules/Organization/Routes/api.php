@@ -45,6 +45,9 @@ Route::middleware([
     Route::get('/branches', [BranchController::class, 'index'])
         ->middleware('permission:organization.branch.view');
 
+    Route::get('/departments', [DepartmentController::class, 'index'])
+        ->middleware('permission:organization.department.view');
+
     Route::get('/branches/{branch}', [BranchController::class, 'show'])
         ->middleware(['permission:organization.branch.view', 'scope:BRANCH,branch']);
     Route::put('/branches/{branch}', [BranchController::class, 'update'])
@@ -127,7 +130,7 @@ Route::middleware([
     Route::get('/hierarchies/health', [OrgHierarchyController::class, 'health'])
         ->middleware('permission:organization.hierarchy.view');
     Route::get('/hierarchies/rebuild/preview', [OrgHierarchyController::class, 'previewRebuild'])
-        ->middleware('permission:organization.hierarchy.view');
+        ->middleware('permission:organization.hierarchy.manage');
     Route::post('/hierarchies/rebuild', [OrgHierarchyController::class, 'rebuild'])
         ->middleware('permission:organization.hierarchy.manage');
     Route::post('/hierarchies/nodes/bulk', [OrgHierarchyController::class, 'bulkNodes'])
@@ -179,7 +182,6 @@ Route::middleware([
     Route::delete('/intercompany/rules/{rule}', [IntercompanyController::class, 'destroyRule'])
         ->middleware('permission:organization.intercompany.manage');
 
-    // Sales organizations — full CRUD + assignments
     Route::get('/sales-organizations', [SalesOrganizationController::class, 'index'])
         ->middleware('permission:organization.sales_org.view');
     Route::post('/sales-organizations', [SalesOrganizationController::class, 'store'])
@@ -199,7 +201,6 @@ Route::middleware([
     Route::delete('/sales-org-assignments/{assignment}', [SalesOrganizationController::class, 'unassign'])
         ->middleware('permission:organization.sales_org.manage');
 
-    // Purchasing organizations — full CRUD + assignments
     Route::get('/purchasing-organizations', [PurchasingOrganizationController::class, 'index'])
         ->middleware('permission:organization.purch_org.view');
     Route::post('/purchasing-organizations', [PurchasingOrganizationController::class, 'store'])
@@ -219,7 +220,6 @@ Route::middleware([
     Route::delete('/purch-org-assignments/{assignment}', [PurchasingOrganizationController::class, 'unassign'])
         ->middleware('permission:organization.purch_org.manage');
 
-    // Sales structure catalogs (channels, divisions, areas, offices, groups)
     Route::get('/distribution-channels', [SalesStructureController::class, 'channels'])
         ->middleware('permission:organization.sales_structure.view');
     Route::post('/distribution-channels', [SalesStructureController::class, 'storeChannel'])
