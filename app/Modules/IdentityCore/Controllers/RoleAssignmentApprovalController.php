@@ -21,9 +21,12 @@ class RoleAssignmentApprovalController extends Controller
     public function index(Request $request): JsonResponse
     {
         $tenantId = $this->tenantId($request);
+        $rows = $this->service->listPending($tenantId);
 
         return response()->json([
-            'data' => $this->service->listPending($tenantId)->values(),
+            'status'  => 'success',
+            'message' => 'فهرست درخواست‌های در انتظار تأیید',
+            'data'    => $rows->values()->all(),
         ]);
     }
 
