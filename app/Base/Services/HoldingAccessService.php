@@ -119,6 +119,30 @@ class HoldingAccessService
         }
     }
 
+    /**
+     * Resolve membership by platform user_id then apply company-scope guard.
+     * Used by role assign (AssignRoleToUserDTO carries user_id, not tenant_user_id).
+     */
+    public function assertCanManageUserId(string $userId): void
+    {
+        if ($this->isGroupWideActor()) {
+            return;
+        }
+
+        $tenantId = $this->currentTenantId();
+        $tu = TenantUser::query()
+            ->where('tenant_id', $tenantId)
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$tu) {
+            throw new RuntimeException('کاربر سازمان یافت نشد.');
+        }
+
+        $this->assertCanManageTenantUser((string) $tu->tenant_user_id);
+    }
+
     public function canManageTenantUser(string $tenantUserId): bool
     {
         try {
