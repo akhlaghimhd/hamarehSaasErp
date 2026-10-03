@@ -17,7 +17,8 @@ class CreateScopeRequest extends FormRequest
             'scope_name'      => ['required', 'string', 'max:150'],
             'scope_type'      => ['required', 'string', 'max:50', 'in:COMPANY,BRANCH,WAREHOUSE,DEPARTMENT,COST_CENTER,BUSINESS_UNIT,CUSTOM'],
             'reference_id'    => ['nullable', 'uuid'],
-            'reference_ids'   => ['nullable', 'array', 'min:1'],
+            // empty array is valid for non-structural types; structural enforced in ScopeService
+            'reference_ids'   => ['nullable', 'array'],
             'reference_ids.*' => ['uuid'],
             'description'     => ['nullable', 'string', 'max:500'],
             'is_active'       => ['nullable', 'boolean'],
