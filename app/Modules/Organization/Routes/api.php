@@ -130,7 +130,7 @@ Route::middleware([
     Route::get('/hierarchies/health', [OrgHierarchyController::class, 'health'])
         ->middleware('permission:organization.hierarchy.view');
     Route::get('/hierarchies/rebuild/preview', [OrgHierarchyController::class, 'previewRebuild'])
-        ->middleware('permission:organization.hierarchy.manage');
+        ->middleware('permission:organization.hierarchy.view');
     Route::post('/hierarchies/rebuild', [OrgHierarchyController::class, 'rebuild'])
         ->middleware('permission:organization.hierarchy.manage');
     Route::post('/hierarchies/nodes/bulk', [OrgHierarchyController::class, 'bulkNodes'])
