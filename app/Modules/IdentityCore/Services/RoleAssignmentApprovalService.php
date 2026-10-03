@@ -24,11 +24,47 @@ class RoleAssignmentApprovalService
 
     public function listPending(string $tenantId): Collection
     {
+        // Keep RLS session var aligned with app tenant (FORCE RLS otherwise hides rows).
+        try {
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, true)", [$tenantId]);
+        } catch (\Throwable) {
+            // best-effort
+        }
+
         return TenantRoleAssignmentRequest::query()
             ->where('tenant_id', $tenantId)
             ->where('status', TenantRoleAssignmentRequest::STATUS_PENDING)
+            ->whereNull('deleted_at')
             ->orderByDesc('created_at')
-            ->get();
+            ->get()
+            ->map(function (TenantRoleAssignmentRequest $r) {
+                $roleName = null;
+                try {
+                    $role = TenantRole::query()
+                        ->where('tenant_id', $r->tenant_id)
+                        ->where('tenant_role_id', $r->tenant_role_id)
+                        ->first();
+                    $roleName = $role?->name ?? $role?->code;
+                } catch (\Throwable) {
+                    $roleName = null;
+                }
+
+                return [
+                    'request_id'     => (string) $r->request_id,
+                    'tenant_id'      => (string) $r->tenant_id,
+                    'user_id'        => (string) $r->user_id,
+                    'tenant_role_id' => (string) $r->tenant_role_id,
+                    'role_name'      => $roleName,
+                    'request_action' => (string) ($r->request_action ?? TenantRoleAssignmentRequest::ACTION_GRANT),
+                    'status'         => (string) $r->status,
+                    'reason'         => $r->reason,
+                    'valid_from'     => optional($r->valid_from)?->toIso8601String(),
+                    'valid_to'       => optional($r->valid_to)?->toIso8601String(),
+                    'requested_by'   => $r->requested_by ? (string) $r->requested_by : null,
+                    'created_at'     => optional($r->created_at)?->toIso8601String(),
+                ];
+            })
+            ->values();
     }
 
     public function requestAssignment(
@@ -127,8 +163,6 @@ class RoleAssignmentApprovalService
                 throw new HttpException(422, 'فقط درخواست‌های در انتظار قابل تأیید هستند.');
             }
 
-            // Separation of duties: requester ≠ approver — except tenant owner
-            // who may act on both sides (product rule for holding/SME admin).
             if ($req->requested_by === $reviewedBy && !$this->isTenantOwner($tenantId, $reviewedBy)) {
                 throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند خودش درخواست را تأیید کند.');
             }
