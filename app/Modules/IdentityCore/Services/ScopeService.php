@@ -159,10 +159,14 @@ class ScopeService
                 'scope_type'  => $dto->scopeType !== null ? strtoupper($dto->scopeType) : null,
                 'description' => $dto->description,
                 'is_active'   => $dto->isActive,
-            ], fn ($value) => !is_null($value));
+            ], static fn ($value) => $value !== null);
 
             if ($referenceIds !== null) {
                 $updateData['reference_id'] = $referenceIds[0] ?? null;
+            }
+
+            if (array_key_exists('is_active', $updateData) && $updateData['is_active'] === false) {
+                $this->assertScopeNotAssignedToUsers($tenantId, $scope->scope_id, 'غیرفعال‌سازی');
             }
 
             if (!empty($updateData)) {
@@ -201,6 +205,8 @@ class ScopeService
             $scope = TenantScope::where('tenant_id', $tenantId)
                 ->where('scope_id', $scopeId)
                 ->firstOrFail();
+
+            $this->assertScopeNotAssignedToUsers($tenantId, $scopeId, 'حذف');
 
             $scope->delete();
 
@@ -576,6 +582,22 @@ class ScopeService
         throw new Exception(
             "موجودیت مرجع انتخاب‌شده برای نوع {$type} در این سازمان یافت نشد. (شناسه: {$referenceId})"
         );
+    }
+
+    private function assertScopeNotAssignedToUsers(string $tenantId, string $scopeId, string $actionLabel): void
+    {
+        $count = TenantUserScope::withoutGlobalScopes()
+            ->where('tenant_id', $tenantId)
+            ->where('scope_id', $scopeId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        if ($count > 0) {
+            throw new DomainException(
+                "این محدوده به {$count} کاربر تخصیص دارد؛ ابتدا تخصیص‌ها را بردارید و سپس {$actionLabel} را انجام دهید.",
+                'scope_in_use'
+            );
+        }
     }
 
     private function getTenantId(): string
