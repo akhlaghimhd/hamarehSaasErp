@@ -40,13 +40,26 @@ class CompanyService
         $isPrimary = (bool) $dto->isPrimary;
         $rateType = $this->normalizeRateType($dto->defaultConsolRateType);
 
+        // ADR-ID-ORG-003 §3.2: after the platform-provisioned primary exists,
+        // tenant cannot create a second root (parent-less) company.
+        if ($existingCount >= 1) {
+            if ($parentId === null || $parentId === '') {
+                throw new \Exception(
+                    'پس از ثبت شرکت اصلی، هر شرکت جدید باید شرکت والد داشته باشد.'
+                );
+            }
+            // Tenant must not claim primary on additional companies.
+            $isPrimary = false;
+        }
+
         $this->assertParentValid($tenantId, $parentId, null);
         $this->assertEntityKindRules($entityKind, $parentId);
         $this->assertEliminationCurrency($tenantId, $entityKind, $parentId, $dto->baseCurrencyId);
 
         $hasPrimary = Company::where('tenant_id', $tenantId)->where('is_primary', true)->exists();
-        if (!$hasPrimary) {
+        if (!$hasPrimary && $existingCount === 0) {
             $isPrimary = true;
+            $parentId = null;
         }
 
         $company = DB::transaction(function () use ($tenantId, $dto, $entityKind, $parentId, $isPrimary, $rateType) {
@@ -154,6 +167,30 @@ class CompanyService
         $rateType = $dto->defaultConsolRateTypeProvided
             ? $this->normalizeRateType($dto->defaultConsolRateType)
             : $company->default_consol_rate_type;
+
+        // ADR-ID-ORG-003 §3.2: primary root is immutable for tenant callers.
+        if ($company->is_primary) {
+            if ($parentId !== null && $parentId !== '') {
+                throw new \Exception(
+                    'شرکت اصلی (ریشه) نمی‌تواند زیرمجموعهٔ شرکت دیگری شود. جابه‌جایی ریشه فقط توسط مالک پلتفرم مجاز است.'
+                );
+            }
+            $parentId = null;
+            $isPrimary = true;
+        } else {
+            // Non-primary must always keep a parent (no second root via update).
+            if ($parentId === null || $parentId === '') {
+                throw new \Exception(
+                    'شرکت غیر اصلی باید شرکت والد داشته باشد. ایجاد ریشهٔ دوم مجاز نیست.'
+                );
+            }
+            if ($isPrimary === true) {
+                throw new \Exception(
+                    'انتقال پرچم شرکت اصلی فقط توسط مالک پلتفرم مجاز است.'
+                );
+            }
+            $isPrimary = false;
+        }
 
         $this->assertParentValid($tenantId, $parentId, $companyId);
         $this->assertEntityKindRules($entityKind, $parentId);
@@ -278,11 +315,23 @@ class CompanyService
             throw new \Exception('کد این شرکت با یک شرکت فعال دیگر تداخل دارد.');
         }
 
+        // Restored non-primary companies must still hang under a valid parent.
+        if (!$company->is_primary && ($company->parent_company_id === null || $company->parent_company_id === '')) {
+            $rootId = Company::where('tenant_id', $tenantId)
+                ->where('is_primary', true)
+                ->value('company_id');
+            if (!$rootId) {
+                throw new \Exception('شرکت اصلی برای اتصال والد یافت نشد. با پشتیبانی پلتفرم تماس بگیرید.');
+            }
+            $company->parent_company_id = $rootId;
+        }
+
         $company = DB::transaction(function () use ($company) {
             $company->restore();
             $company->update([
-                'is_active'   => false,
-                'row_version' => ((int) ($company->row_version ?? 1)) + 1,
+                'is_active'         => false,
+                'parent_company_id' => $company->parent_company_id,
+                'row_version'       => ((int) ($company->row_version ?? 1)) + 1,
             ]);
 
             return $company->fresh();
@@ -322,8 +371,9 @@ class CompanyService
             if ($any) {
                 $this->clearPrimaryFlags($tenantId);
                 $any->update([
-                    'is_primary'  => true,
-                    'row_version' => ((int) ($any->row_version ?? 1)) + 1,
+                    'is_primary'         => true,
+                    'parent_company_id'  => null,
+                    'row_version'        => ((int) ($any->row_version ?? 1)) + 1,
                 ]);
                 $fresh = $any->fresh();
                 $this->ensureDefaultBranchQuietly($fresh->company_id, $tenantId);
