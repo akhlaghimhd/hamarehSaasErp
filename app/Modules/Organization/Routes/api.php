@@ -83,6 +83,8 @@ Route::middleware([
         ->middleware(['permission:organization.officer.view', 'scope:COMPANY,company']);
     Route::post('/companies/{company}/officers', [CompanyOfficerController::class, 'store'])
         ->middleware(['permission:organization.officer.manage', 'scope:COMPANY,company']);
+    Route::put('/officers/{officer}', [CompanyOfficerController::class, 'update'])
+        ->middleware('permission:organization.officer.manage');
     Route::delete('/officers/{officer}', [CompanyOfficerController::class, 'destroy'])
         ->middleware('permission:organization.officer.manage');
 
