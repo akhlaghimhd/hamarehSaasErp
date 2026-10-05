@@ -184,6 +184,107 @@ Route::middleware([
     Route::delete('/intercompany/rules/{rule}', [IntercompanyController::class, 'destroyRule'])
         ->middleware('permission:organization.intercompany.manage');
 
-    // NOTE: remainder of routes restored from develop@190586b + ownership PUT
-    // User local: if any route missing, restore from git history before 2d2941be
+    Route::get('/sales-organizations', [SalesOrganizationController::class, 'index'])
+        ->middleware('permission:organization.sales_org.view');
+    Route::post('/sales-organizations', [SalesOrganizationController::class, 'store'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::get('/sales-organizations/{salesOrg}', [SalesOrganizationController::class, 'show'])
+        ->middleware('permission:organization.sales_org.view');
+    Route::put('/sales-organizations/{salesOrg}', [SalesOrganizationController::class, 'update'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::delete('/sales-organizations/{salesOrg}', [SalesOrganizationController::class, 'destroy'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::post('/sales-organizations/{salesOrg}/restore', [SalesOrganizationController::class, 'restore'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::get('/sales-organizations/{salesOrg}/assignments', [SalesOrganizationController::class, 'assignments'])
+        ->middleware('permission:organization.sales_org.view');
+    Route::post('/sales-organizations/{salesOrg}/assignments', [SalesOrganizationController::class, 'assign'])
+        ->middleware('permission:organization.sales_org.manage');
+    Route::delete('/sales-org-assignments/{assignment}', [SalesOrganizationController::class, 'unassign'])
+        ->middleware('permission:organization.sales_org.manage');
+
+    Route::get('/purchasing-organizations', [PurchasingOrganizationController::class, 'index'])
+        ->middleware('permission:organization.purch_org.view');
+    Route::post('/purchasing-organizations', [PurchasingOrganizationController::class, 'store'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::get('/purchasing-organizations/{purchOrg}', [PurchasingOrganizationController::class, 'show'])
+        ->middleware('permission:organization.purch_org.view');
+    Route::put('/purchasing-organizations/{purchOrg}', [PurchasingOrganizationController::class, 'update'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::delete('/purchasing-organizations/{purchOrg}', [PurchasingOrganizationController::class, 'destroy'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::post('/purchasing-organizations/{purchOrg}/restore', [PurchasingOrganizationController::class, 'restore'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::get('/purchasing-organizations/{purchOrg}/assignments', [PurchasingOrganizationController::class, 'assignments'])
+        ->middleware('permission:organization.purch_org.view');
+    Route::post('/purchasing-organizations/{purchOrg}/assignments', [PurchasingOrganizationController::class, 'assign'])
+        ->middleware('permission:organization.purch_org.manage');
+    Route::delete('/purch-org-assignments/{assignment}', [PurchasingOrganizationController::class, 'unassign'])
+        ->middleware('permission:organization.purch_org.manage');
+
+    Route::get('/distribution-channels', [SalesStructureController::class, 'channels'])
+        ->middleware('permission:organization.sales_structure.view');
+    Route::post('/distribution-channels', [SalesStructureController::class, 'storeChannel'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::put('/distribution-channels/{channel}', [SalesStructureController::class, 'updateChannel'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::delete('/distribution-channels/{channel}', [SalesStructureController::class, 'destroyChannel'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::post('/distribution-channels/{channel}/restore', [SalesStructureController::class, 'restoreChannel'])
+        ->middleware('permission:organization.sales_structure.manage');
+
+    Route::get('/product-divisions', [SalesStructureController::class, 'divisions'])
+        ->middleware('permission:organization.sales_structure.view');
+    Route::post('/product-divisions', [SalesStructureController::class, 'storeDivision'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::put('/product-divisions/{division}', [SalesStructureController::class, 'updateDivision'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::delete('/product-divisions/{division}', [SalesStructureController::class, 'destroyDivision'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::post('/product-divisions/{division}/restore', [SalesStructureController::class, 'restoreDivision'])
+        ->middleware('permission:organization.sales_structure.manage');
+
+    Route::get('/sales-areas', [SalesStructureController::class, 'salesAreas'])
+        ->middleware('permission:organization.sales_structure.view');
+    Route::post('/sales-areas', [SalesStructureController::class, 'storeSalesArea'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::put('/sales-areas/{salesArea}', [SalesStructureController::class, 'updateSalesArea'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::delete('/sales-areas/{salesArea}', [SalesStructureController::class, 'destroySalesArea'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::post('/sales-areas/{salesArea}/restore', [SalesStructureController::class, 'restoreSalesArea'])
+        ->middleware('permission:organization.sales_structure.manage');
+
+    Route::get('/sales-offices', [SalesStructureController::class, 'offices'])
+        ->middleware('permission:organization.sales_structure.view');
+    Route::post('/sales-offices', [SalesStructureController::class, 'storeOffice'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::put('/sales-offices/{office}', [SalesStructureController::class, 'updateOffice'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::delete('/sales-offices/{office}', [SalesStructureController::class, 'destroyOffice'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::post('/sales-offices/{office}/restore', [SalesStructureController::class, 'restoreOffice'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::get('/sales-offices/{office}/groups', [SalesStructureController::class, 'groups'])
+        ->middleware('permission:organization.sales_structure.view');
+    Route::post('/sales-offices/{office}/groups', [SalesStructureController::class, 'storeGroup'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::put('/sales-groups/{group}', [SalesStructureController::class, 'updateGroup'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::delete('/sales-groups/{group}', [SalesStructureController::class, 'destroyGroup'])
+        ->middleware('permission:organization.sales_structure.manage');
+    Route::post('/sales-groups/{group}/restore', [SalesStructureController::class, 'restoreGroup'])
+        ->middleware('permission:organization.sales_structure.manage');
+
+    Route::get('/consolidation-runs', [ConsolidationRunController::class, 'index'])
+        ->middleware('permission:organization.consolidation.view');
+    Route::post('/consolidation-runs', [ConsolidationRunController::class, 'store'])
+        ->middleware('permission:organization.consolidation.manage');
+    Route::post('/consolidation-runs/{run}/snapshot', [ConsolidationRunController::class, 'snapshot'])
+        ->middleware('permission:organization.consolidation.manage');
+
+    Route::get('/enterprise-structure', [EnterpriseStructureController::class, 'show'])
+        ->middleware('permission:organization.company.view');
+    Route::post('/structure/apply-template', [EnterpriseStructureController::class, 'applyTemplate'])
+        ->middleware('permission:organization.company.manage');
 });
