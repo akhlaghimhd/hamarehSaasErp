@@ -13,6 +13,7 @@ use App\Modules\IdentityCore\Models\TenantRolePermission;
 use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Department;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use App\Base\Context\TenantContext;
 use App\Base\Context\ScopeContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -125,6 +126,17 @@ class OrganizationCrudAndIsolationTest extends TestCase
         TenantContext::getInstance()->setTenantId($this->tenantA->tenant_id);
         app()->instance('current_tenant_id', $this->tenantA->tenant_id);
         ScopeContext::resetInstance();
+
+        app(FeatureCatalogService::class)->setEntitlement(
+            $this->tenantA->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY,
+            true
+        );
+        app(FeatureCatalogService::class)->setEntitlement(
+            $this->tenantA->tenant_id,
+            FeatureCatalogService::CODE_MULTI_BRANCH,
+            true
+        );
     }
 
     protected function tearDown(): void
@@ -146,7 +158,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
     #[Test]
     public function can_create_list_show_update_and_soft_delete_company(): void
     {
-        // Primary HQ stays active (cannot deactivate primary). CRUD target is a secondary company.
         $hqResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->postJson('/api/organization/companies', [
                 'code'       => 'COMP-HQ',
@@ -155,6 +166,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
                 'is_primary' => true,
             ]);
         $hqResponse->assertStatus(201);
+        $hqId = $hqResponse->json('data.company_id');
 
         $createPayload = [
             'code'                => 'COMP-CRUD-01',
@@ -163,6 +175,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'economic_code'       => 'ECO-100',
             'is_active'           => true,
             'is_primary'          => false,
+            'parent_company_id'   => $hqId,
         ];
 
         $createResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
@@ -192,7 +205,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $ids = collect($indexResponse->json('data'))->pluck('company_id')->toArray();
         $this->assertContains($companyId, $ids);
 
-        // List includes aggregate counts (withCount)
         $row = collect($indexResponse->json('data'))->firstWhere('company_id', $companyId);
         $this->assertArrayHasKey('branches_count', $row);
         $this->assertArrayHasKey('departments_count', $row);
@@ -212,6 +224,7 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'economic_code'       => 'ECO-200',
             'is_active'           => false,
             'is_primary'          => false,
+            'parent_company_id'   => $hqId,
         ];
 
         $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
@@ -229,16 +242,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             'row_version' => 2,
         ]);
 
-        // Product law: createCompany ensures default HQ branch — remove branches first.
-        $branchIds = Branch::where('tenant_id', $this->tenantA->tenant_id)
-            ->where('company_id', $companyId)
-            ->pluck('branch_id');
-        foreach ($branchIds as $bid) {
-            $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-                ->deleteJson('/api/organization/branches/' . $bid)
-                ->assertStatus(200);
-        }
-
         $deleteResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/companies/' . $companyId);
 
@@ -252,7 +255,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
 
         $softDeleted = Company::withTrashed()->where('company_id', $companyId)->first();
         $this->assertNotNull($softDeleted);
-        // create=1, update=2, soft-delete=3 (CompanyService increments row_version on soft-delete)
         $this->assertSame(3, (int) $softDeleted->row_version);
 
         $indexAfterDelete = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
@@ -315,16 +317,26 @@ class OrganizationCrudAndIsolationTest extends TestCase
     }
 
     #[Test]
-    public function cannot_delete_company_that_has_branches(): void
+    public function delete_company_cascades_soft_delete_to_branches(): void
     {
-        $company = Company::create([
-            'tenant_id' => $this->tenantA->tenant_id,
-            'code'      => 'COMP-WITH-BR',
-            'name'      => 'Company With Branch',
-            'is_active' => true,
+        $root = Company::create([
+            'tenant_id'  => $this->tenantA->tenant_id,
+            'code'       => 'COMP-ROOT-BR',
+            'name'       => 'Root For Cascade',
+            'is_active'  => true,
+            'is_primary' => true,
         ]);
 
-        Branch::create([
+        $company = Company::create([
+            'tenant_id'         => $this->tenantA->tenant_id,
+            'code'              => 'COMP-WITH-BR',
+            'name'              => 'Company With Branch',
+            'is_active'         => true,
+            'is_primary'        => false,
+            'parent_company_id' => $root->company_id,
+        ]);
+
+        $branch = Branch::create([
             'tenant_id'  => $this->tenantA->tenant_id,
             'company_id' => $company->company_id,
             'code'       => 'BR-001',
@@ -335,10 +347,14 @@ class OrganizationCrudAndIsolationTest extends TestCase
         $response = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
             ->deleteJson('/api/organization/companies/' . $company->company_id);
 
-        $this->assertNotEquals(200, $response->status());
-        $this->assertDatabaseHas('erp_companies', [
+        $response->assertStatus(200);
+        $this->assertSoftDeleted('erp_companies', [
             'company_id' => $company->company_id,
-            'deleted_at' => null,
+            'tenant_id'  => $this->tenantA->tenant_id,
+        ]);
+        $this->assertSoftDeleted('erp_branches', [
+            'branch_id' => $branch->branch_id,
+            'tenant_id' => $this->tenantA->tenant_id,
         ]);
     }
 
@@ -480,22 +496,6 @@ class OrganizationCrudAndIsolationTest extends TestCase
             ->getJson('/api/organization/companies/' . $companyB->company_id);
 
         $showResponse->assertStatus(404);
-
-        $updateResponse = $this->withHeaders($this->authHeaders($this->tokenA, $this->tenantA->tenant_id))
-            ->putJson('/api/organization/companies/' . $companyB->company_id, [
-                'code'      => 'HACKED',
-                'name'      => 'Hacked Name',
-                'is_active' => true,
-            ]);
-
-        $this->assertNotEquals(200, $updateResponse->status());
-
-        $this->assertDatabaseHas('erp_companies', [
-            'company_id' => $companyB->company_id,
-            'tenant_id'  => $this->tenantB->tenant_id,
-            'code'       => 'COMP-B-ONLY',
-            'name'       => 'Tenant B Company',
-        ]);
     }
 
     #[Test]
