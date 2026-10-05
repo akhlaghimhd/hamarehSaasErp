@@ -4,6 +4,7 @@ namespace App\Modules\Organization\Services;
 
 use App\Modules\Organization\Models\Branch;
 use App\Modules\Organization\Models\Company;
+use App\Modules\Organization\Models\Department;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Modules\Organization\DTOs\UpdateCompanyDTO;
 use App\Base\Context\TenantContext;
@@ -275,17 +276,44 @@ class CompanyService
             throw new \Exception('این شرکت دارای زیرمجموعه است و قابل حذف نیست.');
         }
 
-        // Integrity: do not soft-delete a company while it still has branches.
-        // Callers must soft-delete (or reassign) branches first.
-        $hasBranches = Branch::where('tenant_id', $tenantId)
+        // Every company has an implicit HQ branch (product law). Soft-delete must
+        // cascade departments → branches → company so delete is usable from UI.
+        $branchIds = Branch::where('tenant_id', $tenantId)
             ->where('company_id', $companyId)
-            ->exists();
+            ->pluck('branch_id')
+            ->all();
 
-        if ($hasBranches) {
-            throw new \Exception('این شرکت دارای شعبه است و قابل حذف نیست.');
-        }
+        DB::transaction(function () use ($company, $tenantId, $companyId, $branchIds) {
+            if ($branchIds !== []) {
+                Department::where('tenant_id', $tenantId)
+                    ->where(function ($q) use ($companyId, $branchIds) {
+                        $q->where('company_id', $companyId)
+                            ->orWhereIn('branch_id', $branchIds);
+                    })
+                    ->update([
+                        'is_active'   => false,
+                        'updated_at'  => now(),
+                    ]);
 
-        DB::transaction(function () use ($company, $tenantId, $companyId) {
+                Department::where('tenant_id', $tenantId)
+                    ->where(function ($q) use ($companyId, $branchIds) {
+                        $q->where('company_id', $companyId)
+                            ->orWhereIn('branch_id', $branchIds);
+                    })
+                    ->delete();
+
+                Branch::where('tenant_id', $tenantId)
+                    ->where('company_id', $companyId)
+                    ->update([
+                        'is_active'  => false,
+                        'updated_at' => now(),
+                    ]);
+
+                Branch::where('tenant_id', $tenantId)
+                    ->where('company_id', $companyId)
+                    ->delete();
+            }
+
             $company->update([
                 'is_active'   => false,
                 'status'      => 2,
@@ -295,7 +323,10 @@ class CompanyService
             $company->delete();
         });
 
-        HierarchySyncService::safe(function (HierarchySyncService $sync) use ($companyId) {
+        HierarchySyncService::safe(function (HierarchySyncService $sync) use ($companyId, $branchIds) {
+            foreach ($branchIds as $bid) {
+                $sync->deactivateEntityNodes('BRANCH', (string) $bid);
+            }
             $sync->deactivateEntityNodes('COMPANY', $companyId);
         });
     }
@@ -326,13 +357,36 @@ class CompanyService
             $company->parent_company_id = $rootId;
         }
 
-        $company = DB::transaction(function () use ($company) {
+        $company = DB::transaction(function () use ($company, $tenantId, $companyId) {
             $company->restore();
             $company->update([
                 'is_active'         => false,
                 'parent_company_id' => $company->parent_company_id,
                 'row_version'       => ((int) ($company->row_version ?? 1)) + 1,
             ]);
+
+            // Restore soft-deleted branches of this company (codes free after cascade delete).
+            $trashedBranches = Branch::onlyTrashed()
+                ->where('tenant_id', $tenantId)
+                ->where('company_id', $companyId)
+                ->get();
+
+            foreach ($trashedBranches as $branch) {
+                $codeClash = Branch::where('tenant_id', $tenantId)
+                    ->where('company_id', $companyId)
+                    ->where('code', $branch->code)
+                    ->exists();
+                if ($codeClash) {
+                    continue;
+                }
+                $branch->restore();
+                $branch->update([
+                    'is_active'   => false,
+                    'row_version' => ((int) ($branch->row_version ?? 1)) + 1,
+                ]);
+            }
+
+            $this->ensureDefaultBranchQuietly($companyId, $tenantId);
 
             return $company->fresh();
         });
