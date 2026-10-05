@@ -1,1 +1,7 @@
-SEE_ARTIFACT_Organization.Routes.api.COST-CENTER.php
+<?php
+
+/**
+ * Organization module HTTP routes.
+ * Full table lives in api.full.php (kept separate to avoid partial overwrites).
+ */
+require __DIR__ . '/api.full.php';
