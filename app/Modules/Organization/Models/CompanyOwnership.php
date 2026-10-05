@@ -10,6 +10,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * erp_company_ownerships — ORG-P1-04
  * Owner module: Organization
+ *
+ * owner_kind:
+ *   COMPANY          → owner_company_id (same-tenant company)
+ *   EXTERNAL_PERSON  → natural person outside platform
+ *   EXTERNAL_ORG     → legal entity outside platform
+ * External rows never create users/companies/branches.
  */
 class CompanyOwnership extends Model
 {
@@ -26,7 +32,10 @@ class CompanyOwnership extends Model
     protected $fillable = [
         'tenant_id',
         'company_id',
+        'owner_kind',
         'owner_company_id',
+        'owner_display_name',
+        'owner_identifier',
         'ownership_percent',
         'relation_type',
         'valid_from',
