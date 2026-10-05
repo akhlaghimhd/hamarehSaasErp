@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * Legal corporate officers (Iran Commercial Code context).
+ * Not operational/HR roles — board, CEO, inspectors, signing authority.
+ */
 class CompanyOfficer extends Model
 {
     use HasUuids, TenantScoped, SoftDeletes;
@@ -26,6 +30,7 @@ class CompanyOfficer extends Model
         'role_title',
         'full_name',
         'person_user_id',
+        'ownership_id',
         'national_id',
         'mandate_from',
         'mandate_to',
@@ -55,5 +60,10 @@ class CompanyOfficer extends Model
     public function company()
     {
         return $this->belongsTo(Company::class, 'company_id', 'company_id');
+    }
+
+    public function ownership()
+    {
+        return $this->belongsTo(CompanyOwnership::class, 'ownership_id', 'ownership_id');
     }
 }
