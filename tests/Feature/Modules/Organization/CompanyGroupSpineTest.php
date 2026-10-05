@@ -4,6 +4,7 @@ namespace Tests\Feature\Modules\Organization;
 
 use Tests\TestCase;
 use App\Modules\SaasPlatform\Models\Tenant;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use App\Modules\IdentityCore\Models\User;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantRole;
@@ -22,6 +23,7 @@ use PHPUnit\Framework\Attributes\Test;
 
 /**
  * ORG-P1-01 … ORG-P1-06 — Group spine rules
+ * ADR-ID-ORG-003 §3.2 single-root: primary immutable for tenant; 2nd+ company requires parent.
  */
 class CompanyGroupSpineTest extends TestCase
 {
@@ -93,6 +95,12 @@ class CompanyGroupSpineTest extends TestCase
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
         app()->instance('current_tenant_id', $this->tenant->tenant_id);
         ScopeContext::resetInstance();
+
+        app(FeatureCatalogService::class)->setEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_MULTI_COMPANY,
+            true
+        );
     }
 
     protected function tearDown(): void
@@ -134,17 +142,21 @@ class CompanyGroupSpineTest extends TestCase
     #[Test]
     public function only_one_primary_per_tenant(): void
     {
-        $this->withHeaders($this->headers())->postJson('/api/organization/companies', [
+        $a = $this->withHeaders($this->headers())->postJson('/api/organization/companies', [
             'code' => 'A',
             'name' => 'Company A',
-        ])->assertStatus(201);
-
-        $b = $this->withHeaders($this->headers())->postJson('/api/organization/companies', [
-            'code'       => 'B',
-            'name'       => 'Company B',
-            'is_primary' => true,
         ]);
-        $b->assertStatus(201)->assertJsonPath('data.is_primary', true);
+        $a->assertStatus(201);
+        $aId = $a->json('data.company_id');
+
+        // Tenant cannot transfer primary to a second company (ADR-ID-ORG-003 §3.2).
+        $b = $this->withHeaders($this->headers())->postJson('/api/organization/companies', [
+            'code'              => 'B',
+            'name'              => 'Company B',
+            'is_primary'        => true,
+            'parent_company_id' => $aId,
+        ]);
+        $b->assertStatus(201)->assertJsonPath('data.is_primary', false);
 
         $primaries = Company::where('tenant_id', $this->tenant->tenant_id)
             ->where('is_primary', true)
@@ -152,11 +164,11 @@ class CompanyGroupSpineTest extends TestCase
         $this->assertSame(1, $primaries);
 
         $this->assertDatabaseHas('erp_companies', [
-            'code'       => 'B',
+            'code'       => 'A',
             'is_primary' => true,
         ]);
         $this->assertDatabaseHas('erp_companies', [
-            'code'       => 'A',
+            'code'       => 'B',
             'is_primary' => false,
         ]);
     }

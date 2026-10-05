@@ -49,7 +49,7 @@ class FeaturePackGateTest extends TestCase
             isPrimary: true,
             entityKind: 'OPERATING',
         );
-        app(CompanyService::class)->createCompany($dto1);
+        $c1 = app(CompanyService::class)->createCompany($dto1);
 
         $dto2 = new CreateCompanyDTO(
             code: 'C2',
@@ -58,6 +58,7 @@ class FeaturePackGateTest extends TestCase
             isActive: true,
             status: 1,
             isPrimary: false,
+            parentCompanyId: $c1->company_id,
             entityKind: 'OPERATING',
         );
 
@@ -83,7 +84,7 @@ class FeaturePackGateTest extends TestCase
             isPrimary: true,
             entityKind: 'OPERATING',
         );
-        app(CompanyService::class)->createCompany($dto1);
+        $c1 = app(CompanyService::class)->createCompany($dto1);
 
         $dto2 = new CreateCompanyDTO(
             code: 'C2',
@@ -92,11 +93,14 @@ class FeaturePackGateTest extends TestCase
             isActive: true,
             status: 1,
             isPrimary: false,
+            parentCompanyId: $c1->company_id,
             entityKind: 'OPERATING',
         );
         $c2 = app(CompanyService::class)->createCompany($dto2);
 
         $this->assertSame('C2', $c2->code);
+        $this->assertSame($c1->company_id, $c2->parent_company_id);
+        $this->assertFalse((bool) $c2->is_primary);
     }
 
     #[Test]
@@ -148,7 +152,7 @@ class FeaturePackGateTest extends TestCase
             true
         );
 
-        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+        $c1 = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
             code: 'C1',
             name: 'Company One',
             legalName: 'Company One Legal',
@@ -165,6 +169,7 @@ class FeaturePackGateTest extends TestCase
             isActive: true,
             status: 1,
             isPrimary: false,
+            parentCompanyId: $c1->company_id,
             entityKind: 'OPERATING',
         ));
 
@@ -189,6 +194,7 @@ class FeaturePackGateTest extends TestCase
             isActive: true,
             status: 1,
             isPrimary: false,
+            parentCompanyId: $c1->company_id,
             entityKind: 'OPERATING',
         ));
     }
@@ -203,7 +209,7 @@ class FeaturePackGateTest extends TestCase
             true
         );
 
-        app(CompanyService::class)->createCompany(new CreateCompanyDTO(
+        $c1 = app(CompanyService::class)->createCompany(new CreateCompanyDTO(
             code: 'C1',
             name: 'Company One',
             legalName: 'Company One Legal',
@@ -234,9 +240,11 @@ class FeaturePackGateTest extends TestCase
             isActive: true,
             status: 1,
             isPrimary: false,
+            parentCompanyId: $c1->company_id,
             entityKind: 'OPERATING',
         ));
 
         $this->assertSame('C2', $c2->code);
+        $this->assertSame($c1->company_id, $c2->parent_company_id);
     }
 }
