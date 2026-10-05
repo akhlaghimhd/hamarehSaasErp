@@ -18,14 +18,16 @@ readonly class CreateEntityContactPointDTO
 
     public static function fromRequest(CreateEntityContactPointRequest $request): self
     {
+        $v = $request->validated();
+
         return new self(
-            entity_type: $request->validated('entity_type'),
-            entity_id: $request->validated('entity_id'),
-            contact_type: $request->validated('contact_type'),
-            contact_value: $request->validated('contact_value'),
-            extension: $request->validated('extension'),
-            is_primary: $request->validated('is_primary', false),
-            status: $request->validated('status', 1)
+            entity_type: (string) $v['entity_type'],
+            entity_id: (string) $v['entity_id'],
+            contact_type: (string) $v['contact_type'],
+            contact_value: (string) $v['contact_value'],
+            extension: isset($v['extension']) ? (string) $v['extension'] : null,
+            is_primary: (bool) ($v['is_primary'] ?? false),
+            status: (int) ($v['status'] ?? 1)
         );
     }
 }
