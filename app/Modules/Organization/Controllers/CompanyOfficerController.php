@@ -65,7 +65,7 @@ class CompanyOfficerController extends Controller
     {
         $roleRule = Rule::in(CompanyOfficerService::LEGAL_ROLE_CODES);
 
-        return $request->validate([
+        $data = $request->validate([
             'role_code'             => [$updating ? 'sometimes' : 'required', 'string', 'max:50', $roleRule],
             'full_name'             => [$updating ? 'sometimes' : 'required', 'string', 'max:200'],
             'role_title'            => 'nullable|string|max:150',
@@ -78,5 +78,17 @@ class CompanyOfficerController extends Controller
             'mandate_notes'         => 'nullable|string|max:500',
             'is_active'             => 'sometimes|boolean',
         ]);
+
+        $role = strtoupper((string) ($data['role_code'] ?? $request->input('role_code', '')));
+        if ($role === 'OTHER') {
+            $title = trim((string) ($data['role_title'] ?? ''));
+            if ($title === '') {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'role_title' => ['برای نقش «سایر» عنوان نقش الزامی است.'],
+                ]);
+            }
+        }
+
+        return $data;
     }
 }
