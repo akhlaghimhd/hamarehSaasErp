@@ -13,6 +13,7 @@ use App\Modules\SaasAdmin\Controllers\AdminApiKeyController;
 use App\Modules\SaasAdmin\Controllers\AdminWebhookController;
 use App\Modules\SaasAdmin\Controllers\AdminAuthController;
 use App\Modules\SaasAdmin\Controllers\AdminFeatureEntitlementController;
+use App\Modules\SaasAdmin\Controllers\AdminTenantController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,6 +41,14 @@ Route::middleware(['admin.auth'])->group(function () {
     Route::post('/tenants/{tenantId}/feature-entitlements', [AdminFeatureEntitlementController::class, 'setForTenant'])
         ->middleware('admin.permission:saas-admin.feature.manage')
         ->name('saas-admin.feature-entitlements.set');
+
+    // Tenant ops (SAASADM-P5) — list/show; grant/revoke via feature-entitlements above
+    Route::get('/tenants', [AdminTenantController::class, 'index'])
+        ->middleware('admin.permission:saas-admin.tenant.view')
+        ->name('saas-admin.tenants.index');
+    Route::get('/tenants/{tenantId}', [AdminTenantController::class, 'show'])
+        ->middleware('admin.permission:saas-admin.tenant.view')
+        ->name('saas-admin.tenants.show');
 
     // Admin Users
     Route::get('/admin-users', [AdminUserController::class, 'index'])

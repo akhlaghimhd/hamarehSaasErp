@@ -19,6 +19,9 @@ class AdminPermissionSeeder extends Seeder
             ['code' => 'saas-admin.feature.view',   'name' => 'View Feature Catalog',   'module_name' => 'SaasAdmin', 'permission_group' => 'Feature', 'action_type' => 'R'],
             ['code' => 'saas-admin.feature.manage', 'name' => 'Manage Tenant Features', 'module_name' => 'SaasAdmin', 'permission_group' => 'Feature', 'action_type' => 'U'],
 
+            // Tenant ops (SAASADM-P5)
+            ['code' => 'saas-admin.tenant.view', 'name' => 'View Tenants', 'module_name' => 'SaasAdmin', 'permission_group' => 'Tenant', 'action_type' => 'R'],
+
             // Admin Users
             ['code' => 'saas-admin.admin_user.view',   'name' => 'View Admin Users',   'module_name' => 'SaasAdmin', 'permission_group' => 'AdminUser', 'action_type' => 'R'],
             ['code' => 'saas-admin.admin_user.create', 'name' => 'Create Admin User',  'module_name' => 'SaasAdmin', 'permission_group' => 'AdminUser', 'action_type' => 'C'],
