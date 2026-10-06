@@ -3,6 +3,7 @@
 namespace App\Modules\Organization\Controllers;
 
 use App\Base\Controller;
+use App\Modules\Organization\Services\OrgSalesPurchPackGuard;
 use App\Modules\Organization\Services\SalesStructureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,8 @@ class SalesStructureController extends Controller
 
     public function storeChannel(Request $request): JsonResponse
     {
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         $data = $request->validate([
             'code'      => 'required|string|max:50',
             'name'      => 'required|string|max:200',
@@ -77,6 +80,8 @@ class SalesStructureController extends Controller
 
     public function storeDivision(Request $request): JsonResponse
     {
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         $data = $request->validate([
             'code'      => 'required|string|max:50',
             'name'      => 'required|string|max:200',
@@ -130,6 +135,8 @@ class SalesStructureController extends Controller
 
     public function storeSalesArea(Request $request): JsonResponse
     {
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         $data = $request->validate([
             'sales_org_id'            => 'required|uuid',
             'distribution_channel_id' => 'required|uuid',
@@ -193,6 +200,8 @@ class SalesStructureController extends Controller
 
     public function storeOffice(Request $request): JsonResponse
     {
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         $data = $request->validate([
             'code'         => 'required|string|max:50',
             'name'         => 'required|string|max:200',
@@ -246,6 +255,8 @@ class SalesStructureController extends Controller
 
     public function storeGroup(string $office, Request $request): JsonResponse
     {
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         $data = $request->validate([
             'code'      => 'required|string|max:50',
             'name'      => 'required|string|max:200',
