@@ -19,6 +19,10 @@ use Illuminate\Support\Str;
  * Product law (§9): also ensures a default HQ branch under the primary company
  * so single-site tenants can use departments without multi-branch setup.
  *
+ * SAASADM-P0/P1: enables demo org feature packs so local FE shows active
+ * entitlements (multi_company, multi_branch, multi_business_unit,
+ * custom_org_hierarchy, org.intercompany).
+ *
  * Usage:
  *   docker compose exec app php artisan db:seed --class=PermissionSeeder
  *   docker compose exec app php artisan db:seed --class=DemoTenantOwnerSeeder
@@ -31,6 +35,15 @@ class DemoTenantOwnerSeeder extends Seeder
     private const EMAIL = 'owner@demo.local';
     private const PASSWORD = 'Owner123!';
     private const MOBILE = '09121111111';
+
+    /** Demo-enabled org packs (independent sellable flags). */
+    private const DEMO_FEATURE_PACKS = [
+        'multi_company',
+        'multi_branch',
+        'multi_business_unit',
+        'custom_org_hierarchy',
+        'org.intercompany',
+    ];
 
     public function run(): void
     {
@@ -63,6 +76,7 @@ class DemoTenantOwnerSeeder extends Seeder
         $this->assignRole($tenantId, $userId, $roleId);
         $companyId = $this->ensurePrimaryCompany($tenantId);
         $branchId = $companyId ? $this->ensureDefaultHqBranch($tenantId, $companyId) : null;
+        $packCount = $this->ensureDemoFeaturePacks($tenantId);
 
         $this->command?->info('Demo tenant owner ready:');
         $this->command?->info('  email:       '.self::EMAIL);
@@ -72,7 +86,9 @@ class DemoTenantOwnerSeeder extends Seeder
         $this->command?->info('  company_id:  '.($companyId ?? 'n/a'));
         $this->command?->info('  hq_branch:   '.($branchId ?? 'n/a'));
         $this->command?->info('  permissions: '.$permCount.' active codes on tenant');
+        $this->command?->info('  feature packs enabled: '.$packCount);
         $this->command?->info('Re-login is required after seed so the token picks up permissions.');
+        $this->command?->info('FE: /dashboard/organization and /dashboard/organization/feature-packs');
     }
 
     private function resolveTenantId(): ?string
@@ -215,7 +231,7 @@ class DemoTenantOwnerSeeder extends Seeder
             'row_version' => 1,
         ]);
 
-            return $roleId;
+        return $roleId;
     }
 
     private function assignRole(string $tenantId, string $userId, string $roleId): void
@@ -240,6 +256,66 @@ class DemoTenantOwnerSeeder extends Seeder
             'updated_at' => now(),
             'row_version' => 1,
         ]);
+    }
+
+    /**
+     * Enable org feature packs for demo tenant (idempotent).
+     */
+    private function ensureDemoFeaturePacks(string $tenantId): int
+    {
+        if (!Schema::hasTable('tenant_feature_entitlements')) {
+            $this->command?->warn('tenant_feature_entitlements missing — run migrations first.');
+
+            return 0;
+        }
+
+        $enabled = 0;
+        foreach (self::DEMO_FEATURE_PACKS as $code) {
+            if (Schema::hasTable('platform_feature_catalog')) {
+                $inCatalog = DB::table('platform_feature_catalog')
+                    ->where('code', $code)
+                    ->whereNull('deleted_at')
+                    ->exists();
+                if (!$inCatalog) {
+                    $this->command?->warn("Feature pack [{$code}] not in catalog — skip.");
+
+                    continue;
+                }
+            }
+
+            $row = DB::table('tenant_feature_entitlements')
+                ->where('tenant_id', $tenantId)
+                ->where('feature_code', $code)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($row) {
+                DB::table('tenant_feature_entitlements')
+                    ->where('entitlement_id', $row->entitlement_id)
+                    ->update([
+                        'is_enabled' => true,
+                        'source' => 'MANUAL',
+                        'notes' => 'Demo seeder — enabled for local QA UI',
+                        'updated_at' => now(),
+                        'row_version' => ((int) ($row->row_version ?? 1)) + 1,
+                    ]);
+            } else {
+                DB::table('tenant_feature_entitlements')->insert([
+                    'entitlement_id' => (string) Str::uuid(),
+                    'tenant_id' => $tenantId,
+                    'feature_code' => $code,
+                    'is_enabled' => true,
+                    'source' => 'MANUAL',
+                    'notes' => 'Demo seeder — enabled for local QA UI',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                    'row_version' => 1,
+                ]);
+            }
+            $enabled++;
+        }
+
+        return $enabled;
     }
 
     /**
