@@ -2,6 +2,8 @@
 
 namespace App\Modules\SaasPlatform\Services;
 
+use App\Modules\SaasPlatform\Events\TenantFeatureGrantedV1;
+use App\Modules\SaasPlatform\Events\TenantFeatureRevokedV1;
 use App\Modules\SaasPlatform\Models\PlatformFeatureCatalog;
 use App\Modules\SaasPlatform\Models\TenantFeatureEntitlement;
 use Illuminate\Support\Collection;
@@ -11,10 +13,12 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * PLT-W1-01 / PLT-W1-03 — Single source of truth for tenant feature packs.
+ * PLT-W1-01 / PLT-W1-03 / SAASADM-P0 — Single source of truth for tenant feature packs.
  *
  * Freeze (downgrade): set is_enabled=false — existing operational data remains;
  * create paths call assertEnabled and reject new multi-* entities.
+ *
+ * Outbox: saas.tenant_feature.granted.v1 / revoked.v1 on enable/disable transitions.
  */
 class FeatureCatalogService
 {
@@ -25,6 +29,7 @@ class FeatureCatalogService
     public const CODE_MULTI_BRANCH = 'multi_branch';
     public const CODE_MULTI_BUSINESS_UNIT = 'multi_business_unit';
     public const CODE_CUSTOM_ORG_HIERARCHY = 'custom_org_hierarchy';
+    public const CODE_ORG_INTERCOMPANY = 'org.intercompany';
 
     public function listCatalog(bool $activeOnly = true): Collection
     {
@@ -116,6 +121,8 @@ class FeatureCatalogService
                 ->whereNull('deleted_at')
                 ->first();
 
+            $previousEnabled = $row ? (bool) $row->is_enabled : null;
+
             if ($row) {
                 $row->is_enabled = $enabled;
                 $row->source = $source;
@@ -136,6 +143,39 @@ class FeatureCatalogService
             }
 
             $this->forgetCache($tenantId);
+
+            // Outbox only on real enable/disable transitions (not no-op re-saves).
+            if ($previousEnabled !== $enabled) {
+                if ($enabled) {
+                    $this->logEventOutbox(
+                        $tenantId,
+                        TenantFeatureGrantedV1::AGGREGATE_TYPE,
+                        (string) $row->entitlement_id,
+                        TenantFeatureGrantedV1::EVENT_TYPE,
+                        TenantFeatureGrantedV1::payload(
+                            $tenantId,
+                            $featureCode,
+                            (string) $row->entitlement_id,
+                            $source,
+                            $notes
+                        )
+                    );
+                } else {
+                    $this->logEventOutbox(
+                        $tenantId,
+                        TenantFeatureRevokedV1::AGGREGATE_TYPE,
+                        (string) $row->entitlement_id,
+                        TenantFeatureRevokedV1::EVENT_TYPE,
+                        TenantFeatureRevokedV1::payload(
+                            $tenantId,
+                            $featureCode,
+                            (string) $row->entitlement_id,
+                            $source,
+                            $notes
+                        )
+                    );
+                }
+            }
 
             return $row;
         });
@@ -193,5 +233,27 @@ class FeatureCatalogService
     private function cacheKey(string $tenantId): string
     {
         return 'feature_entitlements:'.$tenantId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function logEventOutbox(
+        string $tenantId,
+        string $aggregateType,
+        string $aggregateId,
+        string $eventType,
+        array $payload
+    ): void {
+        DB::table('event_outbox')->insert([
+            'event_id'       => (string) Str::uuid(),
+            'tenant_id'      => $tenantId,
+            'aggregate_type' => $aggregateType,
+            'aggregate_id'   => $aggregateId,
+            'event_type'     => $eventType,
+            'payload'        => json_encode($payload),
+            'status'         => 1,
+            'created_at'     => now(),
+        ]);
     }
 }
