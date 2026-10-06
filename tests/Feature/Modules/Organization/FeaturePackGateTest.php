@@ -9,6 +9,7 @@ use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Services\CompanyService;
 use App\Modules\Organization\Services\BusinessUnitService;
 use App\Modules\Organization\Services\OrgHierarchyService;
+use App\Modules\Organization\Services\IntercompanyService;
 use App\Modules\Organization\DTOs\CreateCompanyDTO;
 use App\Base\Context\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -246,5 +247,25 @@ class FeaturePackGateTest extends TestCase
 
         $this->assertSame('C2', $c2->code);
         $this->assertSame($c1->company_id, $c2->parent_company_id);
+    }
+
+    #[Test]
+    public function ic_rule_blocked_without_org_intercompany_pack(): void
+    {
+        $this->expectException(HttpException::class);
+        app(IntercompanyService::class)->createRule('R1', 'Rule 1', 'SO', 'PO');
+    }
+
+    #[Test]
+    public function ic_rule_allowed_with_org_intercompany_pack(): void
+    {
+        $this->features->setEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY,
+            true
+        );
+
+        $rule = app(IntercompanyService::class)->createRule('R1', 'Rule 1', 'SO', 'PO');
+        $this->assertSame('R1', $rule->code);
     }
 }
