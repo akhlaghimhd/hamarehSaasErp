@@ -6,6 +6,7 @@ use App\Modules\Organization\Models\Company;
 use App\Modules\Organization\Models\IntercompanyPartner;
 use App\Modules\Organization\Models\IntercompanyRule;
 use App\Base\Context\TenantContext;
+use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -48,6 +49,12 @@ class IntercompanyService
         bool $isActive = true,
     ): IntercompanyPartner {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        // SAASADM-P1: IC mutations require org.intercompany pack
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
 
         if ($fromCompanyId === $toCompanyId) {
             throw new \Exception('شرکت مبدأ و مقصد نمی‌توانند یکسان باشند.');
@@ -97,6 +104,12 @@ class IntercompanyService
         array $attrs,
     ): IntercompanyPartner {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
+
         $row = IntercompanyPartner::where('tenant_id', $tenantId)
             ->where('ic_partner_id', $icPartnerId)
             ->firstOrFail();
@@ -141,6 +154,12 @@ class IntercompanyService
     public function softDeletePartner(string $icPartnerId): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
+
         $row = IntercompanyPartner::where('tenant_id', $tenantId)
             ->where('ic_partner_id', $icPartnerId)
             ->firstOrFail();
@@ -166,6 +185,11 @@ class IntercompanyService
         ?string $notes = null,
     ): IntercompanyRule {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
 
         if (IntercompanyRule::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
             throw new \Exception('کد قانون بین‌شرکتی تکراری است.');
@@ -194,6 +218,12 @@ class IntercompanyService
     public function updateRule(string $icRuleId, array $attrs): IntercompanyRule
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
+
         $row = IntercompanyRule::where('tenant_id', $tenantId)
             ->where('ic_rule_id', $icRuleId)
             ->firstOrFail();
@@ -236,6 +266,12 @@ class IntercompanyService
     public function softDeleteRule(string $icRuleId): void
     {
         $tenantId = TenantContext::getInstance()->getTenantId();
+
+        app(FeatureCatalogService::class)->assertEnabled(
+            $tenantId,
+            FeatureCatalogService::CODE_ORG_INTERCOMPANY
+        );
+
         $row = IntercompanyRule::where('tenant_id', $tenantId)
             ->where('ic_rule_id', $icRuleId)
             ->firstOrFail();
