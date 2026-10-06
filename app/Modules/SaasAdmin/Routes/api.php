@@ -12,154 +12,165 @@ use App\Modules\SaasAdmin\Controllers\AuditLogController;
 use App\Modules\SaasAdmin\Controllers\AdminApiKeyController;
 use App\Modules\SaasAdmin\Controllers\AdminWebhookController;
 use App\Modules\SaasAdmin\Controllers\AdminAuthController;
+use App\Modules\SaasAdmin\Controllers\AdminFeatureEntitlementController;
 
 /*
 |--------------------------------------------------------------------------
 | Saas Admin API Routes (Layer 2 - Platform Administration)
 |--------------------------------------------------------------------------
-| Prefix: /api/saas-admin
+| Prefix: /api/v1/saas-admin (and legacy /api/saas-admin)
+| Auth: custom admin session token via admin.auth (NOT tenant Sanctum JWT)
 */
 
-// Public admin auth (no sanctum)
 Route::post('/auth/login', [AdminAuthController::class, 'login'])
     ->name('saas-admin.auth.login');
 
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['admin.auth'])->group(function () {
 
     Route::post('/auth/logout', [AdminAuthController::class, 'logout'])
         ->name('saas-admin.auth.logout');
 
+    // Feature packs (platform-wide catalog + per-tenant entitlements)
+    Route::get('/feature-catalog', [AdminFeatureEntitlementController::class, 'catalog'])
+        ->middleware('admin.permission:saas-admin.feature.view')
+        ->name('saas-admin.feature-catalog.index');
+    Route::get('/tenants/{tenantId}/feature-entitlements', [AdminFeatureEntitlementController::class, 'listForTenant'])
+        ->middleware('admin.permission:saas-admin.feature.view')
+        ->name('saas-admin.feature-entitlements.index');
+    Route::post('/tenants/{tenantId}/feature-entitlements', [AdminFeatureEntitlementController::class, 'setForTenant'])
+        ->middleware('admin.permission:saas-admin.feature.manage')
+        ->name('saas-admin.feature-entitlements.set');
+
     // Admin Users
     Route::get('/admin-users', [AdminUserController::class, 'index'])
-        ->middleware('permission:saas-admin.admin_user.view')
+        ->middleware('admin.permission:saas-admin.admin_user.view')
         ->name('saas-admin.admin-users.index');
     Route::get('/admin-users/{id}', [AdminUserController::class, 'show'])
-        ->middleware('permission:saas-admin.admin_user.view')
+        ->middleware('admin.permission:saas-admin.admin_user.view')
         ->name('saas-admin.admin-users.show');
     Route::post('/admin-users', [AdminUserController::class, 'store'])
-        ->middleware('permission:saas-admin.admin_user.create')
+        ->middleware('admin.permission:saas-admin.admin_user.create')
         ->name('saas-admin.admin-users.store');
     Route::put('/admin-users/{id}', [AdminUserController::class, 'update'])
-        ->middleware('permission:saas-admin.admin_user.update')
+        ->middleware('admin.permission:saas-admin.admin_user.update')
         ->name('saas-admin.admin-users.update');
     Route::delete('/admin-users/{id}', [AdminUserController::class, 'destroy'])
-        ->middleware('permission:saas-admin.admin_user.delete')
+        ->middleware('admin.permission:saas-admin.admin_user.delete')
         ->name('saas-admin.admin-users.destroy');
 
     // Admin Roles
     Route::get('/admin-roles', [AdminRoleController::class, 'index'])
-        ->middleware('permission:saas-admin.admin_role.view')
+        ->middleware('admin.permission:saas-admin.admin_role.view')
         ->name('saas-admin.admin-roles.index');
     Route::get('/admin-roles/{id}', [AdminRoleController::class, 'show'])
-        ->middleware('permission:saas-admin.admin_role.view')
+        ->middleware('admin.permission:saas-admin.admin_role.view')
         ->name('saas-admin.admin-roles.show');
     Route::post('/admin-roles', [AdminRoleController::class, 'store'])
-        ->middleware('permission:saas-admin.admin_role.create')
+        ->middleware('admin.permission:saas-admin.admin_role.create')
         ->name('saas-admin.admin-roles.store');
     Route::put('/admin-roles/{id}', [AdminRoleController::class, 'update'])
-        ->middleware('permission:saas-admin.admin_role.update')
+        ->middleware('admin.permission:saas-admin.admin_role.update')
         ->name('saas-admin.admin-roles.update');
     Route::delete('/admin-roles/{id}', [AdminRoleController::class, 'destroy'])
-        ->middleware('permission:saas-admin.admin_role.delete')
+        ->middleware('admin.permission:saas-admin.admin_role.delete')
         ->name('saas-admin.admin-roles.destroy');
     Route::post('/admin-roles/{id}/permissions', [AdminRoleController::class, 'assignPermissions'])
-        ->middleware('permission:saas-admin.admin_role.update')
+        ->middleware('admin.permission:saas-admin.admin_role.update')
         ->name('saas-admin.admin-roles.assign-permissions');
 
     // System Settings
     Route::get('/system-settings', [SystemSettingController::class, 'index'])
-        ->middleware('permission:saas-admin.system_setting.view')
+        ->middleware('admin.permission:saas-admin.system_setting.view')
         ->name('saas-admin.system-settings.index');
     Route::get('/system-settings/{id}', [SystemSettingController::class, 'show'])
-        ->middleware('permission:saas-admin.system_setting.view')
+        ->middleware('admin.permission:saas-admin.system_setting.view')
         ->name('saas-admin.system-settings.show');
     Route::post('/system-settings', [SystemSettingController::class, 'upsert'])
-        ->middleware('permission:saas-admin.system_setting.update')
+        ->middleware('admin.permission:saas-admin.system_setting.update')
         ->name('saas-admin.system-settings.upsert');
     Route::delete('/system-settings/{id}', [SystemSettingController::class, 'destroy'])
-        ->middleware('permission:saas-admin.system_setting.delete')
+        ->middleware('admin.permission:saas-admin.system_setting.delete')
         ->name('saas-admin.system-settings.destroy');
 
     // Audit Logs
     Route::get('/audit-logs', [AuditLogController::class, 'index'])
-        ->middleware('permission:saas-admin.audit_log.view')
+        ->middleware('admin.permission:saas-admin.audit_log.view')
         ->name('saas-admin.audit-logs.index');
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])
-        ->middleware('permission:saas-admin.notification.view')
+        ->middleware('admin.permission:saas-admin.notification.view')
         ->name('saas-admin.notifications.index');
     Route::post('/notifications', [NotificationController::class, 'store'])
-        ->middleware('permission:saas-admin.notification.create')
+        ->middleware('admin.permission:saas-admin.notification.create')
         ->name('saas-admin.notifications.store');
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead'])
-        ->middleware('permission:saas-admin.notification.update')
+        ->middleware('admin.permission:saas-admin.notification.update')
         ->name('saas-admin.notifications.mark-read');
     Route::delete('/notifications/{id}', [NotificationController::class, 'destroy'])
-        ->middleware('permission:saas-admin.notification.delete')
+        ->middleware('admin.permission:saas-admin.notification.delete')
         ->name('saas-admin.notifications.destroy');
 
     // Notification Templates
     Route::get('/notification-templates', [NotificationTemplateController::class, 'index'])
-        ->middleware('permission:saas-admin.notification.view')
+        ->middleware('admin.permission:saas-admin.notification.view')
         ->name('saas-admin.notification-templates.index');
     Route::post('/notification-templates', [NotificationTemplateController::class, 'upsert'])
-        ->middleware('permission:saas-admin.notification.create')
+        ->middleware('admin.permission:saas-admin.notification.create')
         ->name('saas-admin.notification-templates.upsert');
     Route::delete('/notification-templates/{id}', [NotificationTemplateController::class, 'destroy'])
-        ->middleware('permission:saas-admin.notification.delete')
+        ->middleware('admin.permission:saas-admin.notification.delete')
         ->name('saas-admin.notification-templates.destroy');
 
     // Support Tickets
     Route::get('/support-tickets', [SupportTicketController::class, 'index'])
-        ->middleware('permission:saas-admin.support_ticket.view')
+        ->middleware('admin.permission:saas-admin.support_ticket.view')
         ->name('saas-admin.support-tickets.index');
     Route::get('/support-tickets/{id}', [SupportTicketController::class, 'show'])
-        ->middleware('permission:saas-admin.support_ticket.view')
+        ->middleware('admin.permission:saas-admin.support_ticket.view')
         ->name('saas-admin.support-tickets.show');
     Route::post('/support-tickets', [SupportTicketController::class, 'store'])
-        ->middleware('permission:saas-admin.support_ticket.create')
+        ->middleware('admin.permission:saas-admin.support_ticket.create')
         ->name('saas-admin.support-tickets.store');
     Route::put('/support-tickets/{id}', [SupportTicketController::class, 'update'])
-        ->middleware('permission:saas-admin.support_ticket.update')
+        ->middleware('admin.permission:saas-admin.support_ticket.update')
         ->name('saas-admin.support-tickets.update');
     Route::delete('/support-tickets/{id}', [SupportTicketController::class, 'destroy'])
-        ->middleware('permission:saas-admin.support_ticket.delete')
+        ->middleware('admin.permission:saas-admin.support_ticket.delete')
         ->name('saas-admin.support-tickets.destroy');
 
-    // Support Ticket Messages / Attachments
     Route::get('/support-tickets/{ticketId}/messages', [SupportTicketMessageController::class, 'index'])
-        ->middleware('permission:saas-admin.support_ticket.view')
+        ->middleware('admin.permission:saas-admin.support_ticket.view')
         ->name('saas-admin.support-ticket-messages.index');
     Route::post('/support-tickets/{ticketId}/messages', [SupportTicketMessageController::class, 'store'])
-        ->middleware('permission:saas-admin.support_ticket.update')
+        ->middleware('admin.permission:saas-admin.support_ticket.update')
         ->name('saas-admin.support-ticket-messages.store');
     Route::post('/support-ticket-messages/{messageId}/attachments', [SupportTicketMessageController::class, 'storeAttachment'])
-        ->middleware('permission:saas-admin.support_ticket.update')
+        ->middleware('admin.permission:saas-admin.support_ticket.update')
         ->name('saas-admin.support-ticket-attachments.store');
 
     // API Keys
     Route::get('/api-keys', [AdminApiKeyController::class, 'index'])
-        ->middleware('permission:saas-admin.api_key.view')
+        ->middleware('admin.permission:saas-admin.api_key.view')
         ->name('saas-admin.api-keys.index');
     Route::post('/api-keys', [AdminApiKeyController::class, 'store'])
-        ->middleware('permission:saas-admin.api_key.create')
+        ->middleware('admin.permission:saas-admin.api_key.create')
         ->name('saas-admin.api-keys.store');
     Route::delete('/api-keys/{id}', [AdminApiKeyController::class, 'destroy'])
-        ->middleware('permission:saas-admin.api_key.delete')
+        ->middleware('admin.permission:saas-admin.api_key.delete')
         ->name('saas-admin.api-keys.destroy');
 
     // Webhooks
     Route::get('/webhooks', [AdminWebhookController::class, 'index'])
-        ->middleware('permission:saas-admin.webhook.view')
+        ->middleware('admin.permission:saas-admin.webhook.view')
         ->name('saas-admin.webhooks.index');
     Route::post('/webhooks', [AdminWebhookController::class, 'store'])
-        ->middleware('permission:saas-admin.webhook.create')
+        ->middleware('admin.permission:saas-admin.webhook.create')
         ->name('saas-admin.webhooks.store');
     Route::put('/webhooks/{id}', [AdminWebhookController::class, 'update'])
-        ->middleware('permission:saas-admin.webhook.update')
+        ->middleware('admin.permission:saas-admin.webhook.update')
         ->name('saas-admin.webhooks.update');
     Route::delete('/webhooks/{id}', [AdminWebhookController::class, 'destroy'])
-        ->middleware('permission:saas-admin.webhook.delete')
+        ->middleware('admin.permission:saas-admin.webhook.delete')
         ->name('saas-admin.webhooks.destroy');
 });
