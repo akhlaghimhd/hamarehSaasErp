@@ -13,8 +13,15 @@ use InvalidArgumentException;
 class AdminAuthService
 {
     private const MAX_FAILED = 5;
+
     private const LOCK_MINUTES = 15;
+
     private const SESSION_HOURS = 8;
+
+    public function __construct(
+        private readonly AuditLogService $auditLogService
+    ) {
+    }
 
     /**
      * @return array{admin_user: AdminUser, session: AdminUserSession, token: string}
@@ -33,22 +40,25 @@ class AdminAuthService
             ->whereNull('deleted_at')
             ->first();
 
-        if (!$user) {
+        if (! $user) {
             $this->recordAttempt($username, $ipAddress, $userAgent, false, 'user_not_found');
+            $this->auditAuthFailure($username, $ipAddress, $userAgent, 'user_not_found');
             throw new InvalidArgumentException('Invalid credentials.');
         }
 
         if ($user->locked_until && $user->locked_until->isFuture()) {
             $this->recordAttempt($username, $ipAddress, $userAgent, false, 'account_locked');
+            $this->auditAuthFailure($username, $ipAddress, $userAgent, 'account_locked', $user->admin_user_id);
             throw new InvalidArgumentException('Account is temporarily locked.');
         }
 
         if ($user->status !== 1) {
             $this->recordAttempt($username, $ipAddress, $userAgent, false, 'inactive');
+            $this->auditAuthFailure($username, $ipAddress, $userAgent, 'inactive', $user->admin_user_id);
             throw new InvalidArgumentException('Account is inactive.');
         }
 
-        if (!Hash::check($password, $user->password_hash)) {
+        if (! Hash::check($password, $user->password_hash)) {
             $failed = ((int) $user->failed_login_count) + 1;
             $user->failed_login_count = $failed;
             if ($failed >= self::MAX_FAILED) {
@@ -58,6 +68,7 @@ class AdminAuthService
             $user->save();
 
             $this->recordAttempt($username, $ipAddress, $userAgent, false, 'bad_password');
+            $this->auditAuthFailure($username, $ipAddress, $userAgent, 'bad_password', $user->admin_user_id);
             throw new InvalidArgumentException('Invalid credentials.');
         }
 
@@ -82,6 +93,22 @@ class AdminAuthService
                 'last_activity_at' => now(),
             ]);
 
+            $this->auditLogService->write(
+                entityName: 'admin_auth',
+                actionType: 'LOGIN',
+                entityId: $user->admin_user_id,
+                adminUserId: $user->admin_user_id,
+                details: [
+                    'username'   => $username,
+                    'session_id' => $session->session_id,
+                ],
+                severity: 1,
+                ipAddress: $ipAddress,
+                userAgent: $userAgent,
+                sessionId: $session->session_id,
+                createdBy: $user->admin_user_id
+            );
+
             return [
                 'admin_user' => $user->fresh(),
                 'session'    => $session,
@@ -93,10 +120,49 @@ class AdminAuthService
     public function logout(string $token): void
     {
         $hash = hash('sha256', $token);
-        AdminUserSession::query()
+        $session = AdminUserSession::query()
             ->where('token_hash', $hash)
             ->where('is_active', true)
-            ->update(['is_active' => false]);
+            ->first();
+
+        if ($session) {
+            $session->is_active = false;
+            $session->save();
+
+            $this->auditLogService->write(
+                entityName: 'admin_auth',
+                actionType: 'LOGOUT',
+                entityId: $session->admin_user_id,
+                adminUserId: $session->admin_user_id,
+                details: ['session_id' => $session->session_id],
+                severity: 1,
+                sessionId: $session->session_id,
+                createdBy: $session->admin_user_id
+            );
+        }
+    }
+
+    private function auditAuthFailure(
+        string $username,
+        string $ipAddress,
+        ?string $userAgent,
+        string $reason,
+        ?string $adminUserId = null
+    ): void {
+        $this->auditLogService->write(
+            entityName: 'admin_auth',
+            actionType: 'LOGIN_FAILED',
+            entityId: $adminUserId,
+            adminUserId: $adminUserId,
+            details: [
+                'username' => $username,
+                'reason'   => $reason,
+            ],
+            severity: 2,
+            ipAddress: $ipAddress,
+            userAgent: $userAgent,
+            createdBy: $adminUserId
+        );
     }
 
     private function recordAttempt(
