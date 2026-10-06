@@ -44,9 +44,10 @@ class PlatformAdminSeeder extends Seeder
             }
 
             // Local/testing fallback only — never used in production.
+            // Password must be >= 10 chars (same rule as production validation).
             $username = $username !== '' ? $username : 'platform.admin';
             $email = $email !== '' ? $email : 'admin@platform.local';
-            $password = $password !== '' ? $password : 'Admin123!';
+            $password = $password !== '' ? $password : 'LocalAdmin1!';
             $this->command?->warn(
                 'PlatformAdminSeeder using local defaults (APP_ENV='.app()->environment().'). Set PLATFORM_ADMIN_* for real deploys.'
             );
