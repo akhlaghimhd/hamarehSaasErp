@@ -7,6 +7,8 @@ use App\Base\Http\Middleware\TenantContextMiddleware;
 use App\Base\Http\Middleware\RequirePermission;
 use App\Base\Http\Middleware\LoadUserScopesMiddleware;
 use App\Base\Http\Middleware\RequireScope;
+use App\Modules\SaasAdmin\Http\Middleware\AuthenticateAdmin;
+use App\Modules\SaasAdmin\Http\Middleware\RequireAdminPermission;
 use App\Base\Exceptions\DomainException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -117,12 +119,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
 
-        // Shared security middleware aliases (Identity / Isolation)
+        // Shared security middleware aliases (Identity / Isolation / SaaS Admin)
         $middleware->alias([
-            'tenant.context' => TenantContextMiddleware::class,
-            'permission'     => RequirePermission::class,
-            'load.scopes'    => LoadUserScopesMiddleware::class,
-            'scope'          => RequireScope::class, // F3 — Validate Scope on actions
+            'tenant.context'    => TenantContextMiddleware::class,
+            'permission'        => RequirePermission::class,
+            'load.scopes'       => LoadUserScopesMiddleware::class,
+            'scope'             => RequireScope::class,
+            'admin.auth'        => AuthenticateAdmin::class,
+            'admin.permission'  => RequireAdminPermission::class,
         ]);
 
     })
