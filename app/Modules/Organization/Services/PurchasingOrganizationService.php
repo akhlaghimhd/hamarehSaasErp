@@ -55,6 +55,8 @@ class PurchasingOrganizationService
     ): PurchasingOrganization {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        OrgSalesPurchPackGuard::assertPurchStructure();
+
         if (PurchasingOrganization::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
             throw new DomainException('کد سازمان خرید تکراری است.', 'duplicate_purch_org_code');
         }
@@ -91,13 +93,9 @@ class PurchasingOrganizationService
             ->where('purch_org_id', $purchOrgId)
             ->firstOrFail();
 
-        if ($row->code !== $code) {
-            if (PurchasingOrganization::where('tenant_id', $tenantId)
-                ->where('code', $code)
-                ->where('purch_org_id', '!=', $purchOrgId)
-                ->exists()) {
-                throw new DomainException('کد سازمان خرید تکراری است.', 'duplicate_purch_org_code');
-            }
+        if ($row->code !== $code
+            && PurchasingOrganization::where('tenant_id', $tenantId)->where('code', $code)->where('purch_org_id', '!=', $purchOrgId)->exists()) {
+            throw new DomainException('کد سازمان خرید تکراری است.', 'duplicate_purch_org_code');
         }
 
         if ($companyId) {
@@ -111,14 +109,12 @@ class PurchasingOrganizationService
             'company_id'  => $companyId,
             'row_version' => ((int) ($row->row_version ?? 1)) + 1,
         ];
-
         if ($isActive !== null) {
             $payload['is_active'] = $isActive;
         }
         if ($isReference !== null) {
             $payload['is_reference'] = $isReference;
         }
-
         $row->update($payload);
 
         return $row->fresh(['assignments', 'company']) ?? $row;
@@ -136,9 +132,10 @@ class PurchasingOrganizationService
             ->where('purch_org_id', $purchOrgId)
             ->whereNull('deleted_at')
             ->count();
+
         if ($activeAssignments > 0) {
             throw new DomainException(
-                'این سازمان خرید دارای تخصیص فعال است و قابل حذف نیست. ابتدا تخصیص‌ها را حذف کنید.',
+                'این سازمان خرید دارای تخصیص فعال است و قابل حذف نیست.',
                 'purch_org_has_assignments'
             );
         }
