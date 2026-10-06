@@ -9,7 +9,12 @@ use Illuminate\Routing\Controller;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * Tenant system settings for Identity policies (customer-controlled, not feature packs).
+ * Tenant-owned Identity policy settings (customer-controlled).
+ *
+ * Dual-approval toggles are NOT platform system_settings — they live in
+ * tenant_settings via TenantIdentitySettingsService (SAASADM-P3 decision).
+ * Temporary UI under /dashboard/identity/settings should later move to a
+ * formal tenant System Settings page (FE residual).
  */
 class IdentitySettingsController extends Controller
 {
@@ -28,7 +33,8 @@ class IdentitySettingsController extends Controller
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'require_role_assignment_approval' => ['sometimes', 'boolean'],
+            'require_role_assignment_approval'    => ['sometimes', 'boolean'],
+            'require_privileged_access_approval'  => ['sometimes', 'boolean'],
         ]);
 
         $actor = optional($request->user())->user_id;

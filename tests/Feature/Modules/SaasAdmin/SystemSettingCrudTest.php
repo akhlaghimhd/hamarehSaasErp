@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Modules\SaasAdmin;
 
+use App\Modules\SaasAdmin\Models\SystemSetting;
 use App\Modules\SaasAdmin\Services\SystemSettingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -45,8 +46,6 @@ class SystemSettingCrudTest extends TestCase
 
         $this->assertEquals('Asia/Tehran', $updated->setting_value);
         $this->assertEquals('Updated TZ', $updated->description);
-        $this->assertEquals(1, SystemSettingService::class ? 1 : 0); // keep simple
-
         $this->assertDatabaseCount('system_settings', 1);
     }
 
@@ -81,5 +80,43 @@ class SystemSettingCrudTest extends TestCase
         $list = $this->service->list();
 
         $this->assertGreaterThanOrEqual(2, $list->count());
+    }
+
+    #[Test]
+    public function it_ensures_catalog_defaults_including_retention_keys(): void
+    {
+        $created = $this->service->ensureDefaults();
+
+        $this->assertGreaterThanOrEqual(4, $created);
+
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => SystemSetting::KEY_PLATFORM_EMAIL_BASE_DOMAIN,
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => SystemSetting::KEY_RETENTION_SOFT_DELETE_DAYS_DEFAULT,
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => SystemSetting::KEY_RETENTION_SOFT_DELETE_DAYS_ORG_MASTERS,
+        ]);
+        $this->assertDatabaseHas('system_settings', [
+            'setting_key' => SystemSetting::KEY_RETENTION_PURGE_JOB_ENABLED,
+        ]);
+
+        // Second call is idempotent — no overwrite / no duplicate active rows
+        $again = $this->service->ensureDefaults();
+        $this->assertSame(0, $again);
+
+        $this->assertSame(90, $this->service->getInt(SystemSetting::KEY_RETENTION_SOFT_DELETE_DAYS_DEFAULT));
+        $this->assertFalse($this->service->getBool(SystemSetting::KEY_RETENTION_PURGE_JOB_ENABLED));
+    }
+
+    #[Test]
+    public function typed_getters_return_defaults_when_missing(): void
+    {
+        $this->assertNull($this->service->getValue('missing.key'));
+        $this->assertSame('fallback', $this->service->getValue('missing.key', 'fallback'));
+        $this->assertFalse($this->service->getBool('missing.bool'));
+        $this->assertTrue($this->service->getBool('missing.bool', true));
+        $this->assertSame(7, $this->service->getInt('missing.int', 7));
     }
 }

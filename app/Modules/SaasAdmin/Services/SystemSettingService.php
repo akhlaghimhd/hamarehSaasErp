@@ -3,10 +3,9 @@
 namespace App\Modules\SaasAdmin\Services;
 
 use App\Modules\SaasAdmin\Models\SystemSetting;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Database\Eloquent\Collection;
-use InvalidArgumentException;
 
 class SystemSettingService
 {
@@ -26,12 +25,59 @@ class SystemSettingService
             ->firstOrFail();
     }
 
+    public function findByKey(string $key): ?SystemSetting
+    {
+        return SystemSetting::query()
+            ->where('setting_key', $key)
+            ->whereNull('deleted_at')
+            ->first();
+    }
+
     public function get(string $systemSettingId): SystemSetting
     {
         return SystemSetting::query()
             ->where('system_setting_id', $systemSettingId)
             ->whereNull('deleted_at')
             ->firstOrFail();
+    }
+
+    public function getValue(string $key, ?string $default = null): ?string
+    {
+        return SystemSetting::getValue($key, $default);
+    }
+
+    public function getBool(string $key, bool $default = false): bool
+    {
+        return SystemSetting::getBool($key, $default);
+    }
+
+    public function getInt(string $key, int $default = 0): int
+    {
+        return SystemSetting::getInt($key, $default);
+    }
+
+    /**
+     * Idempotent seed of known platform keys (does not overwrite existing values).
+     */
+    public function ensureDefaults(?string $actorId = null): int
+    {
+        $created = 0;
+
+        foreach (SystemSetting::catalogDefaults() as $key => $meta) {
+            $exists = SystemSetting::query()
+                ->where('setting_key', $key)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $this->upsert($key, $meta['value'], $meta['description'], $actorId);
+            $created++;
+        }
+
+        return $created;
     }
 
     public function upsert(
