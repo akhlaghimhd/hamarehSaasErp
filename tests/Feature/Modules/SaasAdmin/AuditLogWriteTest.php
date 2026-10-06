@@ -18,9 +18,8 @@ class AuditLogWriteTest extends TestCase
     #[Test]
     public function successful_admin_login_writes_audit_log(): void
     {
-        $adminId = (string) Str::uuid();
-        AdminUser::query()->create([
-            'admin_user_id'      => $adminId,
+        // admin_user_id is not fillable; HasUuids assigns PK on create.
+        $user = AdminUser::query()->create([
             'username'           => 'audit.admin',
             'email'              => 'audit.admin@platform.local',
             'password_hash'      => Hash::make('LocalAdmin1!'),
@@ -29,8 +28,9 @@ class AuditLogWriteTest extends TestCase
             'status'             => 1,
             'failed_login_count' => 0,
             'two_factor_enabled' => false,
-            'row_version'        => 1,
         ]);
+
+        $adminId = (string) $user->admin_user_id;
 
         /** @var AdminAuthService $auth */
         $auth = app(AdminAuthService::class);
@@ -48,16 +48,13 @@ class AuditLogWriteTest extends TestCase
     #[Test]
     public function failed_admin_login_writes_audit_log(): void
     {
-        $adminId = (string) Str::uuid();
         AdminUser::query()->create([
-            'admin_user_id'      => $adminId,
             'username'           => 'audit.fail',
             'email'              => 'audit.fail@platform.local',
             'password_hash'      => Hash::make('LocalAdmin1!'),
             'status'             => 1,
             'failed_login_count' => 0,
             'two_factor_enabled' => false,
-            'row_version'        => 1,
         ]);
 
         /** @var AdminAuthService $auth */
