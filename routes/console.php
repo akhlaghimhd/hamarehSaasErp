@@ -14,3 +14,6 @@ Schedule::command('erp:mark-payment-schedules-overdue')->dailyAt('01:00')->witho
 
 // ID-W2-01b — periodic Access Certification campaign reminders (3/6 month)
 Schedule::command('erp:access-cert-reminders')->dailyAt('08:00')->withoutOverlapping();
+
+// Soft-delete retention purge (Org masters P0) — gated by retention.purge_job_enabled
+Schedule::command('erp:purge-soft-deleted')->dailyAt('03:30')->withoutOverlapping();
