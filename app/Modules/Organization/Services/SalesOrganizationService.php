@@ -54,6 +54,8 @@ class SalesOrganizationService
     ): SalesOrganization {
         $tenantId = TenantContext::getInstance()->getTenantId();
 
+        OrgSalesPurchPackGuard::assertSalesStructure();
+
         if (SalesOrganization::where('tenant_id', $tenantId)->where('code', $code)->exists()) {
             throw new DomainException('کد سازمان فروش تکراری است.', 'duplicate_sales_org_code');
         }
@@ -88,11 +90,8 @@ class SalesOrganizationService
             ->where('sales_org_id', $salesOrgId)
             ->firstOrFail();
 
-        $dup = SalesOrganization::where('tenant_id', $tenantId)
-            ->where('code', $code)
-            ->where('sales_org_id', '!=', $salesOrgId)
-            ->exists();
-        if ($dup) {
+        if ($row->code !== $code
+            && SalesOrganization::where('tenant_id', $tenantId)->where('code', $code)->where('sales_org_id', '!=', $salesOrgId)->exists()) {
             throw new DomainException('کد سازمان فروش تکراری است.', 'duplicate_sales_org_code');
         }
 
@@ -127,9 +126,10 @@ class SalesOrganizationService
             ->where('sales_org_id', $salesOrgId)
             ->whereNull('deleted_at')
             ->count();
+
         if ($activeAssignments > 0) {
             throw new DomainException(
-                'این سازمان فروش دارای تخصیص فعال است و قابل حذف نیست. ابتدا تخصیص‌ها را حذف کنید.',
+                'این سازمان فروش دارای تخصیص فعال است و قابل حذف نیست.',
                 'sales_org_has_assignments'
             );
         }
