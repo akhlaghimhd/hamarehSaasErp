@@ -3,9 +3,9 @@
 namespace Tests\Feature\Modules\Organization;
 
 use App\Base\Context\TenantContext;
+use App\Modules\Organization\Services\OrgSalesPurchPackGuard;
 use App\Modules\Organization\Services\PurchasingOrganizationService;
 use App\Modules\Organization\Services\SalesOrganizationService;
-use App\Modules\Organization\Services\SalesStructureService;
 use App\Modules\SaasPlatform\Models\Tenant;
 use App\Modules\SaasPlatform\Services\FeatureCatalogService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -80,9 +80,27 @@ class SalesPurchFeaturePackGateTest extends TestCase
     }
 
     #[Test]
-    public function channel_create_blocked_without_sales_structure_pack(): void
+    public function sales_structure_guard_blocks_without_pack(): void
     {
         $this->expectException(HttpException::class);
-        app(SalesStructureService::class)->createChannel('CH1', 'Channel 1');
+        OrgSalesPurchPackGuard::assertSalesStructure();
+    }
+
+    #[Test]
+    public function sales_structure_guard_passes_with_pack(): void
+    {
+        $this->features->setEntitlement(
+            $this->tenant->tenant_id,
+            FeatureCatalogService::CODE_ORG_SALES_STRUCTURE,
+            true
+        );
+
+        OrgSalesPurchPackGuard::assertSalesStructure();
+        $this->assertTrue(
+            $this->features->isEnabled(
+                $this->tenant->tenant_id,
+                FeatureCatalogService::CODE_ORG_SALES_STRUCTURE
+            )
+        );
     }
 }
