@@ -15,6 +15,10 @@ class AdminPermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
+            // Feature packs (SAASADM-P0/P2)
+            ['code' => 'saas-admin.feature.view',   'name' => 'View Feature Catalog',   'module_name' => 'SaasAdmin', 'permission_group' => 'Feature', 'action_type' => 'R'],
+            ['code' => 'saas-admin.feature.manage', 'name' => 'Manage Tenant Features', 'module_name' => 'SaasAdmin', 'permission_group' => 'Feature', 'action_type' => 'U'],
+
             // Admin Users
             ['code' => 'saas-admin.admin_user.view',   'name' => 'View Admin Users',   'module_name' => 'SaasAdmin', 'permission_group' => 'AdminUser', 'action_type' => 'R'],
             ['code' => 'saas-admin.admin_user.create', 'name' => 'Create Admin User',  'module_name' => 'SaasAdmin', 'permission_group' => 'AdminUser', 'action_type' => 'C'],
