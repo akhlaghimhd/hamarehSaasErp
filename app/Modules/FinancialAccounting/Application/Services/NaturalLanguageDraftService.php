@@ -98,18 +98,18 @@ class NaturalLanguageDraftService
      */
     protected function parse(string $command, string $companyId): array
     {
-        // amount: first number with optional separators
-        if (! preg_match('/(\d+(?:[.,]\d+)?)/u', $command, $mAmt)) {
-            throw new DomainException('مبلغ در دستور یافت نشد.', 'fin.nl.amount_missing');
-        }
-        $amount = (float) str_replace(',', '', $mAmt[1]);
-        if ($amount <= 0) {
-            throw new DomainException('مبلغ باید مثبت باشد.', 'fin.nl.bad_amount');
-        }
+        $amount = $this->extractAmount($command);
 
-        // Try explicit account codes like 1101 / 5101
+        // Prefer account codes that are not the amount token when possible
         preg_match_all('/\b(\d{3,8})\b/', $command, $codes);
-        $codeList = $codes[1] ?? [];
+        $codeList = array_values(array_filter(
+            $codes[1] ?? [],
+            fn ($c) => (float) $c !== $amount || strlen($c) >= 4
+        ));
+        // If amount was e.g. 250 and codes are 5101,1101,250 — drop pure amount match of short length
+        $codeList = array_values(array_filter($codeList, function ($c) use ($amount) {
+            return ! ((float) $c === $amount && strlen($c) <= 3);
+        }));
 
         $debitId = null;
         $creditId = null;
@@ -128,7 +128,6 @@ class NaturalLanguageDraftService
         }
 
         if (! $debitId || ! $creditId) {
-            // history-based suggestions for both sides
             $s1 = $this->suggest->suggest($companyId, $command, 1);
             $s2 = $this->suggest->suggest($companyId, $command, 2);
             $d = $s1['suggestions'][0] ?? null;
@@ -139,7 +138,6 @@ class NaturalLanguageDraftService
                     'fin.nl.accounts_unresolved'
                 );
             }
-            // ensure distinct
             if ($d['account_id'] === $c['account_id'] && isset($s1['suggestions'][1])) {
                 $c = $s1['suggestions'][1];
             }
@@ -154,12 +152,34 @@ class NaturalLanguageDraftService
         }
 
         return [
-            'amount'             => $amount,
-            'debit_account_id'   => $debitId,
-            'credit_account_id'  => $creditId,
-            'debit_label'        => $debitLabel,
-            'credit_label'       => $creditLabel,
-            'explanation'        => "پیش‌نویس: بدهکار {$debitLabel} / بستانکار {$creditLabel} مبلغ {$amount} (ثبت قطعی نشده)",
+            'amount'            => $amount,
+            'debit_account_id'  => $debitId,
+            'credit_account_id' => $creditId,
+            'debit_label'       => $debitLabel,
+            'credit_label'      => $creditLabel,
+            'explanation'       => "پیش‌نویس: بدهکار {$debitLabel} / بستانکار {$creditLabel} مبلغ {$amount} (ثبت قطعی نشده)",
         ];
+    }
+
+    protected function extractAmount(string $command): float
+    {
+        // Prefer explicit amount keywords (FA/EN)
+        if (preg_match('/(?:مبلغ|amount|sum)\s*[:=]?\s*(\d+(?:[.,]\d+)?)/ui', $command, $m)) {
+            $amount = (float) str_replace(',', '', $m[1]);
+            if ($amount > 0) {
+                return $amount;
+            }
+        }
+
+        // Fallback: last number in the command (amount usually trails)
+        if (preg_match_all('/(\d+(?:[.,]\d+)?)/u', $command, $all) && ! empty($all[1])) {
+            $last = $all[1][count($all[1]) - 1];
+            $amount = (float) str_replace(',', '', $last);
+            if ($amount > 0) {
+                return $amount;
+            }
+        }
+
+        throw new DomainException('مبلغ در دستور یافت نشد.', 'fin.nl.amount_missing');
     }
 }
