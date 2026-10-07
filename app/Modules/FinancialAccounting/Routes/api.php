@@ -3,14 +3,17 @@
 declare(strict_types=1);
 
 use App\Modules\FinancialAccounting\Controllers\AccountController;
+use App\Modules\FinancialAccounting\Controllers\BankReconciliationController;
+use App\Modules\FinancialAccounting\Controllers\ChequeController;
 use App\Modules\FinancialAccounting\Controllers\JournalEntryController;
+use App\Modules\FinancialAccounting\Controllers\OpenItemController;
 use App\Modules\FinancialAccounting\Controllers\PeriodControlController;
 use App\Modules\FinancialAccounting\Controllers\ReportController;
+use App\Modules\FinancialAccounting\Controllers\TreasuryController;
 use Illuminate\Support\Facades\Route;
 
 /**
  * Loaded as /api/v1/financial-accounting/...
- * (ModuleServiceProvider kebab-cases module name)
  */
 Route::middleware([
     'auth:sanctum',
@@ -59,4 +62,39 @@ Route::middleware([
         ->middleware('permission:finance.report.view');
     Route::get('/reports/balance-sheet', [ReportController::class, 'balanceSheet'])
         ->middleware('permission:finance.report.view');
+
+    // FIN-P1 treasury / AR / AP / cheque / recon
+    Route::get('/cash-accounts', [TreasuryController::class, 'cashAccounts'])
+        ->middleware('permission:finance.treasury.view');
+    Route::post('/cash-accounts', [TreasuryController::class, 'storeCashAccount'])
+        ->middleware('permission:finance.treasury.manage');
+    Route::get('/treasury-documents', [TreasuryController::class, 'documents'])
+        ->middleware('permission:finance.treasury.view');
+    Route::post('/treasury-documents', [TreasuryController::class, 'storeDocument'])
+        ->middleware('permission:finance.treasury.manage');
+    Route::post('/treasury-documents/{document}/post', [TreasuryController::class, 'post'])
+        ->middleware('permission:finance.treasury.post');
+
+    Route::get('/cheques', [ChequeController::class, 'index'])
+        ->middleware('permission:finance.treasury.view');
+    Route::post('/cheques', [ChequeController::class, 'store'])
+        ->middleware('permission:finance.treasury.manage');
+    Route::post('/cheques/{cheque}/transition', [ChequeController::class, 'transition'])
+        ->middleware('permission:finance.treasury.manage');
+
+    Route::get('/open-items', [OpenItemController::class, 'index'])
+        ->middleware('permission:finance.ar.view');
+    Route::post('/open-items', [OpenItemController::class, 'store'])
+        ->middleware('permission:finance.ar.manage');
+    Route::post('/open-items/{openItem}/allocate', [OpenItemController::class, 'allocate'])
+        ->middleware('permission:finance.ar.manage');
+    Route::get('/open-items/aging', [OpenItemController::class, 'aging'])
+        ->middleware('permission:finance.ar.view');
+
+    Route::get('/bank-statements', [BankReconciliationController::class, 'index'])
+        ->middleware('permission:finance.treasury.view');
+    Route::post('/bank-statements', [BankReconciliationController::class, 'store'])
+        ->middleware('permission:finance.treasury.manage');
+    Route::post('/bank-statement-lines/{line}/match', [BankReconciliationController::class, 'matchLine'])
+        ->middleware('permission:finance.treasury.manage');
 });
