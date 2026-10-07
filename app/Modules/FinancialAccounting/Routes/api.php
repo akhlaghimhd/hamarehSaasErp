@@ -63,7 +63,6 @@ Route::middleware([
     Route::get('/reports/balance-sheet', [ReportController::class, 'balanceSheet'])
         ->middleware('permission:finance.report.view');
 
-    // FIN-P1 treasury / AR / AP / cheque / recon
     Route::get('/cash-accounts', [TreasuryController::class, 'cashAccounts'])
         ->middleware('permission:finance.treasury.view');
     Route::post('/cash-accounts', [TreasuryController::class, 'storeCashAccount'])
@@ -82,14 +81,15 @@ Route::middleware([
     Route::post('/cheques/{cheque}/transition', [ChequeController::class, 'transition'])
         ->middleware('permission:finance.treasury.manage');
 
+    // static paths before {openItem}
+    Route::get('/open-items/aging', [OpenItemController::class, 'aging'])
+        ->middleware('permission:finance.ar.view');
     Route::get('/open-items', [OpenItemController::class, 'index'])
         ->middleware('permission:finance.ar.view');
     Route::post('/open-items', [OpenItemController::class, 'store'])
         ->middleware('permission:finance.ar.manage');
     Route::post('/open-items/{openItem}/allocate', [OpenItemController::class, 'allocate'])
         ->middleware('permission:finance.ar.manage');
-    Route::get('/open-items/aging', [OpenItemController::class, 'aging'])
-        ->middleware('permission:finance.ar.view');
 
     Route::get('/bank-statements', [BankReconciliationController::class, 'index'])
         ->middleware('permission:finance.treasury.view');
