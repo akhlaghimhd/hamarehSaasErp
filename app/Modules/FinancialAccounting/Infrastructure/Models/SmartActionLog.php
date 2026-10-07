@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Infrastructure\Models;
 
 use App\Base\Traits\TenantScoped;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 class SmartActionLog extends Model
 {
-    use HasUuids, TenantScoped;
+    use TenantScoped;
 
     public $timestamps = false;
 
@@ -23,18 +22,22 @@ class SmartActionLog extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'smart_action_log_id',
         'tenant_id',
         'action_type',
-        'subject_type',
-        'subject_id',
+        'feature_code',
         'actor_id',
-        'payload_json',
+        'decision',
+        'payload',
+        'related_entity_type',
+        'related_entity_id',
         'created_at',
     ];
 
     protected function casts(): array
     {
         return [
+            'payload'    => 'array',
             'created_at' => 'datetime',
         ];
     }
