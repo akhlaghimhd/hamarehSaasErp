@@ -62,9 +62,6 @@ class FinanceComplianceAlertService
         return $alert->fresh();
     }
 
-    /**
-     * Scan tax txns without successful Moodian acceptance.
-     */
     public function scanMissingMoodian(string $companyId): int
     {
         $txns = TaxTransaction::query()
@@ -86,9 +83,11 @@ class FinanceComplianceAlertService
                 continue;
             }
 
+            $relatedId = (string) ($txn->transaction_id ?? $txn->tax_transaction_id);
+
             $exists = ComplianceAlert::query()
                 ->where('alert_code', 'MOODIAN_MISSING')
-                ->where('related_id', $txn->tax_transaction_id)
+                ->where('related_id', $relatedId)
                 ->where('is_resolved', false)
                 ->exists();
 
@@ -99,11 +98,11 @@ class FinanceComplianceAlertService
             $this->raise(
                 'MOODIAN_MISSING',
                 'ارسال مودیان انجام نشده',
-                "تراکنش مالیاتی {$txn->tax_transaction_id} هنوز در مودیان ثبت موفق ندارد.",
+                "تراکنش مالیاتی {$relatedId} هنوز در مودیان ثبت موفق ندارد.",
                 ComplianceAlert::SEV_WARN,
                 $companyId,
                 'TAX_TRANSACTION',
-                $txn->tax_transaction_id
+                $relatedId
             );
             $raised++;
         }

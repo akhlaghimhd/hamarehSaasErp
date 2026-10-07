@@ -7,10 +7,15 @@ namespace App\Modules\FinancialAccounting\Infrastructure\Models;
 use App\Base\Traits\TenantScoped;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
+/**
+ * P2 tax ledger. Legacy DDL used transaction_id as PK; we keep that as primary key
+ * and mirror into tax_transaction_id when the column exists.
+ */
 class TaxTransaction extends Model
 {
-    use HasUuids, TenantScoped;
+    use TenantScoped;
 
     public $timestamps = false;
 
@@ -20,13 +25,15 @@ class TaxTransaction extends Model
 
     protected $table = 'fin_acc_tax_transactions';
 
-    protected $primaryKey = 'tax_transaction_id';
+    protected $primaryKey = 'transaction_id';
 
     public $incrementing = false;
 
     protected $keyType = 'string';
 
     protected $fillable = [
+        'transaction_id',
+        'tax_transaction_id',
         'tenant_id',
         'company_id',
         'source_document_type',
@@ -52,5 +59,16 @@ class TaxTransaction extends Model
             'transaction_date' => 'date',
             'created_at'       => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (self $model) {
+            $id = $model->transaction_id ?: $model->tax_transaction_id ?: (string) Str::uuid();
+            $model->transaction_id = $id;
+            if (Schema::hasColumn($model->getTable(), 'tax_transaction_id')) {
+                $model->tax_transaction_id = $id;
+            }
+        });
     }
 }

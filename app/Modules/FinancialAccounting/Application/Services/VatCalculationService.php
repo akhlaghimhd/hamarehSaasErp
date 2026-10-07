@@ -111,8 +111,11 @@ class VatCalculationService
             ? $this->splitGross((float) $data['gross_amount'], (string) $data['tax_code'], $onDate)
             : $this->splitNet((float) $data['net_amount'], (string) $data['tax_code'], $onDate);
 
+        $id = (string) Str::uuid();
+
         return TaxTransaction::create([
-            'tax_transaction_id'   => (string) Str::uuid(),
+            'transaction_id'       => $id,
+            'tax_transaction_id'   => $id,
             'tenant_id'            => $tenantId,
             'company_id'           => $data['company_id'],
             'source_document_type' => $data['source_document_type'],
