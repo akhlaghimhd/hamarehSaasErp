@@ -28,6 +28,8 @@ class SmartAssistFeatureTest extends TestCase
 
     protected string $periodId;
 
+    protected string $actorId;
+
     protected Ledger $ledger;
 
     protected Account $cash;
@@ -44,6 +46,7 @@ class SmartAssistFeatureTest extends TestCase
 
         $this->companyId = (string) Str::uuid();
         $this->periodId = (string) Str::uuid();
+        $this->actorId = (string) Str::uuid();
 
         $this->ledger = Ledger::create([
             'ledger_id'   => (string) Str::uuid(),
@@ -83,7 +86,6 @@ class SmartAssistFeatureTest extends TestCase
     public function k2_suggests_and_decision_is_audited(): void
     {
         $journals = new JournalEntryService();
-        // seed one posted journal for history
         $draft = $journals->createDraft([
             'ledger_id'     => $this->ledger->ledger_id,
             'company_id'    => $this->companyId,
@@ -94,15 +96,14 @@ class SmartAssistFeatureTest extends TestCase
                 ['account_id' => $this->cash->account_id, 'debit_amount' => 0, 'credit_amount' => 100],
             ],
         ]);
-        // open period implicitly by posting without period control row (service may allow)
         try {
-            $journals->post($draft->journal_entry_id, (string) Str::uuid());
+            $journals->post($draft->journal_entry_id, $this->actorId);
         } catch (\Throwable) {
-            // if period blocks, history empty is ok — still suggestions from fallback
+            // period may block — fallback suggestions still ok
         }
 
         $svc = new AccountSuggestionService();
-        $result = $svc->suggest($this->companyId, 'هزینه', 1, 'actor-1');
+        $result = $svc->suggest($this->companyId, 'هزینه', 1, $this->actorId);
         $this->assertTrue($result['override_allowed']);
         $this->assertNotEmpty($result['suggestions']);
 
@@ -110,7 +111,7 @@ class SmartAssistFeatureTest extends TestCase
             'OVERRIDDEN',
             $result['suggestions'][0]['account_id'],
             $this->cash->account_id,
-            'actor-1',
+            $this->actorId,
             ['note' => 'test override']
         );
 
@@ -128,10 +129,11 @@ class SmartAssistFeatureTest extends TestCase
             'ledger_id'  => $this->ledger->ledger_id,
             'period_id'  => $this->periodId,
             'command'    => 'بدهکار 5101 بستانکار 1101 مبلغ 250',
-            'actor_id'   => 'actor-nl',
+            'actor_id'   => $this->actorId,
         ]);
 
         $this->assertSame(JournalEntry::STATUS_DRAFT, $result['status']);
+        $this->assertSame(250.0, (float) $result['parsed']['amount']);
         $je = JournalEntry::find($result['journal_entry_id']);
         $this->assertNotNull($je);
         $this->assertSame(JournalEntry::STATUS_DRAFT, $je->status);
@@ -145,10 +147,13 @@ class SmartAssistFeatureTest extends TestCase
     public function k5_insights_non_blocking(): void
     {
         $svc = new PlInsightService();
-        $result = $svc->insights($this->companyId, $this->periodId);
+        $result = $svc->insights($this->companyId, $this->periodId, $this->actorId);
         $this->assertArrayHasKey('insights', $result);
         $this->assertArrayHasKey('pl', $result);
         $this->assertIsArray($result['insights']);
+        $this->assertTrue(
+            SmartActionLog::query()->where('feature_code', 'K5')->exists()
+        );
     }
 
     #[Test]
@@ -166,7 +171,7 @@ class SmartAssistFeatureTest extends TestCase
             ],
         ]);
 
-        $alerts = (new AnomalyAmountService())->scanJournal($draft->journal_entry_id);
+        $alerts = (new AnomalyAmountService())->scanJournal($draft->journal_entry_id, $this->actorId);
         $this->assertIsArray($alerts);
     }
 }
