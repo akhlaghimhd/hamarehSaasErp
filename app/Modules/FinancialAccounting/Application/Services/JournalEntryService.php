@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
 /**
  * FIN-P0-12..14 — Draft CRUD, post (balanced + numbered), reverse.
  * FIN-P3-06 — outbox finance.journal.posted.v1 / reversed.v1 on post/reverse.
+ * FIN-P4-04 — required analytical dimensions on post when account flagged.
  */
 class JournalEntryService
 {
@@ -163,6 +164,20 @@ class JournalEntryService
                     'fin.journal.account_not_postable'
                 );
             }
+
+            // FIN-P4-04 dimension gates
+            if ($account->requires_cost_center && empty($item->cost_center_id)) {
+                throw new DomainException(
+                    'برای حساب «'.$account->account_code.'» مرکز هزینه الزامی است.',
+                    'fin.journal.cost_center_required'
+                );
+            }
+            if ($account->requires_business_unit && empty($item->business_unit_id)) {
+                throw new DomainException(
+                    'برای حساب «'.$account->account_code.'» واحد کسب‌وکار الزامی است.',
+                    'fin.journal.business_unit_required'
+                );
+            }
         }
 
         return DB::transaction(function () use ($entry, $actorId) {
@@ -260,10 +275,10 @@ class JournalEntryService
                 (string) $original->journal_entry_id,
                 FinanceEventPublisher::JOURNAL_REVERSED,
                 [
-                    'original_journal_entry_id' => $original->journal_entry_id,
-                    'reversing_journal_entry_id'=> $posted->journal_entry_id,
-                    'company_id'                => $original->company_id,
-                    'period_id'                 => $original->period_id,
+                    'original_journal_entry_id'  => $original->journal_entry_id,
+                    'reversing_journal_entry_id' => $posted->journal_entry_id,
+                    'company_id'                 => $original->company_id,
+                    'period_id'                  => $original->period_id,
                 ]
             );
 
@@ -335,8 +350,8 @@ class JournalEntryService
                 'tenant_id'       => $tenantId,
                 'company_id'      => $companyId,
                 'sequence_key'    => 'JOURNAL',
-                'fiscal_year_key' => $yearKey,
                 'prefix'          => 'JE',
+                'fiscal_year_key' => $yearKey,
                 'next_number'     => 1,
                 'pad_length'      => 6,
                 'row_version'     => 1,
