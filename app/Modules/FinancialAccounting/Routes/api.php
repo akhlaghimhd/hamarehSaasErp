@@ -5,16 +5,16 @@ declare(strict_types=1);
 use App\Modules\FinancialAccounting\Controllers\AccountController;
 use App\Modules\FinancialAccounting\Controllers\BankReconciliationController;
 use App\Modules\FinancialAccounting\Controllers\ChequeController;
+use App\Modules\FinancialAccounting\Controllers\ComplianceAlertController;
 use App\Modules\FinancialAccounting\Controllers\JournalEntryController;
+use App\Modules\FinancialAccounting\Controllers\MoodianController;
 use App\Modules\FinancialAccounting\Controllers\OpenItemController;
 use App\Modules\FinancialAccounting\Controllers\PeriodControlController;
 use App\Modules\FinancialAccounting\Controllers\ReportController;
+use App\Modules\FinancialAccounting\Controllers\TaxController;
 use App\Modules\FinancialAccounting\Controllers\TreasuryController;
 use Illuminate\Support\Facades\Route;
 
-/**
- * Loaded as /api/v1/financial-accounting/...
- */
 Route::middleware([
     'auth:sanctum',
     'tenant.context',
@@ -81,7 +81,6 @@ Route::middleware([
     Route::post('/cheques/{cheque}/transition', [ChequeController::class, 'transition'])
         ->middleware('permission:finance.treasury.manage');
 
-    // static paths before {openItem}
     Route::get('/open-items/aging', [OpenItemController::class, 'aging'])
         ->middleware('permission:finance.ar.view');
     Route::get('/open-items', [OpenItemController::class, 'index'])
@@ -97,4 +96,30 @@ Route::middleware([
         ->middleware('permission:finance.treasury.manage');
     Route::post('/bank-statement-lines/{line}/match', [BankReconciliationController::class, 'matchLine'])
         ->middleware('permission:finance.treasury.manage');
+
+    // FIN-P2 tax / Moodian / compliance
+    Route::get('/tax/rates', [TaxController::class, 'rates'])
+        ->middleware('permission:finance.tax.view');
+    Route::post('/tax/rates', [TaxController::class, 'storeRate'])
+        ->middleware('permission:finance.tax.manage');
+    Route::post('/tax/split', [TaxController::class, 'split'])
+        ->middleware('permission:finance.tax.view');
+    Route::get('/tax/transactions', [TaxController::class, 'transactions'])
+        ->middleware('permission:finance.tax.view');
+    Route::post('/tax/transactions', [TaxController::class, 'recordTransaction'])
+        ->middleware('permission:finance.tax.manage');
+
+    Route::get('/moodian/submissions', [MoodianController::class, 'index'])
+        ->middleware('permission:finance.moodian.view');
+    Route::post('/moodian/submit', [MoodianController::class, 'submit'])
+        ->middleware('permission:finance.moodian.submit');
+    Route::post('/moodian/submissions/{submission}/poll', [MoodianController::class, 'poll'])
+        ->middleware('permission:finance.moodian.view');
+
+    Route::get('/compliance-alerts', [ComplianceAlertController::class, 'index'])
+        ->middleware('permission:finance.compliance.view');
+    Route::post('/compliance-alerts/scan', [ComplianceAlertController::class, 'scan'])
+        ->middleware('permission:finance.compliance.manage');
+    Route::post('/compliance-alerts/{alert}/resolve', [ComplianceAlertController::class, 'resolve'])
+        ->middleware('permission:finance.compliance.manage');
 });
