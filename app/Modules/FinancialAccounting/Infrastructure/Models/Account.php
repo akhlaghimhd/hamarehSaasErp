@@ -42,6 +42,8 @@ class Account extends Model
         'normal_balance',
         'is_control_account',
         'is_postable',
+        'requires_cost_center',
+        'requires_business_unit',
         'status',
         'created_by',
         'updated_by',
@@ -52,16 +54,18 @@ class Account extends Model
     protected function casts(): array
     {
         return [
-            'account_type'       => 'integer',
-            'account_level'      => 'integer',
-            'normal_balance'     => 'integer',
-            'is_control_account' => 'boolean',
-            'is_postable'        => 'boolean',
-            'status'             => 'integer',
-            'row_version'        => 'integer',
-            'created_at'         => 'datetime',
-            'updated_at'         => 'datetime',
-            'deleted_at'         => 'datetime',
+            'account_type'            => 'integer',
+            'account_level'           => 'integer',
+            'normal_balance'          => 'integer',
+            'is_control_account'      => 'boolean',
+            'is_postable'             => 'boolean',
+            'requires_cost_center'    => 'boolean',
+            'requires_business_unit'  => 'boolean',
+            'status'                  => 'integer',
+            'row_version'             => 'integer',
+            'created_at'              => 'datetime',
+            'updated_at'              => 'datetime',
+            'deleted_at'              => 'datetime',
         ];
     }
 
