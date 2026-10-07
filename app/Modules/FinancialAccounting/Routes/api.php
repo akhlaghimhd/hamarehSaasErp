@@ -6,9 +6,11 @@ use App\Modules\FinancialAccounting\Controllers\AccountController;
 use App\Modules\FinancialAccounting\Controllers\BankReconciliationController;
 use App\Modules\FinancialAccounting\Controllers\ChequeController;
 use App\Modules\FinancialAccounting\Controllers\ComplianceAlertController;
+use App\Modules\FinancialAccounting\Controllers\FixedAssetController;
 use App\Modules\FinancialAccounting\Controllers\JournalEntryController;
 use App\Modules\FinancialAccounting\Controllers\MoodianController;
 use App\Modules\FinancialAccounting\Controllers\OpenItemController;
+use App\Modules\FinancialAccounting\Controllers\PeriodCloseController;
 use App\Modules\FinancialAccounting\Controllers\PeriodControlController;
 use App\Modules\FinancialAccounting\Controllers\ReportController;
 use App\Modules\FinancialAccounting\Controllers\SuggestedJournalController;
@@ -56,6 +58,14 @@ Route::middleware([
         ->middleware('permission:finance.period.close');
     Route::post('/period-controls/reopen', [PeriodControlController::class, 'reopen'])
         ->middleware('permission:finance.period.reopen');
+
+    // FIN-P4 K4 guided close
+    Route::post('/period-close/evaluate', [PeriodCloseController::class, 'evaluate'])
+        ->middleware('permission:finance.period.view');
+    Route::post('/period-close/soft-close', [PeriodCloseController::class, 'softClose'])
+        ->middleware('permission:finance.period.close');
+    Route::post('/period-close/hard-close', [PeriodCloseController::class, 'hardClose'])
+        ->middleware('permission:finance.period.close');
 
     Route::get('/reports/trial-balance', [ReportController::class, 'trialBalance'])
         ->middleware('permission:finance.report.view');
@@ -123,7 +133,6 @@ Route::middleware([
     Route::post('/compliance-alerts/{alert}/resolve', [ComplianceAlertController::class, 'resolve'])
         ->middleware('permission:finance.compliance.manage');
 
-    // FIN-P3 K1 suggested journals + determination rules
     Route::get('/suggested-journals', [SuggestedJournalController::class, 'index'])
         ->middleware('permission:finance.suggest.view');
     Route::post('/suggested-journals', [SuggestedJournalController::class, 'store'])
@@ -139,4 +148,12 @@ Route::middleware([
         ->middleware('permission:finance.suggest.view');
     Route::post('/account-determination-rules', [SuggestedJournalController::class, 'storeRule'])
         ->middleware('permission:finance.suggest.manage');
+
+    // FIN-P4 fixed assets
+    Route::get('/fixed-assets', [FixedAssetController::class, 'index'])
+        ->middleware('permission:finance.fa.view');
+    Route::post('/fixed-assets', [FixedAssetController::class, 'store'])
+        ->middleware('permission:finance.fa.manage');
+    Route::post('/fixed-assets/run-depreciation', [FixedAssetController::class, 'runDepreciation'])
+        ->middleware('permission:finance.fa.depreciate');
 });

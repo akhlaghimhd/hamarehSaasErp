@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P0..P3 finance.* permission codes (idempotent).
+ * FIN-P0..P4 finance.* permission codes (idempotent).
  */
 class FinancePermissionSeeder extends Seeder
 {
@@ -46,10 +46,13 @@ class FinancePermissionSeeder extends Seeder
             ['code' => 'finance.moodian.submit', 'name' => 'ارسال به سامانه مودیان', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.compliance.view', 'name' => 'مشاهده هشدارهای انطباق', 'action_type' => 'READ'],
             ['code' => 'finance.compliance.manage', 'name' => 'اسکن و بستن هشدار انطباق', 'action_type' => 'EXECUTE'],
-            // P3 K1
             ['code' => 'finance.suggest.view', 'name' => 'مشاهده پیشنهاد اسناد هوشمند', 'action_type' => 'READ'],
             ['code' => 'finance.suggest.manage', 'name' => 'ایجاد پیشنهاد و قواعد تعیین حساب', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.suggest.decide', 'name' => 'قبول یا رد پیشنهاد سند', 'action_type' => 'EXECUTE'],
+            // P4
+            ['code' => 'finance.fa.view', 'name' => 'مشاهده دارایی ثابت', 'action_type' => 'READ'],
+            ['code' => 'finance.fa.manage', 'name' => 'ثبت دارایی ثابت', 'action_type' => 'EXECUTE'],
+            ['code' => 'finance.fa.depreciate', 'name' => 'اجرای استهلاک (پیش‌نویس)', 'action_type' => 'EXECUTE'],
         ];
 
         $tenantIds = DB::table('tenants')->pluck('tenant_id')->map(fn ($id) => (string) $id)->all();
