@@ -7,6 +7,7 @@ use App\Modules\FinancialAccounting\Controllers\BankReconciliationController;
 use App\Modules\FinancialAccounting\Controllers\ChequeController;
 use App\Modules\FinancialAccounting\Controllers\ComplianceAlertController;
 use App\Modules\FinancialAccounting\Controllers\FixedAssetController;
+use App\Modules\FinancialAccounting\Controllers\IntercompanyController;
 use App\Modules\FinancialAccounting\Controllers\JournalEntryController;
 use App\Modules\FinancialAccounting\Controllers\MoodianController;
 use App\Modules\FinancialAccounting\Controllers\OpenItemController;
@@ -59,7 +60,6 @@ Route::middleware([
     Route::post('/period-controls/reopen', [PeriodControlController::class, 'reopen'])
         ->middleware('permission:finance.period.reopen');
 
-    // FIN-P4 K4 guided close
     Route::post('/period-close/evaluate', [PeriodCloseController::class, 'evaluate'])
         ->middleware('permission:finance.period.view');
     Route::post('/period-close/soft-close', [PeriodCloseController::class, 'softClose'])
@@ -73,6 +73,8 @@ Route::middleware([
         ->middleware('permission:finance.report.view');
     Route::get('/reports/balance-sheet', [ReportController::class, 'balanceSheet'])
         ->middleware('permission:finance.report.view');
+    Route::get('/reports/consolidated-trial-balance', [IntercompanyController::class, 'consolidatedTrialBalance'])
+        ->middleware('permission:finance.ic.view');
 
     Route::get('/cash-accounts', [TreasuryController::class, 'cashAccounts'])
         ->middleware('permission:finance.treasury.view');
@@ -149,11 +151,18 @@ Route::middleware([
     Route::post('/account-determination-rules', [SuggestedJournalController::class, 'storeRule'])
         ->middleware('permission:finance.suggest.manage');
 
-    // FIN-P4 fixed assets
     Route::get('/fixed-assets', [FixedAssetController::class, 'index'])
         ->middleware('permission:finance.fa.view');
     Route::post('/fixed-assets', [FixedAssetController::class, 'store'])
         ->middleware('permission:finance.fa.manage');
     Route::post('/fixed-assets/run-depreciation', [FixedAssetController::class, 'runDepreciation'])
         ->middleware('permission:finance.fa.depreciate');
+
+    // FIN-P5 intercompany
+    Route::post('/intercompany/account-maps', [IntercompanyController::class, 'upsertMap'])
+        ->middleware('permission:finance.ic.manage');
+    Route::post('/intercompany/pairs', [IntercompanyController::class, 'createPair'])
+        ->middleware('permission:finance.ic.manage');
+    Route::post('/intercompany/eliminations', [IntercompanyController::class, 'createElimination'])
+        ->middleware('permission:finance.ic.manage');
 });
