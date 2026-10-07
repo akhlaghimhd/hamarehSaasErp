@@ -167,14 +167,16 @@ class IntercompanyJournalService
     public function createEliminationDraft(array $data): array
     {
         $elimId = (string) $data['elimination_company_id'];
+        $tenantId = $this->requireTenantId();
 
-        // ScopeScoped may hide companies outside current ScopeContext — read without scopes
-        $company = Company::withoutGlobalScopes()
+        // Logical read of Org SoT — bypass Eloquent global scopes / model UUID hooks
+        $entityKind = DB::table('erp_companies')
             ->where('company_id', $elimId)
-            ->where('tenant_id', $this->requireTenantId())
-            ->first();
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->value('entity_kind');
 
-        if (! $company || $company->entity_kind !== Company::ENTITY_KIND_ELIMINATION) {
+        if ($entityKind !== Company::ENTITY_KIND_ELIMINATION) {
             throw new DomainException(
                 'شرکت حذف باید entity_kind=ELIMINATION باشد.',
                 'fin.ic.not_elimination_entity'

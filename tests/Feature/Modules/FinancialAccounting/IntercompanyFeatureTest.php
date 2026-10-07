@@ -6,14 +6,13 @@ namespace Tests\Feature\Modules\FinancialAccounting;
 
 use App\Base\Context\TenantContext;
 use App\Modules\FinancialAccounting\Application\Services\IntercompanyJournalService;
-use App\Modules\FinancialAccounting\Application\Services\JournalEntryService;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Account;
 use App\Modules\FinancialAccounting\Infrastructure\Models\IcJournalPair;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalEntry;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Ledger;
 use App\Modules\Organization\Models\Company;
-use App\Modules\Organization\Models\IntercompanyPartner;
 use App\Modules\SaasPlatform\Models\Tenant;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -50,6 +49,7 @@ class IntercompanyFeatureTest extends TestCase
 
         $this->tenant = Tenant::factory()->create(['tenant_code' => 'FIN_P5']);
         TenantContext::getInstance()->setTenantId($this->tenant->tenant_id);
+        DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$this->tenant->tenant_id]);
 
         $this->periodId = (string) Str::uuid();
 
@@ -57,52 +57,59 @@ class IntercompanyFeatureTest extends TestCase
         $this->toCompanyId = (string) Str::uuid();
         $this->elimCompanyId = (string) Str::uuid();
 
-        Company::create([
-            'company_id'  => $this->fromCompanyId,
-            'tenant_id'   => $this->tenant->tenant_id,
-            'code'        => 'C-FROM',
-            'name'        => 'From Co',
-            'legal_name'  => 'From Co',
-            'entity_kind' => Company::ENTITY_KIND_OPERATING,
-            'is_primary'  => true,
-            'is_active'   => true,
-            'status'      => 1,
-            'row_version' => 1,
-        ]);
-        Company::create([
-            'company_id'        => $this->toCompanyId,
-            'tenant_id'         => $this->tenant->tenant_id,
-            'code'              => 'C-TO',
-            'name'              => 'To Co',
-            'legal_name'        => 'To Co',
-            'entity_kind'       => Company::ENTITY_KIND_OPERATING,
-            'parent_company_id' => $this->fromCompanyId,
-            'is_primary'        => false,
-            'is_active'         => true,
-            'status'            => 1,
-            'row_version'       => 1,
-        ]);
-        Company::create([
-            'company_id'        => $this->elimCompanyId,
-            'tenant_id'         => $this->tenant->tenant_id,
-            'code'              => 'C-ELIM',
-            'name'              => 'Elim',
-            'legal_name'        => 'Elim',
-            'entity_kind'       => Company::ENTITY_KIND_ELIMINATION,
-            'parent_company_id' => $this->fromCompanyId,
-            'is_primary'        => false,
-            'is_active'         => true,
-            'status'            => 1,
-            'row_version'       => 1,
-        ]);
+        // Insert companies via query builder so PK/entity_kind are exact (no HasUuids side-effects)
+        foreach ([
+            [
+                'company_id' => $this->fromCompanyId,
+                'code' => 'C-FROM',
+                'name' => 'From Co',
+                'entity_kind' => Company::ENTITY_KIND_OPERATING,
+                'is_primary' => true,
+                'parent_company_id' => null,
+            ],
+            [
+                'company_id' => $this->toCompanyId,
+                'code' => 'C-TO',
+                'name' => 'To Co',
+                'entity_kind' => Company::ENTITY_KIND_OPERATING,
+                'is_primary' => false,
+                'parent_company_id' => $this->fromCompanyId,
+            ],
+            [
+                'company_id' => $this->elimCompanyId,
+                'code' => 'C-ELIM',
+                'name' => 'Elim',
+                'entity_kind' => Company::ENTITY_KIND_ELIMINATION,
+                'is_primary' => false,
+                'parent_company_id' => $this->fromCompanyId,
+            ],
+        ] as $c) {
+            DB::table('erp_companies')->insert([
+                'company_id'        => $c['company_id'],
+                'tenant_id'         => $this->tenant->tenant_id,
+                'code'              => $c['code'],
+                'name'              => $c['name'],
+                'legal_name'        => $c['name'],
+                'entity_kind'       => $c['entity_kind'],
+                'is_primary'        => $c['is_primary'],
+                'parent_company_id' => $c['parent_company_id'],
+                'is_active'         => true,
+                'status'            => 1,
+                'row_version'       => 1,
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ]);
+        }
 
-        IntercompanyPartner::create([
-            'ic_partner_id'    => (string) Str::uuid(),
-            'tenant_id'        => $this->tenant->tenant_id,
-            'from_company_id'  => $this->fromCompanyId,
-            'to_company_id'    => $this->toCompanyId,
-            'is_active'        => true,
-            'row_version'      => 1,
+        DB::table('erp_intercompany_partners')->insert([
+            'ic_partner_id'   => (string) Str::uuid(),
+            'tenant_id'       => $this->tenant->tenant_id,
+            'from_company_id' => $this->fromCompanyId,
+            'to_company_id'   => $this->toCompanyId,
+            'is_active'       => true,
+            'row_version'     => 1,
+            'created_at'      => now(),
+            'updated_at'      => now(),
         ]);
 
         $this->fromLedger = $this->makeLedger($this->fromCompanyId, 'LF');
@@ -180,6 +187,11 @@ class IntercompanyFeatureTest extends TestCase
     #[Test]
     public function elimination_draft_on_elimination_entity(): void
     {
+        $kind = DB::table('erp_companies')
+            ->where('company_id', $this->elimCompanyId)
+            ->value('entity_kind');
+        $this->assertSame(Company::ENTITY_KIND_ELIMINATION, $kind);
+
         $svc = new IntercompanyJournalService();
         $result = $svc->createEliminationDraft([
             'elimination_company_id' => $this->elimCompanyId,
