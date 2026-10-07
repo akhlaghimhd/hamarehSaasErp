@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\FinancialAccounting\Application\Services;
 
+use App\Base\Context\TenantContext;
 use App\Base\Exceptions\DomainException;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Account;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalEntry;
@@ -12,8 +13,8 @@ use App\Modules\Organization\Models\Company;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P5-04 — Lean consolidated TB: sum POSTED of OPERATING companies under a CONSOLIDATION root.
- * No currency translation / ownership % in P5.
+ * FIN-P5-04 — Lean consolidated TB: sum POSTED of OPERATING companies under a root.
+ * Reads Company without ScopeScoped (group walk is structural, not user-scope).
  */
 class ConsolidatedTrialBalanceService
 {
@@ -22,14 +23,19 @@ class ConsolidatedTrialBalanceService
      */
     public function run(string $consolidationCompanyId, string $periodId): array
     {
-        $root = Company::query()->where('company_id', $consolidationCompanyId)->first();
+        $tenantId = TenantContext::getInstance()->getTenantId();
+
+        $root = Company::withoutGlobalScopes()
+            ->where('company_id', $consolidationCompanyId)
+            ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
+            ->first();
+
         if (! $root) {
             throw new DomainException('شرکت تلفیق یافت نشد.', 'fin.consol.company_missing');
         }
 
-        $companyIds = $this->operatingDescendants($consolidationCompanyId);
+        $companyIds = $this->operatingDescendants($consolidationCompanyId, $tenantId ? (string) $tenantId : null);
         if ($companyIds === []) {
-            // include self if operating
             if ($root->entity_kind === Company::ENTITY_KIND_OPERATING) {
                 $companyIds = [$consolidationCompanyId];
             }
@@ -84,7 +90,7 @@ class ConsolidatedTrialBalanceService
     /**
      * @return list<string>
      */
-    protected function operatingDescendants(string $rootId): array
+    protected function operatingDescendants(string $rootId, ?string $tenantId): array
     {
         $ids = [];
         $queue = [$rootId];
@@ -97,15 +103,15 @@ class ConsolidatedTrialBalanceService
             }
             $seen[$current] = true;
 
-            $children = Company::query()
+            $children = Company::withoutGlobalScopes()
                 ->where('parent_company_id', $current)
+                ->when($tenantId, fn ($q) => $q->where('tenant_id', $tenantId))
                 ->get(['company_id', 'entity_kind']);
 
             foreach ($children as $child) {
                 if ($child->entity_kind === Company::ENTITY_KIND_OPERATING) {
                     $ids[] = (string) $child->company_id;
                 }
-                // walk further under CONSOLIDATION nodes too
                 if (in_array($child->entity_kind, [
                     Company::ENTITY_KIND_OPERATING,
                     Company::ENTITY_KIND_CONSOLIDATION,

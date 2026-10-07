@@ -81,7 +81,6 @@ class IntercompanyJournalService
         return DB::transaction(function () use (
             $tenantId, $fromId, $toId, $amount, $map, $data, $desc, $date
         ) {
-            // From company: Dr Due-from (to) / Cr offset (e.g. revenue or cash)
             $fromDraft = $this->journals->createDraft([
                 'ledger_id'            => $data['from_ledger_id'],
                 'company_id'           => $fromId,
@@ -105,7 +104,6 @@ class IntercompanyJournalService
                 ],
             ]);
 
-            // To company: Dr offset / Cr Due-to (from)
             $toDraft = $this->journals->createDraft([
                 'ledger_id'            => $data['to_ledger_id'],
                 'company_id'           => $toId,
@@ -131,32 +129,30 @@ class IntercompanyJournalService
 
             $pair = new IcJournalPair();
             $pair->forceFill([
-                'ic_journal_pair_id'     => (string) Str::uuid(),
-                'tenant_id'              => $tenantId,
-                'from_company_id'        => $fromId,
-                'to_company_id'          => $toId,
-                'from_journal_entry_id'  => $fromDraft->journal_entry_id,
-                'to_journal_entry_id'    => $toDraft->journal_entry_id,
-                'period_id'              => $data['period_id'],
-                'amount'                 => $amount,
-                'description'            => $desc,
-                'status'                 => IcJournalPair::STATUS_DRAFT_PAIR,
-                'ic_partner_id'          => $data['ic_partner_id'] ?? $map->ic_partner_id,
-                'row_version'            => 1,
+                'ic_journal_pair_id'    => (string) Str::uuid(),
+                'tenant_id'             => $tenantId,
+                'from_company_id'       => $fromId,
+                'to_company_id'         => $toId,
+                'from_journal_entry_id' => $fromDraft->journal_entry_id,
+                'to_journal_entry_id'   => $toDraft->journal_entry_id,
+                'period_id'             => $data['period_id'],
+                'amount'                => $amount,
+                'description'           => $desc,
+                'status'                => IcJournalPair::STATUS_DRAFT_PAIR,
+                'ic_partner_id'         => $data['ic_partner_id'] ?? $map->ic_partner_id,
+                'row_version'           => 1,
             ]);
             $pair->save();
 
             return [
-                'pair'                 => $pair->fresh(),
-                'from_journal_entry_id'=> $fromDraft->journal_entry_id,
-                'to_journal_entry_id'  => $toDraft->journal_entry_id,
+                'pair'                  => $pair->fresh(),
+                'from_journal_entry_id' => $fromDraft->journal_entry_id,
+                'to_journal_entry_id'   => $toDraft->journal_entry_id,
             ];
         });
     }
 
     /**
-     * Elimination draft on ELIMINATION company: reverse IC due-from/due-to balances (simple).
-     *
      * @param  array{
      *   elimination_company_id: string,
      *   ledger_id: string,
@@ -171,7 +167,13 @@ class IntercompanyJournalService
     public function createEliminationDraft(array $data): array
     {
         $elimId = (string) $data['elimination_company_id'];
-        $company = Company::query()->where('company_id', $elimId)->first();
+
+        // ScopeScoped may hide companies outside current ScopeContext — read without scopes
+        $company = Company::withoutGlobalScopes()
+            ->where('company_id', $elimId)
+            ->where('tenant_id', $this->requireTenantId())
+            ->first();
+
         if (! $company || $company->entity_kind !== Company::ENTITY_KIND_ELIMINATION) {
             throw new DomainException(
                 'شرکت حذف باید entity_kind=ELIMINATION باشد.',
@@ -236,16 +238,16 @@ class IntercompanyJournalService
 
         $row = new IcAccountMap();
         $row->forceFill([
-            'ic_account_map_id'    => (string) Str::uuid(),
-            'tenant_id'            => $tenantId,
-            'from_company_id'      => $data['from_company_id'],
-            'to_company_id'        => $data['to_company_id'],
-            'due_from_account_id'  => $data['due_from_account_id'],
-            'due_to_account_id'    => $data['due_to_account_id'],
-            'ic_partner_id'        => $data['ic_partner_id'] ?? null,
-            'is_active'            => $data['is_active'] ?? true,
-            'description'          => $data['description'] ?? null,
-            'row_version'          => 1,
+            'ic_account_map_id'   => (string) Str::uuid(),
+            'tenant_id'           => $tenantId,
+            'from_company_id'     => $data['from_company_id'],
+            'to_company_id'       => $data['to_company_id'],
+            'due_from_account_id' => $data['due_from_account_id'],
+            'due_to_account_id'   => $data['due_to_account_id'],
+            'ic_partner_id'       => $data['ic_partner_id'] ?? null,
+            'is_active'           => $data['is_active'] ?? true,
+            'description'         => $data['description'] ?? null,
+            'row_version'         => 1,
         ]);
         $row->save();
 
@@ -264,8 +266,6 @@ class IntercompanyJournalService
         }
 
         if (! $q->exists()) {
-            // Soft path: allow if caller skips Org seed in unit tests without partners table rows
-            // but still require at least one active partner in production data.
             throw new DomainException(
                 'شریک بین شرکتی فعال در سازمان برای این زوج یافت نشد.',
                 'fin.ic.partner_missing'
