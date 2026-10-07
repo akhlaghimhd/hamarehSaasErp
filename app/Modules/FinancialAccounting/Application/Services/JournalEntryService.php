@@ -16,11 +16,13 @@ use Illuminate\Support\Str;
 
 /**
  * FIN-P0-12..14 — Draft CRUD, post (balanced + numbered), reverse.
+ * FIN-P3-06 — outbox finance.journal.posted.v1 / reversed.v1 on post/reverse.
  */
 class JournalEntryService
 {
     public function __construct(
-        protected FiscalPeriodControlService $periodControl = new FiscalPeriodControlService()
+        protected FiscalPeriodControlService $periodControl = new FiscalPeriodControlService(),
+        protected FinanceEventPublisher $events = new FinanceEventPublisher()
     ) {
     }
 
@@ -176,6 +178,21 @@ class JournalEntryService
             $entry->row_version = ((int) ($entry->row_version ?? 1)) + 1;
             $entry->save();
 
+            $this->events->publish(
+                (string) $entry->tenant_id,
+                'fin_acc_journal_entries',
+                (string) $entry->journal_entry_id,
+                FinanceEventPublisher::JOURNAL_POSTED,
+                [
+                    'journal_entry_id' => $entry->journal_entry_id,
+                    'company_id'       => $entry->company_id,
+                    'period_id'        => $entry->period_id,
+                    'ledger_id'        => $entry->ledger_id,
+                    'entry_number'     => $entry->entry_number,
+                    'posted_by'        => $actorId,
+                ]
+            );
+
             return $entry->fresh(['items']);
         });
     }
@@ -237,6 +254,19 @@ class JournalEntryService
             $original->row_version = ((int) ($original->row_version ?? 1)) + 1;
             $original->save();
 
+            $this->events->publish(
+                $tenantId,
+                'fin_acc_journal_entries',
+                (string) $original->journal_entry_id,
+                FinanceEventPublisher::JOURNAL_REVERSED,
+                [
+                    'original_journal_entry_id' => $original->journal_entry_id,
+                    'reversing_journal_entry_id'=> $posted->journal_entry_id,
+                    'company_id'                => $original->company_id,
+                    'period_id'                 => $original->period_id,
+                ]
+            );
+
             return $posted->fresh(['items']);
         });
     }
@@ -290,7 +320,6 @@ class JournalEntryService
     protected function nextEntryNumber(string $companyId, string $periodId): string
     {
         $tenantId = $this->requireTenantId();
-        // fiscal_year_key derived from period_id string for P0; refine when calendar API is consumed
         $yearKey = substr(str_replace('-', '', $periodId), 0, 8) ?: date('Y');
 
         $seq = DocumentSequence::query()

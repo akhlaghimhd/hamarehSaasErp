@@ -20,6 +20,9 @@ use App\Modules\IdentityCore\Contracts\SmsSenderInterface;
 use App\Modules\IdentityCore\Infrastructure\LogSmsSender;
 use App\Modules\Organization\Contracts\HierarchyReportContract;
 use App\Modules\Organization\Services\HierarchyReportService;
+use App\Modules\FinancialAccounting\Application\Services\OperationalEventConsumer;
+use App\Modules\FinancialAccounting\Infrastructure\Listeners\OperationalSalesInvoicePostedListener;
+use App\Modules\FinancialAccounting\Infrastructure\Listeners\OperationalPurchInvoicePostedListener;
 
 class ModuleServiceProvider extends ServiceProvider
 {
@@ -80,6 +83,16 @@ class ModuleServiceProvider extends ServiceProvider
         Event::listen(
             WorkflowTaskCompletedV1::EVENT_TYPE,
             [InventoryWorkflowTaskCompletedListener::class, 'handle']
+        );
+
+        // FIN-P3-03 — operational invoice events → suggested journal (never auto-post)
+        Event::listen(
+            OperationalEventConsumer::SALES_INVOICE_POSTED,
+            [OperationalSalesInvoicePostedListener::class, 'handle']
+        );
+        Event::listen(
+            OperationalEventConsumer::PURCH_INVOICE_POSTED,
+            [OperationalPurchInvoicePostedListener::class, 'handle']
         );
     }
 
