@@ -83,7 +83,7 @@ class FinanceComplianceAlertService
                 continue;
             }
 
-            $relatedId = (string) ($txn->transaction_id ?? $txn->tax_transaction_id);
+            $relatedId = (string) $txn->tax_transaction_id;
 
             $exists = ComplianceAlert::query()
                 ->where('alert_code', 'MOODIAN_MISSING')
