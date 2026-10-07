@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Infrastructure\Models;
 
 use App\Base\Traits\TenantScoped;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
 class DepreciationRunLine extends Model
 {
-    use HasUuids, TenantScoped;
+    use TenantScoped;
 
     public $timestamps = false;
 
@@ -23,6 +22,7 @@ class DepreciationRunLine extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'depreciation_line_id',
         'tenant_id',
         'depreciation_run_id',
         'fixed_asset_id',

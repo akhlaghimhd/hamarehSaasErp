@@ -48,24 +48,24 @@ class FixedAssetService
         }
 
         return FixedAsset::create([
-            'fixed_asset_id'          => (string) Str::uuid(),
-            'tenant_id'               => $tenantId,
-            'company_id'              => $data['company_id'],
-            'asset_code'              => trim((string) $data['asset_code']),
-            'name'                    => (string) $data['name'],
-            'asset_account_id'        => $data['asset_account_id'],
-            'accum_depr_account_id'   => $data['accum_depr_account_id'],
-            'depr_expense_account_id' => $data['depr_expense_account_id'],
-            'cost_center_id'          => $data['cost_center_id'] ?? null,
-            'acquisition_date'        => $data['acquisition_date'],
-            'acquisition_cost'        => $cost,
-            'salvage_value'           => $salvage,
-            'useful_life_months'      => $months,
-            'depreciation_method'     => $data['depreciation_method'] ?? 'STRAIGHT_LINE',
-            'book_value'              => $cost,
-            'accumulated_depreciation'=> 0,
-            'status'                  => FixedAsset::STATUS_ACTIVE,
-            'row_version'             => 1,
+            'fixed_asset_id'           => (string) Str::uuid(),
+            'tenant_id'                => $tenantId,
+            'company_id'               => $data['company_id'],
+            'asset_code'               => trim((string) $data['asset_code']),
+            'name'                     => (string) $data['name'],
+            'asset_account_id'         => $data['asset_account_id'],
+            'accum_depr_account_id'    => $data['accum_depr_account_id'],
+            'depr_expense_account_id'  => $data['depr_expense_account_id'],
+            'cost_center_id'           => $data['cost_center_id'] ?? null,
+            'acquisition_date'         => $data['acquisition_date'],
+            'acquisition_cost'         => $cost,
+            'salvage_value'            => $salvage,
+            'useful_life_months'       => $months,
+            'depreciation_method'      => $data['depreciation_method'] ?? 'STRAIGHT_LINE',
+            'book_value'               => $cost,
+            'accumulated_depreciation' => 0,
+            'status'                   => FixedAsset::STATUS_ACTIVE,
+            'row_version'              => 1,
         ]);
     }
 
@@ -98,7 +98,7 @@ class FixedAssetService
         return DB::transaction(function () use ($tenantId, $companyId, $periodId, $ledgerId, $assets, $actorId) {
             $runId = (string) Str::uuid();
             $total = 0.0;
-            $lines = [];
+            $linePayloads = [];
             $journalLines = [];
 
             foreach ($assets as $asset) {
@@ -119,7 +119,7 @@ class FixedAssetService
                 }
 
                 $total += $amount;
-                $lines[] = [
+                $linePayloads[] = [
                     'depreciation_line_id' => (string) Str::uuid(),
                     'depreciation_run_id'  => $runId,
                     'tenant_id'            => $tenantId,
@@ -129,21 +129,19 @@ class FixedAssetService
                     'created_at'           => now(),
                 ];
 
-                // Expense debit
                 $journalLines[] = [
-                    'account_id'      => $asset->depr_expense_account_id,
-                    'debit_amount'    => $amount,
-                    'credit_amount'   => 0,
-                    'cost_center_id'  => $asset->cost_center_id,
-                    'description'     => 'استهلاک '.$asset->asset_code,
+                    'account_id'     => $asset->depr_expense_account_id,
+                    'debit_amount'   => $amount,
+                    'credit_amount'  => 0,
+                    'cost_center_id' => $asset->cost_center_id,
+                    'description'    => 'استهلاک '.$asset->asset_code,
                 ];
-                // Accum credit
                 $journalLines[] = [
-                    'account_id'      => $asset->accum_depr_account_id,
-                    'debit_amount'    => 0,
-                    'credit_amount'   => $amount,
-                    'cost_center_id'  => $asset->cost_center_id,
-                    'description'     => 'استهلاک انباشته '.$asset->asset_code,
+                    'account_id'     => $asset->accum_depr_account_id,
+                    'debit_amount'   => 0,
+                    'credit_amount'  => $amount,
+                    'cost_center_id' => $asset->cost_center_id,
+                    'description'    => 'استهلاک انباشته '.$asset->asset_code,
                 ];
 
                 $asset->book_value = $bookAfter;
@@ -160,6 +158,30 @@ class FixedAssetService
                 throw new DomainException('مبلغ استهلاک صفر است.', 'fin.fa.zero_depr');
             }
 
+            // Parent row FIRST so FK on lines succeeds
+            $run = new DepreciationRun();
+            $run->forceFill([
+                'depreciation_run_id' => $runId,
+                'tenant_id'           => $tenantId,
+                'company_id'          => $companyId,
+                'period_id'           => $periodId,
+                'ledger_id'           => $ledgerId,
+                'run_date'            => now()->toDateString(),
+                'status'              => DepreciationRun::STATUS_DRAFT,
+                'journal_entry_id'    => null,
+                'total_amount'        => round($total, 4),
+                'asset_count'         => count($linePayloads),
+                'created_by'          => $actorId,
+                'row_version'         => 1,
+            ]);
+            $run->save();
+
+            foreach ($linePayloads as $line) {
+                $row = new DepreciationRunLine();
+                $row->forceFill($line);
+                $row->save();
+            }
+
             $draft = $this->journals->createDraft([
                 'ledger_id'            => $ledgerId,
                 'company_id'           => $companyId,
@@ -171,24 +193,10 @@ class FixedAssetService
                 'lines'                => $journalLines,
             ]);
 
-            $run = DepreciationRun::create([
-                'depreciation_run_id' => $runId,
-                'tenant_id'           => $tenantId,
-                'company_id'          => $companyId,
-                'period_id'           => $periodId,
-                'ledger_id'           => $ledgerId,
-                'run_date'            => now()->toDateString(),
-                'status'              => DepreciationRun::STATUS_POSTED_AS_JOURNAL, // means linked to draft JE
-                'journal_entry_id'    => $draft->journal_entry_id,
-                'total_amount'        => round($total, 4),
-                'asset_count'         => count($lines),
-                'created_by'          => $actorId,
-                'row_version'         => 1,
-            ]);
-
-            foreach ($lines as $line) {
-                DepreciationRunLine::create($line);
-            }
+            $run->journal_entry_id = $draft->journal_entry_id;
+            $run->status = DepreciationRun::STATUS_POSTED_AS_JOURNAL;
+            $run->row_version = ((int) $run->row_version) + 1;
+            $run->save();
 
             return [
                 'run'              => $run->fresh(['lines']),

@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Infrastructure\Models;
 
 use App\Base\Traits\TenantScoped;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DepreciationRun extends Model
 {
-    use HasUuids, SoftDeletes, TenantScoped;
+    use SoftDeletes, TenantScoped;
 
     public const STATUS_DRAFT = 'DRAFT';
     public const STATUS_POSTED_AS_JOURNAL = 'POSTED_AS_JOURNAL';
@@ -27,6 +26,7 @@ class DepreciationRun extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'depreciation_run_id',
         'tenant_id',
         'company_id',
         'period_id',
