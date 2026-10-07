@@ -11,6 +11,7 @@ use App\Modules\FinancialAccounting\Controllers\MoodianController;
 use App\Modules\FinancialAccounting\Controllers\OpenItemController;
 use App\Modules\FinancialAccounting\Controllers\PeriodControlController;
 use App\Modules\FinancialAccounting\Controllers\ReportController;
+use App\Modules\FinancialAccounting\Controllers\SuggestedJournalController;
 use App\Modules\FinancialAccounting\Controllers\TaxController;
 use App\Modules\FinancialAccounting\Controllers\TreasuryController;
 use Illuminate\Support\Facades\Route;
@@ -97,7 +98,6 @@ Route::middleware([
     Route::post('/bank-statement-lines/{line}/match', [BankReconciliationController::class, 'matchLine'])
         ->middleware('permission:finance.treasury.manage');
 
-    // FIN-P2 tax / Moodian / compliance
     Route::get('/tax/rates', [TaxController::class, 'rates'])
         ->middleware('permission:finance.tax.view');
     Route::post('/tax/rates', [TaxController::class, 'storeRate'])
@@ -122,4 +122,21 @@ Route::middleware([
         ->middleware('permission:finance.compliance.manage');
     Route::post('/compliance-alerts/{alert}/resolve', [ComplianceAlertController::class, 'resolve'])
         ->middleware('permission:finance.compliance.manage');
+
+    // FIN-P3 K1 suggested journals + determination rules
+    Route::get('/suggested-journals', [SuggestedJournalController::class, 'index'])
+        ->middleware('permission:finance.suggest.view');
+    Route::post('/suggested-journals', [SuggestedJournalController::class, 'store'])
+        ->middleware('permission:finance.suggest.manage');
+    Route::get('/suggested-journals/{suggested}', [SuggestedJournalController::class, 'show'])
+        ->middleware('permission:finance.suggest.view');
+    Route::post('/suggested-journals/{suggested}/accept', [SuggestedJournalController::class, 'accept'])
+        ->middleware('permission:finance.suggest.decide');
+    Route::post('/suggested-journals/{suggested}/reject', [SuggestedJournalController::class, 'reject'])
+        ->middleware('permission:finance.suggest.decide');
+
+    Route::get('/account-determination-rules', [SuggestedJournalController::class, 'rules'])
+        ->middleware('permission:finance.suggest.view');
+    Route::post('/account-determination-rules', [SuggestedJournalController::class, 'storeRule'])
+        ->middleware('permission:finance.suggest.manage');
 });

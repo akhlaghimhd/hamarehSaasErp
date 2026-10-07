@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P0 + P1 + P2 finance.* permission codes (idempotent).
+ * FIN-P0..P3 finance.* permission codes (idempotent).
  */
 class FinancePermissionSeeder extends Seeder
 {
@@ -40,13 +40,16 @@ class FinancePermissionSeeder extends Seeder
             ['code' => 'finance.ar.manage', 'name' => 'ثبت و تسویه آیتم‌های باز AR/AP', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.ap.view', 'name' => 'مشاهده حساب‌های پرداختنی', 'action_type' => 'READ'],
             ['code' => 'finance.ap.manage', 'name' => 'مدیریت حساب‌های پرداختنی', 'action_type' => 'EXECUTE'],
-            // P2
             ['code' => 'finance.tax.view', 'name' => 'مشاهده نرخ و تراکنش مالیاتی', 'action_type' => 'READ'],
             ['code' => 'finance.tax.manage', 'name' => 'مدیریت نرخ و ثبت تراکنش مالیاتی', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.moodian.view', 'name' => 'مشاهده ارسال مودیان', 'action_type' => 'READ'],
             ['code' => 'finance.moodian.submit', 'name' => 'ارسال به سامانه مودیان', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.compliance.view', 'name' => 'مشاهده هشدارهای انطباق', 'action_type' => 'READ'],
             ['code' => 'finance.compliance.manage', 'name' => 'اسکن و بستن هشدار انطباق', 'action_type' => 'EXECUTE'],
+            // P3 K1
+            ['code' => 'finance.suggest.view', 'name' => 'مشاهده پیشنهاد اسناد هوشمند', 'action_type' => 'READ'],
+            ['code' => 'finance.suggest.manage', 'name' => 'ایجاد پیشنهاد و قواعد تعیین حساب', 'action_type' => 'EXECUTE'],
+            ['code' => 'finance.suggest.decide', 'name' => 'قبول یا رد پیشنهاد سند', 'action_type' => 'EXECUTE'],
         ];
 
         $tenantIds = DB::table('tenants')->pluck('tenant_id')->map(fn ($id) => (string) $id)->all();
