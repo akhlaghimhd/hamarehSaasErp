@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Infrastructure\Models;
 
 use App\Base\Traits\TenantScoped;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * P2 tax ledger. Legacy DDL used transaction_id as PK; we keep that as primary key
- * and mirror into tax_transaction_id when the column exists.
+ * P2 tax ledger. Legacy DDL used transaction_id as PK.
  */
 class TaxTransaction extends Model
 {
@@ -66,8 +65,12 @@ class TaxTransaction extends Model
         static::creating(function (self $model) {
             $id = $model->transaction_id ?: $model->tax_transaction_id ?: (string) Str::uuid();
             $model->transaction_id = $id;
-            if (Schema::hasColumn($model->getTable(), 'tax_transaction_id')) {
-                $model->tax_transaction_id = $id;
+            try {
+                if (Schema::hasColumn($model->getTable(), 'tax_transaction_id')) {
+                    $model->tax_transaction_id = $id;
+                }
+            } catch (\Throwable) {
+                // ignore schema probe failures
             }
         });
     }
