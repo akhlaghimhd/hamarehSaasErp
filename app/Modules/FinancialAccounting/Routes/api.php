@@ -14,6 +14,7 @@ use App\Modules\FinancialAccounting\Controllers\OpenItemController;
 use App\Modules\FinancialAccounting\Controllers\PeriodCloseController;
 use App\Modules\FinancialAccounting\Controllers\PeriodControlController;
 use App\Modules\FinancialAccounting\Controllers\ReportController;
+use App\Modules\FinancialAccounting\Controllers\SmartAssistController;
 use App\Modules\FinancialAccounting\Controllers\SuggestedJournalController;
 use App\Modules\FinancialAccounting\Controllers\TaxController;
 use App\Modules\FinancialAccounting\Controllers\TreasuryController;
@@ -50,6 +51,8 @@ Route::middleware([
         ->middleware('permission:finance.journal.post');
     Route::post('/journals/{journal}/reverse', [JournalEntryController::class, 'reverse'])
         ->middleware('permission:finance.journal.reverse');
+    Route::post('/journals/{journal}/anomaly-scan', [SmartAssistController::class, 'anomalyScan'])
+        ->middleware('permission:finance.smart.view');
 
     Route::get('/period-controls', [PeriodControlController::class, 'show'])
         ->middleware('permission:finance.period.view');
@@ -75,6 +78,8 @@ Route::middleware([
         ->middleware('permission:finance.report.view');
     Route::get('/reports/consolidated-trial-balance', [IntercompanyController::class, 'consolidatedTrialBalance'])
         ->middleware('permission:finance.ic.view');
+    Route::get('/reports/pl-insights', [SmartAssistController::class, 'plInsights'])
+        ->middleware('permission:finance.smart.view');
 
     Route::get('/cash-accounts', [TreasuryController::class, 'cashAccounts'])
         ->middleware('permission:finance.treasury.view');
@@ -158,11 +163,18 @@ Route::middleware([
     Route::post('/fixed-assets/run-depreciation', [FixedAssetController::class, 'runDepreciation'])
         ->middleware('permission:finance.fa.depreciate');
 
-    // FIN-P5 intercompany
     Route::post('/intercompany/account-maps', [IntercompanyController::class, 'upsertMap'])
         ->middleware('permission:finance.ic.manage');
     Route::post('/intercompany/pairs', [IntercompanyController::class, 'createPair'])
         ->middleware('permission:finance.ic.manage');
     Route::post('/intercompany/eliminations', [IntercompanyController::class, 'createElimination'])
         ->middleware('permission:finance.ic.manage');
+
+    // FIN-P6 smart assist
+    Route::post('/smart/suggest-accounts', [SmartAssistController::class, 'suggestAccounts'])
+        ->middleware('permission:finance.smart.view');
+    Route::post('/smart/account-decision', [SmartAssistController::class, 'recordAccountDecision'])
+        ->middleware('permission:finance.smart.decide');
+    Route::post('/smart/nl-draft', [SmartAssistController::class, 'nlDraft'])
+        ->middleware('permission:finance.smart.nl');
 });

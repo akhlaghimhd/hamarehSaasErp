@@ -7,9 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-/**
- * FIN-P0..P5 finance.* permission codes (idempotent).
- */
+/** FIN-P0..P6 finance.* permission codes (idempotent). */
 class FinancePermissionSeeder extends Seeder
 {
     public function run(): void
@@ -52,9 +50,12 @@ class FinancePermissionSeeder extends Seeder
             ['code' => 'finance.fa.view', 'name' => 'مشاهده دارایی ثابت', 'action_type' => 'READ'],
             ['code' => 'finance.fa.manage', 'name' => 'ثبت دارایی ثابت', 'action_type' => 'EXECUTE'],
             ['code' => 'finance.fa.depreciate', 'name' => 'اجرای استهلاک (پیش‌نویس)', 'action_type' => 'EXECUTE'],
-            // P5
             ['code' => 'finance.ic.view', 'name' => 'مشاهده بین شرکتی و تراز تلفیقی', 'action_type' => 'READ'],
             ['code' => 'finance.ic.manage', 'name' => 'ثبت نقشه و پیش‌نویس IC / حذف', 'action_type' => 'EXECUTE'],
+            // P6
+            ['code' => 'finance.smart.view', 'name' => 'مشاهده پیشنهاد حساب و بینش', 'action_type' => 'READ'],
+            ['code' => 'finance.smart.decide', 'name' => 'ثبت قبول/رد پیشنهاد حساب', 'action_type' => 'EXECUTE'],
+            ['code' => 'finance.smart.nl', 'name' => 'دستور زبان طبیعی → پیش‌نویس', 'action_type' => 'EXECUTE'],
         ];
 
         $tenantIds = DB::table('tenants')->pluck('tenant_id')->map(fn ($id) => (string) $id)->all();
