@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * FIN-P2-01/02 — Tax rate config, tax transactions, Moodian log, compliance alerts.
- * Idempotent: skip create if relation already exists (legacy / partial migrate).
+ * Idempotent; fully aligns legacy fin_acc_tax_transactions if present.
  */
 return new class extends Migration
 {
@@ -68,35 +68,18 @@ return new class extends Migration
                 );
                 $table->index(['tenant_id', 'company_id', 'transaction_date'], 'idx_fin_acc_tax_txn_co_date');
             });
-
-            DB::statement("
-                DO $$ BEGIN
-                    ALTER TABLE fin_acc_tax_transactions
-                    ADD CONSTRAINT chk_fin_acc_tax_direction
-                    CHECK (direction IN ('OUTPUT', 'INPUT'));
-                EXCEPTION WHEN duplicate_object THEN NULL;
-                END $$;
-            ");
         } else {
-            // Align legacy table with P2 columns if missing
-            Schema::table('fin_acc_tax_transactions', function (Blueprint $table) {
-                if (! Schema::hasColumn('fin_acc_tax_transactions', 'company_id')) {
-                    $table->uuid('company_id')->nullable();
-                }
-                if (! Schema::hasColumn('fin_acc_tax_transactions', 'tax_rate_config_id')) {
-                    $table->uuid('tax_rate_config_id')->nullable();
-                }
-                if (! Schema::hasColumn('fin_acc_tax_transactions', 'tax_code')) {
-                    $table->string('tax_code', 40)->nullable();
-                }
-                if (! Schema::hasColumn('fin_acc_tax_transactions', 'direction')) {
-                    $table->string('direction', 10)->default('OUTPUT');
-                }
-                if (! Schema::hasColumn('fin_acc_tax_transactions', 'journal_entry_id')) {
-                    $table->uuid('journal_entry_id')->nullable();
-                }
-            });
+            $this->alignLegacyTaxTransactions();
         }
+
+        DB::statement("
+            DO $$ BEGIN
+                ALTER TABLE fin_acc_tax_transactions
+                ADD CONSTRAINT chk_fin_acc_tax_direction
+                CHECK (direction IN ('OUTPUT', 'INPUT'));
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$;
+        ");
 
         if (! Schema::hasTable('fin_acc_moodian_submissions')) {
             Schema::create('fin_acc_moodian_submissions', function (Blueprint $table) {
@@ -183,6 +166,37 @@ return new class extends Migration
         }
     }
 
+    private function alignLegacyTaxTransactions(): void
+    {
+        $cols = [
+            'company_id'           => "uuid NULL",
+            'source_document_type' => "varchar(100) NULL",
+            'source_document_id'   => "uuid NULL",
+            'tax_rate_config_id'   => "uuid NULL",
+            'tax_code'             => "varchar(40) NULL",
+            'taxable_amount'       => "numeric(20,4) NULL",
+            'tax_rate'             => "numeric(8,4) NULL",
+            'tax_amount'           => "numeric(20,4) NULL",
+            'transaction_date'     => "date NULL",
+            'direction'            => "varchar(10) NOT NULL DEFAULT 'OUTPUT'",
+            'journal_entry_id'     => "uuid NULL",
+            'created_by'           => "uuid NULL",
+            'created_at'           => "timestamptz NULL DEFAULT NOW()",
+        ];
+
+        foreach ($cols as $name => $ddl) {
+            if (! Schema::hasColumn('fin_acc_tax_transactions', $name)) {
+                DB::statement("ALTER TABLE fin_acc_tax_transactions ADD COLUMN {$name} {$ddl}");
+            }
+        }
+
+        // Ensure primary key column exists under expected name
+        if (! Schema::hasColumn('fin_acc_tax_transactions', 'tax_transaction_id')) {
+            DB::statement('ALTER TABLE fin_acc_tax_transactions ADD COLUMN tax_transaction_id uuid');
+            DB::statement('UPDATE fin_acc_tax_transactions SET tax_transaction_id = gen_random_uuid() WHERE tax_transaction_id IS NULL');
+        }
+    }
+
     public function down(): void
     {
         foreach ([
@@ -193,6 +207,10 @@ return new class extends Migration
         ] as $t) {
             if (Schema::hasTable($t)) {
                 DB::statement("DROP POLICY IF EXISTS tenant_isolation_policy ON {$t}");
+                // Do not drop legacy tax_transactions if it pre-existed — only drop P2-only tables
+                if ($t === 'fin_acc_tax_transactions') {
+                    continue;
+                }
                 Schema::dropIfExists($t);
             }
         }
