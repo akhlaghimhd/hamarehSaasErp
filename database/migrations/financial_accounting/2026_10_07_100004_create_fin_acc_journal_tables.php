@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Schema;
  * FIN-P0-06 — Journal entries + items (double-entry)
  * FK only inside Finance BC. company_id / period_id / currency / dimensions = logical UUID.
  * Posted docs: reverse only (soft-delete of header allowed only for DRAFT).
+ *
+ * Self-referential reverses_entry_id FK added after table create (PostgreSQL).
  */
 return new class extends Migration
 {
@@ -44,14 +46,16 @@ return new class extends Migration
                 ->on('fin_acc_ledgers')
                 ->onDelete('restrict');
 
-            $table->foreign('reverses_entry_id')
-                ->references('journal_entry_id')
-                ->on('fin_acc_journal_entries')
-                ->onDelete('restrict');
-
             $table->index(['tenant_id', 'company_id', 'period_id'], 'idx_fin_acc_je_company_period');
             $table->index(['tenant_id', 'status'], 'idx_fin_acc_je_status');
             $table->index(['tenant_id', 'source_document_type', 'source_document_id'], 'idx_fin_acc_je_source');
+        });
+
+        Schema::table('fin_acc_journal_entries', function (Blueprint $table) {
+            $table->foreign('reverses_entry_id', 'fk_fin_acc_je_reverses')
+                ->references('journal_entry_id')
+                ->on('fin_acc_journal_entries')
+                ->onDelete('restrict');
         });
 
         DB::statement("
@@ -99,7 +103,7 @@ return new class extends Migration
             $table->index(['tenant_id', 'account_id'], 'idx_fin_acc_ji_account');
         });
 
-        // Debit XOR Credit (exactly one side positive)
+        // Debit XOR Credit (exactly one side positive); zero/zero allowed for draft scaffolding
         DB::statement('
             ALTER TABLE fin_acc_journal_items
             ADD CONSTRAINT chk_fin_acc_ji_amounts
@@ -109,7 +113,6 @@ return new class extends Migration
                 OR (debit_amount = 0 AND credit_amount = 0)
             )
         ');
-        // Zero/zero allowed only for draft scaffolding; post service rejects unbalanced + zero lines.
 
         DB::statement('ALTER TABLE fin_acc_journal_entries ENABLE ROW LEVEL SECURITY');
         DB::statement('ALTER TABLE fin_acc_journal_entries FORCE ROW LEVEL SECURITY');

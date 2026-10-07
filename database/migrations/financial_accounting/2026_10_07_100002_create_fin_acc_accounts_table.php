@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * FIN-P0-04 — Chart of Accounts tree (tenant-wide CoA per ownership decision)
  * parent_account_id physical FK inside Finance BC only.
+ *
+ * Self-referential FK is added AFTER Schema::create — PostgreSQL requires the
+ * primary key constraint to exist before CREATE POLICY/FK against the same table.
  */
 return new class extends Migration
 {
@@ -36,13 +39,16 @@ return new class extends Migration
             $table->uuid('deleted_by')->nullable();
             $table->bigInteger('row_version')->default(1);
 
-            $table->foreign('parent_account_id')
+            $table->index(['tenant_id', 'parent_account_id'], 'idx_fin_acc_accounts_parent');
+            $table->index(['tenant_id', 'account_type'], 'idx_fin_acc_accounts_type');
+        });
+
+        // Self-FK after table + PK exist (avoids SQLSTATE 42830 on PostgreSQL)
+        Schema::table('fin_acc_accounts', function (Blueprint $table) {
+            $table->foreign('parent_account_id', 'fk_fin_acc_accounts_parent')
                 ->references('account_id')
                 ->on('fin_acc_accounts')
                 ->onDelete('restrict');
-
-            $table->index(['tenant_id', 'parent_account_id'], 'idx_fin_acc_accounts_parent');
-            $table->index(['tenant_id', 'account_type'], 'idx_fin_acc_accounts_type');
         });
 
         DB::statement('
