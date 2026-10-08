@@ -125,6 +125,10 @@ Route::middleware([
         ->middleware('permission:finance.tax.view');
     Route::post('/tax/transactions', [TaxController::class, 'recordTransaction'])
         ->middleware('permission:finance.tax.manage');
+    Route::get('/tax/vat-summary', [TaxController::class, 'vatSummary'])
+        ->middleware('permission:finance.tax.view');
+    Route::get('/tax/moodian-recon', [TaxController::class, 'moodianRecon'])
+        ->middleware('permission:finance.tax.view');
 
     Route::get('/moodian/submissions', [MoodianController::class, 'index'])
         ->middleware('permission:finance.moodian.view');
@@ -170,7 +174,6 @@ Route::middleware([
     Route::post('/intercompany/eliminations', [IntercompanyController::class, 'createElimination'])
         ->middleware('permission:finance.ic.manage');
 
-    // FIN-P6 smart assist
     Route::post('/smart/suggest-accounts', [SmartAssistController::class, 'suggestAccounts'])
         ->middleware('permission:finance.smart.view');
     Route::post('/smart/account-decision', [SmartAssistController::class, 'recordAccountDecision'])
