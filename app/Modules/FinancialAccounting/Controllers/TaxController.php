@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Controllers;
 
 use App\Base\Controller;
+use App\Modules\FinancialAccounting\Application\Services\TaxReportingService;
 use App\Modules\FinancialAccounting\Application\Services\VatCalculationService;
 use App\Modules\FinancialAccounting\Infrastructure\Models\TaxRateConfig;
 use App\Modules\FinancialAccounting\Infrastructure\Models\TaxTransaction;
@@ -14,7 +15,8 @@ use Illuminate\Http\Request;
 class TaxController extends Controller
 {
     public function __construct(
-        private readonly VatCalculationService $vat
+        private readonly VatCalculationService $vat,
+        private readonly TaxReportingService $reports = new TaxReportingService()
     ) {
     }
 
@@ -48,10 +50,10 @@ class TaxController extends Controller
     public function split(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'tax_code'    => 'required|string|max:40',
-            'on_date'     => 'required|date',
-            'net_amount'  => 'nullable|numeric|min:0',
-            'gross_amount'=> 'nullable|numeric|min:0',
+            'tax_code'     => 'required|string|max:40',
+            'on_date'      => 'required|date',
+            'net_amount'   => 'nullable|numeric|min:0',
+            'gross_amount' => 'nullable|numeric|min:0',
         ]);
 
         if (isset($data['gross_amount'])) {
@@ -99,5 +101,35 @@ class TaxController extends Controller
             'message' => 'تراکنش مالیاتی ثبت شد.',
             'data'    => $row,
         ], 201);
+    }
+
+    /** FIN-P2-07 */
+    public function vatSummary(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'company_id' => 'required|uuid',
+            'from'       => 'required|date',
+            'to'         => 'required|date',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $this->reports->vatPeriodSummary($data['company_id'], $data['from'], $data['to']),
+        ]);
+    }
+
+    /** FIN-P2-06 */
+    public function moodianRecon(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'company_id' => 'required|uuid',
+            'from'       => 'required|date',
+            'to'         => 'required|date',
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $this->reports->moodianLedgerRecon($data['company_id'], $data['from'], $data['to']),
+        ]);
     }
 }
