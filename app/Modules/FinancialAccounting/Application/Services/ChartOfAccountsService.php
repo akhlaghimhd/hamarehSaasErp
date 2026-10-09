@@ -58,9 +58,13 @@ class ChartOfAccountsService
             throw new DomainException('کد حساب الزامی است.', 'fin.coa.code_required');
         }
 
-        if (Account::where('account_code', $code)->exists()) {
-            throw new DomainException('کد حساب تکراری است.', 'fin.coa.code_duplicate');
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            throw new DomainException('نام حساب الزامی است.', 'fin.coa.name_required');
         }
+
+        $this->assertCodeUnique($code, null);
+        $this->assertNameUnique($name, null);
 
         $parentId = $data['parent_account_id'] ?? null;
         $level = (int) ($data['account_level'] ?? 1);
@@ -89,7 +93,7 @@ class ChartOfAccountsService
             'tenant_id'          => $tenantId,
             'parent_account_id'  => $parentId,
             'account_code'       => $code,
-            'name'               => (string) ($data['name'] ?? ''),
+            'name'               => $name,
             'account_type'       => $type,
             'account_level'      => $level,
             'normal_balance'     => (int) ($data['normal_balance'] ?? Account::BALANCE_DEBIT),
@@ -119,15 +123,20 @@ class ChartOfAccountsService
                         'fin.coa.code_locked_has_movement'
                     );
                 }
-                if (Account::where('account_code', $code)->where('account_id', '!=', $accountId)->exists()) {
-                    throw new DomainException('کد حساب تکراری است.', 'fin.coa.code_duplicate');
-                }
+                $this->assertCodeUnique($code, $accountId);
             }
             $account->account_code = $code;
         }
 
         if (array_key_exists('name', $data)) {
-            $account->name = (string) $data['name'];
+            $name = trim((string) $data['name']);
+            if ($name === '') {
+                throw new DomainException('نام حساب الزامی است.', 'fin.coa.name_required');
+            }
+            if ($name !== trim((string) $account->name)) {
+                $this->assertNameUnique($name, $accountId);
+            }
+            $account->name = $name;
         }
         if (array_key_exists('account_type', $data)) {
             $account->account_type = (int) $data['account_type'];
@@ -186,6 +195,42 @@ class ChartOfAccountsService
         $account->row_version = ((int) ($account->row_version ?? 1)) + 1;
         $account->save();
         $account->delete();
+    }
+
+    /**
+     * کد در کل درخت tenant یکتا است (بین همه سطوح).
+     */
+    protected function assertCodeUnique(string $code, ?string $exceptAccountId): void
+    {
+        $q = Account::query()->where('account_code', $code);
+        if ($exceptAccountId) {
+            $q->where('account_id', '!=', $exceptAccountId);
+        }
+        if ($q->exists()) {
+            throw new DomainException(
+                'کد حساب تکراری است؛ کد باید در تمام سطوح یکتا باشد.',
+                'fin.coa.code_duplicate'
+            );
+        }
+    }
+
+    /**
+     * نام در کل درخت tenant یکتا است (بدون حساسیت به فاصله ابتدا/انتها و حروف).
+     */
+    protected function assertNameUnique(string $name, ?string $exceptAccountId): void
+    {
+        $normalized = mb_strtolower(trim($name), 'UTF-8');
+        $q = Account::query()
+            ->whereRaw('lower(trim(name)) = ?', [$normalized]);
+        if ($exceptAccountId) {
+            $q->where('account_id', '!=', $exceptAccountId);
+        }
+        if ($q->exists()) {
+            throw new DomainException(
+                'نام حساب تکراری است؛ نام باید در تمام سطوح یکتا باشد.',
+                'fin.coa.name_duplicate'
+            );
+        }
     }
 
     /**
