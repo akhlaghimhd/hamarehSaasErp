@@ -111,6 +111,13 @@ class ChartOfAccountsService
     {
         $account = $this->find($accountId);
 
+        if ($this->isRootAccount($account)) {
+            throw new DomainException(
+                'حساب کل ساختار ثابت سیستم است و قابل ویرایش نیست.',
+                'fin.coa.root_locked'
+            );
+        }
+
         if (isset($data['account_code'])) {
             $code = trim((string) $data['account_code']);
             if ($code === '') {
@@ -178,6 +185,13 @@ class ChartOfAccountsService
     {
         $account = $this->find($accountId);
 
+        if ($this->isRootAccount($account)) {
+            throw new DomainException(
+                'حساب کل ساختار ثابت سیستم است و قابل حذف نیست.',
+                'fin.coa.root_locked'
+            );
+        }
+
         if (Account::where('parent_account_id', $accountId)->exists()) {
             throw new DomainException(
                 'حساب دارای زیرمجموعه است و قابل حذف نیست.',
@@ -195,6 +209,13 @@ class ChartOfAccountsService
         $account->row_version = ((int) ($account->row_version ?? 1)) + 1;
         $account->save();
         $account->delete();
+    }
+
+    /** حساب کل (ریشه بدون والد / سطح ۱) — اسکلت ثابت ۵گانه. */
+    protected function isRootAccount(Account $account): bool
+    {
+        return $account->parent_account_id === null
+            || (int) $account->account_level === 1;
     }
 
     /**
