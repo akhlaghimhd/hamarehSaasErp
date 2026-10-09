@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 
 /**
  * FIN-P0-18 — Idempotent Iran-minimal CoA + default VAT rate for all tenants.
+ * Coding law: child = parent code + sequential digit (1→11→111).
  * Does not invent fiscal periods (Org remains SoT for calendar).
  */
 class FinanceDemoCoaSeeder extends Seeder
@@ -37,29 +38,29 @@ class FinanceDemoCoaSeeder extends Seeder
     {
         // code => [name, type, level, postable, normal_balance, parent_code|null]
         $tree = [
-            '1'    => ['دارایی‌ها', Account::TYPE_ASSET, 1, false, Account::BALANCE_DEBIT, null],
-            '11'   => ['دارایی جاری', Account::TYPE_ASSET, 2, false, Account::BALANCE_DEBIT, '1'],
-            '1101' => ['موجودی نقد', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '11'],
-            '1102' => ['حساب‌های دریافتنی', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '11'],
-            '12'   => ['دارایی غیرجاری', Account::TYPE_ASSET, 2, false, Account::BALANCE_DEBIT, '1'],
-            '1201' => ['دارایی ثابت مشهود', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '12'],
-            '1202' => ['استهلاک انباشته', Account::TYPE_ASSET, 3, true, Account::BALANCE_CREDIT, '12'],
+            '1'   => ['دارایی‌ها', Account::TYPE_ASSET, 1, false, Account::BALANCE_DEBIT, null],
+            '11'  => ['دارایی جاری', Account::TYPE_ASSET, 2, false, Account::BALANCE_DEBIT, '1'],
+            '111' => ['موجودی نقد', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '11'],
+            '112' => ['حساب‌های دریافتنی', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '11'],
+            '12'  => ['دارایی غیرجاری', Account::TYPE_ASSET, 2, false, Account::BALANCE_DEBIT, '1'],
+            '121' => ['دارایی ثابت مشهود', Account::TYPE_ASSET, 3, true, Account::BALANCE_DEBIT, '12'],
+            '122' => ['استهلاک انباشته', Account::TYPE_ASSET, 3, true, Account::BALANCE_CREDIT, '12'],
 
-            '2'    => ['بدهی‌ها', Account::TYPE_LIABILITY, 1, false, Account::BALANCE_CREDIT, null],
-            '21'   => ['بدهی جاری', Account::TYPE_LIABILITY, 2, false, Account::BALANCE_CREDIT, '2'],
-            '2101' => ['حساب‌های پرداختنی', Account::TYPE_LIABILITY, 3, true, Account::BALANCE_CREDIT, '21'],
-            '2102' => ['مالیات بر ارزش افزوده پرداختنی', Account::TYPE_LIABILITY, 3, true, Account::BALANCE_CREDIT, '21'],
+            '2'   => ['بدهی‌ها', Account::TYPE_LIABILITY, 1, false, Account::BALANCE_CREDIT, null],
+            '21'  => ['بدهی جاری', Account::TYPE_LIABILITY, 2, false, Account::BALANCE_CREDIT, '2'],
+            '211' => ['حساب‌های پرداختنی', Account::TYPE_LIABILITY, 3, true, Account::BALANCE_CREDIT, '21'],
+            '212' => ['مالیات بر ارزش افزوده پرداختنی', Account::TYPE_LIABILITY, 3, true, Account::BALANCE_CREDIT, '21'],
 
-            '3'    => ['حقوق صاحبان سهام', Account::TYPE_EQUITY, 1, false, Account::BALANCE_CREDIT, null],
-            '3101' => ['سرمایه', Account::TYPE_EQUITY, 2, true, Account::BALANCE_CREDIT, '3'],
-            '3201' => ['سود (زیان) انباشته', Account::TYPE_EQUITY, 2, true, Account::BALANCE_CREDIT, '3'],
+            '3'  => ['حقوق صاحبان سهام', Account::TYPE_EQUITY, 1, false, Account::BALANCE_CREDIT, null],
+            '31' => ['سرمایه', Account::TYPE_EQUITY, 2, true, Account::BALANCE_CREDIT, '3'],
+            '32' => ['سود (زیان) انباشته', Account::TYPE_EQUITY, 2, true, Account::BALANCE_CREDIT, '3'],
 
-            '4'    => ['درآمدها', Account::TYPE_REVENUE, 1, false, Account::BALANCE_CREDIT, null],
-            '4101' => ['فروش کالا/خدمات', Account::TYPE_REVENUE, 2, true, Account::BALANCE_CREDIT, '4'],
+            '4'  => ['درآمدها', Account::TYPE_REVENUE, 1, false, Account::BALANCE_CREDIT, null],
+            '41' => ['فروش کالا/خدمات', Account::TYPE_REVENUE, 2, true, Account::BALANCE_CREDIT, '4'],
 
-            '5'    => ['هزینه‌ها', Account::TYPE_EXPENSE, 1, false, Account::BALANCE_DEBIT, null],
-            '5101' => ['بهای تمام‌شده / هزینه عملیاتی', Account::TYPE_EXPENSE, 2, true, Account::BALANCE_DEBIT, '5'],
-            '5201' => ['هزینه استهلاک', Account::TYPE_EXPENSE, 2, true, Account::BALANCE_DEBIT, '5'],
+            '5'  => ['هزینه‌ها', Account::TYPE_EXPENSE, 1, false, Account::BALANCE_DEBIT, null],
+            '51' => ['بهای تمام‌شده / هزینه عملیاتی', Account::TYPE_EXPENSE, 2, true, Account::BALANCE_DEBIT, '5'],
+            '52' => ['هزینه استهلاک', Account::TYPE_EXPENSE, 2, true, Account::BALANCE_DEBIT, '5'],
         ];
 
         $idByCode = [];
