@@ -10,12 +10,16 @@ use Illuminate\Support\Str;
 /**
  * FIN-P0-18 — Minimal Iranian-style CoA + leading ledger + open period control for demo tenant.
  *
+ * Coding law: child code = parent code + sequential digit (1,2,3…).
+ * Example: 1 → 11,12 → 111,112 ; 4 → 41 → 411
+ *
  * Idempotent. Does not invent fin_fiscal_periods (calendar owned outside Finance BC);
  * uses a stable demo period UUID for local QA.
  *
  * Usage:
  *   docker compose exec app php artisan db:seed --class=FinancePermissionSeeder
  *   docker compose exec app php artisan db:seed --class=DemoFinanceCoaSeeder
+ *   docker compose exec app php artisan db:seed --class=ResetDemoFinanceCoaSeeder
  */
 class DemoFinanceCoaSeeder extends Seeder
 {
@@ -129,37 +133,43 @@ class DemoFinanceCoaSeeder extends Seeder
     }
 
     /**
-     * Minimal Iranian CoA (Kol → Moein). account_type: 1A 2L 3E 4R 5X
+     * Hierarchical codes: parent + seq (1→11→111). account_type: 1A 2L 3E 4R 5X
      */
     private function ensureCoa(string $tenantId): int
     {
         $tree = [
-            // Assets
+            // Assets — 1
             ['code' => '1', 'name' => 'دارایی‌ها', 'type' => 1, 'balance' => 1, 'postable' => false, 'level' => 1, 'children' => [
                 ['code' => '11', 'name' => 'دارایی‌های جاری', 'type' => 1, 'balance' => 1, 'postable' => false, 'level' => 2, 'children' => [
-                    ['code' => '1101', 'name' => 'صندوق', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
-                    ['code' => '1102', 'name' => 'بانک', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
-                    ['code' => '1103', 'name' => 'حساب‌های دریافتنی', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
+                    ['code' => '111', 'name' => 'صندوق', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
+                    ['code' => '112', 'name' => 'بانک', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
+                    ['code' => '113', 'name' => 'حساب‌های دریافتنی', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
+                ]],
+                ['code' => '12', 'name' => 'دارایی‌های غیرجاری', 'type' => 1, 'balance' => 1, 'postable' => false, 'level' => 2, 'children' => [
+                    ['code' => '121', 'name' => 'دارایی ثابت مشهود', 'type' => 1, 'balance' => 1, 'postable' => true, 'level' => 3],
+                    ['code' => '122', 'name' => 'استهلاک انباشته', 'type' => 1, 'balance' => 2, 'postable' => true, 'level' => 3],
                 ]],
             ]],
-            // Liabilities
+            // Liabilities — 2
             ['code' => '2', 'name' => 'بدهی‌ها', 'type' => 2, 'balance' => 2, 'postable' => false, 'level' => 1, 'children' => [
                 ['code' => '21', 'name' => 'بدهی‌های جاری', 'type' => 2, 'balance' => 2, 'postable' => false, 'level' => 2, 'children' => [
-                    ['code' => '2101', 'name' => 'حساب‌های پرداختنی', 'type' => 2, 'balance' => 2, 'postable' => true, 'level' => 3],
+                    ['code' => '211', 'name' => 'حساب‌های پرداختنی', 'type' => 2, 'balance' => 2, 'postable' => true, 'level' => 3],
+                    ['code' => '212', 'name' => 'مالیات بر ارزش افزوده پرداختنی', 'type' => 2, 'balance' => 2, 'postable' => true, 'level' => 3],
                 ]],
             ]],
-            // Equity
+            // Equity — 3
             ['code' => '3', 'name' => 'حقوق صاحبان سهام', 'type' => 3, 'balance' => 2, 'postable' => false, 'level' => 1, 'children' => [
-                ['code' => '3101', 'name' => 'سرمایه', 'type' => 3, 'balance' => 2, 'postable' => true, 'level' => 2],
+                ['code' => '31', 'name' => 'سرمایه', 'type' => 3, 'balance' => 2, 'postable' => true, 'level' => 2],
+                ['code' => '32', 'name' => 'سود (زیان) انباشته', 'type' => 3, 'balance' => 2, 'postable' => true, 'level' => 2],
             ]],
-            // Revenue
+            // Revenue — 4
             ['code' => '4', 'name' => 'درآمدها', 'type' => 4, 'balance' => 2, 'postable' => false, 'level' => 1, 'children' => [
-                ['code' => '4101', 'name' => 'فروش کالا و خدمات', 'type' => 4, 'balance' => 2, 'postable' => true, 'level' => 2],
+                ['code' => '41', 'name' => 'فروش کالا و خدمات', 'type' => 4, 'balance' => 2, 'postable' => true, 'level' => 2],
             ]],
-            // Expense
+            // Expense — 5
             ['code' => '5', 'name' => 'هزینه‌ها', 'type' => 5, 'balance' => 1, 'postable' => false, 'level' => 1, 'children' => [
-                ['code' => '5101', 'name' => 'هزینه حقوق و دستمزد', 'type' => 5, 'balance' => 1, 'postable' => true, 'level' => 2],
-                ['code' => '5102', 'name' => 'هزینه اداری', 'type' => 5, 'balance' => 1, 'postable' => true, 'level' => 2],
+                ['code' => '51', 'name' => 'هزینه حقوق و دستمزد', 'type' => 5, 'balance' => 1, 'postable' => true, 'level' => 2],
+                ['code' => '52', 'name' => 'هزینه اداری', 'type' => 5, 'balance' => 1, 'postable' => true, 'level' => 2],
             ]],
         ];
 
