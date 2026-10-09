@@ -109,9 +109,19 @@ class ChartOfAccountsService
 
         if (isset($data['account_code'])) {
             $code = trim((string) $data['account_code']);
-            if ($code !== $account->account_code
-                && Account::where('account_code', $code)->where('account_id', '!=', $accountId)->exists()) {
-                throw new DomainException('کد حساب تکراری است.', 'fin.coa.code_duplicate');
+            if ($code === '') {
+                throw new DomainException('کد حساب الزامی است.', 'fin.coa.code_required');
+            }
+            if ($code !== $account->account_code) {
+                if (JournalItem::where('account_id', $accountId)->exists()) {
+                    throw new DomainException(
+                        'کد حساب دارای گردش سند قابل تغییر نیست.',
+                        'fin.coa.code_locked_has_movement'
+                    );
+                }
+                if (Account::where('account_code', $code)->where('account_id', '!=', $accountId)->exists()) {
+                    throw new DomainException('کد حساب تکراری است.', 'fin.coa.code_duplicate');
+                }
             }
             $account->account_code = $code;
         }
