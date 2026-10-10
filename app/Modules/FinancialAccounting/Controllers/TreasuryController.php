@@ -91,7 +91,7 @@ class TreasuryController extends Controller
     public function post(string $document, Request $request): JsonResponse
     {
         $data = $request->validate([
-            'ledger_id'         => 'required|uuid',
+            'ledger_id'         => 'nullable|uuid',
             'offset_account_id' => 'required|uuid',
         ]);
 
