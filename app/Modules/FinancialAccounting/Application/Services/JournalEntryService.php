@@ -182,7 +182,6 @@ class JournalEntryService
                 );
             }
 
-            // FIN-P4-04 dimension gates
             if ($account->requires_cost_center && empty($item->cost_center_id)) {
                 throw new DomainException(
                     'برای حساب «'.$account->account_code.'» مرکز هزینه الزامی است.',
@@ -269,12 +268,13 @@ class JournalEntryService
             $lines = [];
             foreach ($items as $item) {
                 $lines[] = [
-                    'account_id'        => $item->account_id,
-                    'debit_amount'      => $item->credit_amount,
-                    'credit_amount'     => $item->debit_amount,
-                    'description'       => $item->description,
-                    'cost_center_id'    => $item->cost_center_id,
-                    'business_unit_id'  => $item->business_unit_id,
+                    'account_id'             => $item->account_id,
+                    'debit_amount'           => $item->credit_amount,
+                    'credit_amount'          => $item->debit_amount,
+                    'description'            => $item->description,
+                    'cost_center_id'         => $item->cost_center_id,
+                    'business_unit_id'       => $item->business_unit_id,
+                    'source_currency_amount' => $item->source_currency_amount,
                 ];
             }
             $this->replaceLines($reversal, $lines, (string) $original->tenant_id);
@@ -314,21 +314,26 @@ class JournalEntryService
             if ($debit <= 0 && $credit <= 0) {
                 continue;
             }
+            $lineAmount = $debit > 0 ? $debit : $credit;
+            $sourceAmount = array_key_exists('source_currency_amount', $line) && $line['source_currency_amount'] !== null
+                ? (float) $line['source_currency_amount']
+                : $lineAmount;
+
             JournalItem::create([
-                'journal_item_id'   => (string) Str::uuid(),
-                'tenant_id'         => $tenantId,
-                'journal_entry_id'  => $entry->journal_entry_id,
-                'account_id'        => $line['account_id'],
-                'debit_amount'      => $debit,
-                'credit_amount'     => $credit,
-                'description'       => $line['description'] ?? null,
-                'cost_center_id'    => $line['cost_center_id'] ?? null,
-                'business_unit_id'  => $line['business_unit_id'] ?? null,
-                'currency_id'       => $line['currency_id'] ?? null,
-                'exchange_rate'     => $line['exchange_rate'] ?? 1,
-                'source_currency_amount' => $line['source_currency_amount'] ?? null,
-                'sort_order'        => $order++,
-                'row_version'       => 1,
+                'journal_item_id'        => (string) Str::uuid(),
+                'tenant_id'              => $tenantId,
+                'journal_entry_id'       => $entry->journal_entry_id,
+                'account_id'             => $line['account_id'],
+                'debit_amount'           => $debit,
+                'credit_amount'          => $credit,
+                'description'            => $line['description'] ?? null,
+                'cost_center_id'         => $line['cost_center_id'] ?? null,
+                'business_unit_id'       => $line['business_unit_id'] ?? null,
+                'currency_id'            => $line['currency_id'] ?? null,
+                'exchange_rate'          => $line['exchange_rate'] ?? 1,
+                'source_currency_amount' => $sourceAmount,
+                'sort_order'             => $order++,
+                'row_version'            => 1,
             ]);
         }
     }
