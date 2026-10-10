@@ -83,6 +83,9 @@ class JournalEntryController extends Controller
             'lines.*.account_id' => 'required_with:lines|uuid',
             'lines.*.debit_amount' => 'nullable|numeric|min:0',
             'lines.*.credit_amount'=> 'nullable|numeric|min:0',
+            'lines.*.description'  => 'nullable|string|max:500',
+            'lines.*.cost_center_id' => 'nullable|uuid',
+            'lines.*.business_unit_id' => 'nullable|uuid',
         ]);
 
         $row = $this->service->updateDraft($journal, $data);
