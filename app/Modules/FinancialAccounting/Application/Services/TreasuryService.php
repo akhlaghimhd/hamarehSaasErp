@@ -57,8 +57,8 @@ class TreasuryService
      *   counterparty_name?: string|null,
      *   counterparty_open_item_id?: string|null,
      *   description?: string|null,
-     *   offset_account_id: string,
-     *   ledger_id: string,
+     *   offset_account_id?: string|null,
+     *   ledger_id?: string|null,
      *   auto_post?: bool
      * }  $data
      */
@@ -100,7 +100,7 @@ class TreasuryService
 
             if (! empty($data['auto_post'])) {
                 $doc = $this->postToGl($doc->treasury_document_id, [
-                    'ledger_id'         => $data['ledger_id'],
+                    'ledger_id'         => $data['ledger_id'] ?? null,
                     'offset_account_id' => $data['offset_account_id'],
                 ]);
             }
@@ -110,7 +110,7 @@ class TreasuryService
     }
 
     /**
-     * @param  array{ledger_id: string, offset_account_id: string}  $opts
+     * @param  array{ledger_id?: string|null, offset_account_id: string}  $opts
      */
     public function postToGl(string $treasuryDocumentId, array $opts): TreasuryDocument
     {
@@ -124,6 +124,19 @@ class TreasuryService
         $amount = (float) $doc->amount;
         $cashGl = (string) $cash->gl_account_id;
         $offset = (string) $opts['offset_account_id'];
+
+        $ledgerId = (string) ($opts['ledger_id'] ?? '');
+        if ($ledgerId === '') {
+            $ledger = Ledger::query()
+                ->where('company_id', $doc->company_id)
+                ->where('is_leading', true)
+                ->first()
+                ?? Ledger::query()->where('company_id', $doc->company_id)->first();
+            if (! $ledger) {
+                throw new DomainException('دفتر کل پیش‌فرض برای شرکت یافت نشد.', 'fin.treasury.no_ledger');
+            }
+            $opts['ledger_id'] = (string) $ledger->ledger_id;
+        }
 
         if ($doc->document_type === TreasuryDocument::TYPE_RECEIPT) {
             $lines = [
