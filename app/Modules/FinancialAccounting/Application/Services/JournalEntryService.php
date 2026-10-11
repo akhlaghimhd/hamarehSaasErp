@@ -11,76 +11,74 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\DocumentSequence;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalEntry;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalItem;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Ledger;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P0-12..14 — Draft CRUD, post (balanced + numbered), reverse.
- * Product law: reverse is one-shot; a reversing entry cannot itself be reversed.
- * Draft numbers use DRAFT- series; official JE- only on post.
- * Draft delete: soft-delete; only creator or tenant owner.
+ * FIN-P0-12..14 + ADR-FIN-002 (FIN-CSN-F0-05/06/07)
+ * Dual series: DR-{FY}-{SEQ6} on draft, JE-{FY}-{SEQ6} on post (per company).
+ * Access: FinanceCompanyScope on every mutation/read/list.
  */
 class JournalEntryService
 {
     public function __construct(
         protected FiscalPeriodControlService $periodControl = new FiscalPeriodControlService(),
-        protected FinanceEventPublisher $events = new FinanceEventPublisher()
+        protected FinanceEventPublisher $events = new FinanceEventPublisher(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
     /**
      * @param  array{
-     *   ledger_id: string,
+     *   ledger_id?: string,
      *   company_id: string,
      *   period_id: string,
      *   document_date: string,
      *   description?: string|null,
      *   source_document_type?: string|null,
      *   source_document_id?: string|null,
-     *   lines: list<array{
-     *     account_id: string,
-     *     debit_amount?: float|string,
-     *     credit_amount?: float|string,
-     *     description?: string|null,
-     *     cost_center_id?: string|null,
-     *     business_unit_id?: string|null,
-     *     currency_id?: string|null,
-     *     exchange_rate?: float|string,
-     *     source_currency_amount?: float|string
-     *   }>
+     *   lines: list<array<string, mixed>>
      * }  $payload
      */
     public function createDraft(array $payload, ?string $actorId = null): JournalEntry
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($payload['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
 
         if (empty($payload['ledger_id'])) {
-            $payload['ledger_id'] = $this->resolveLeadingLedgerId((string) ($payload['company_id'] ?? ''));
+            $payload['ledger_id'] = $this->resolveLeadingLedgerId($companyId);
         }
-        $this->assertLedger($payload['ledger_id'] ?? '');
+        $this->assertLedger((string) $payload['ledger_id']);
 
-        return DB::transaction(function () use ($tenantId, $payload, $actorId) {
-            $draftNumber = $this->nextSequenceNumber(
-                (string) $payload['company_id'],
+        return DB::transaction(function () use ($tenantId, $payload, $actorId, $companyId) {
+            $fy = $this->resolveFiscalYearKey(
                 (string) $payload['period_id'],
-                'JOURNAL_DRAFT',
-                'DRAFT'
+                (string) ($payload['document_date'] ?? '')
+            );
+            $draftNumber = $this->nextSequenceNumber(
+                $companyId,
+                $fy,
+                'JOURNAL_DR',
+                'DR'
             );
 
             $entry = JournalEntry::create([
-                'journal_entry_id'      => (string) Str::uuid(),
-                'tenant_id'             => $tenantId,
-                'ledger_id'             => $payload['ledger_id'],
-                'company_id'            => $payload['company_id'],
-                'period_id'             => $payload['period_id'],
-                'document_date'         => $payload['document_date'],
-                'status'                => JournalEntry::STATUS_DRAFT,
-                'entry_number'          => $draftNumber,
-                'description'           => $payload['description'] ?? null,
-                'source_document_type'  => $payload['source_document_type'] ?? null,
-                'source_document_id'    => $payload['source_document_id'] ?? null,
-                'created_by'            => $actorId,
-                'row_version'           => 1,
+                'journal_entry_id'     => (string) Str::uuid(),
+                'tenant_id'            => $tenantId,
+                'ledger_id'            => $payload['ledger_id'],
+                'company_id'           => $companyId,
+                'period_id'            => $payload['period_id'],
+                'document_date'        => $payload['document_date'],
+                'status'               => JournalEntry::STATUS_DRAFT,
+                'draft_number'         => $draftNumber,
+                'entry_number'         => $draftNumber,
+                'description'          => $payload['description'] ?? null,
+                'source_document_type' => $payload['source_document_type'] ?? null,
+                'source_document_id'   => $payload['source_document_id'] ?? null,
+                'created_by'           => $actorId,
+                'row_version'          => 1,
             ]);
 
             $this->replaceLines($entry, $payload['lines'] ?? [], $tenantId);
@@ -162,6 +160,7 @@ class JournalEntryService
             throw new DomainException('این سند در سطل حذف نیست.', 'fin.journal.not_trashed');
         }
 
+        $this->companyScope->assertCanAccessCompany((string) $entry->company_id);
         $this->assertCanMutateDraft($entry, $actorId);
 
         $entry->restore();
@@ -179,7 +178,38 @@ class JournalEntryService
             throw new DomainException('سند یافت نشد.', 'fin.journal.not_found');
         }
 
+        $this->companyScope->assertCanAccessCompany((string) $entry->company_id);
+
         return $entry;
+    }
+
+    /**
+     * Scope-aware list (FIN-CSN-F0-07).
+     *
+     * @param  array{company_id?: string, period_id?: string, status?: string, deleted?: bool, limit?: int}  $filters
+     * @return Collection<int, JournalEntry>
+     */
+    public function list(array $filters = []): Collection
+    {
+        $q = JournalEntry::query()->with('items')->orderByDesc('created_at');
+
+        if (! empty($filters['deleted'])) {
+            $q->onlyTrashed();
+        }
+
+        $companyFilter = isset($filters['company_id']) ? (string) $filters['company_id'] : null;
+        $this->companyScope->applyToQuery($q, $companyFilter !== '' ? $companyFilter : null);
+
+        if (! empty($filters['period_id'])) {
+            $q->where('period_id', $filters['period_id']);
+        }
+        if (! empty($filters['status'])) {
+            $q->where('status', $filters['status']);
+        }
+
+        $limit = min(100, max(1, (int) ($filters['limit'] ?? 100)));
+
+        return $q->limit($limit)->get();
     }
 
     public function post(string $journalEntryId, ?string $actorId = null): JournalEntry
@@ -237,12 +267,20 @@ class JournalEntryService
         }
 
         return DB::transaction(function () use ($entry, $actorId) {
+            $fy = $this->resolveFiscalYearKey(
+                (string) $entry->period_id,
+                (string) $entry->document_date
+            );
             $number = $this->nextSequenceNumber(
                 (string) $entry->company_id,
-                (string) $entry->period_id,
-                'JOURNAL',
+                $fy,
+                'JOURNAL_JE',
                 'JE'
             );
+
+            if (empty($entry->draft_number) && ! empty($entry->entry_number)) {
+                $entry->draft_number = $entry->entry_number;
+            }
 
             $entry->entry_number = $number;
             $entry->status = JournalEntry::STATUS_POSTED;
@@ -261,6 +299,7 @@ class JournalEntryService
                     'company_id'       => (string) $entry->company_id,
                     'period_id'        => (string) $entry->period_id,
                     'entry_number'     => (string) $entry->entry_number,
+                    'draft_number'     => (string) ($entry->draft_number ?? ''),
                 ]
             );
 
@@ -301,26 +340,31 @@ class JournalEntryService
         $items = JournalItem::where('journal_entry_id', $original->journal_entry_id)->get();
 
         return DB::transaction(function () use ($original, $items, $actorId, $description) {
+            $fy = $this->resolveFiscalYearKey(
+                (string) $original->period_id,
+                (string) $original->document_date
+            );
             $draftNumber = $this->nextSequenceNumber(
                 (string) $original->company_id,
-                (string) $original->period_id,
-                'JOURNAL_DRAFT',
-                'DRAFT'
+                $fy,
+                'JOURNAL_DR',
+                'DR'
             );
 
             $reversal = JournalEntry::create([
-                'journal_entry_id'     => (string) Str::uuid(),
-                'tenant_id'            => $original->tenant_id,
-                'ledger_id'            => $original->ledger_id,
-                'company_id'           => $original->company_id,
-                'period_id'            => $original->period_id,
-                'document_date'        => $original->document_date,
-                'status'               => JournalEntry::STATUS_DRAFT,
-                'entry_number'         => $draftNumber,
-                'description'          => $description ?? ('برگشت سند '.$original->entry_number),
-                'reverses_entry_id'    => $original->journal_entry_id,
-                'created_by'           => $actorId,
-                'row_version'          => 1,
+                'journal_entry_id'  => (string) Str::uuid(),
+                'tenant_id'         => $original->tenant_id,
+                'ledger_id'         => $original->ledger_id,
+                'company_id'        => $original->company_id,
+                'period_id'         => $original->period_id,
+                'document_date'     => $original->document_date,
+                'status'            => JournalEntry::STATUS_DRAFT,
+                'draft_number'      => $draftNumber,
+                'entry_number'      => $draftNumber,
+                'description'       => $description ?? ('برگشت سند '.$original->entry_number),
+                'reverses_entry_id' => $original->journal_entry_id,
+                'created_by'        => $actorId,
+                'row_version'       => 1,
             ]);
 
             $lines = [];
@@ -350,9 +394,9 @@ class JournalEntryService
                 (string) $original->journal_entry_id,
                 FinanceEventPublisher::JOURNAL_REVERSED,
                 [
-                    'journal_entry_id'   => (string) $original->journal_entry_id,
-                    'reversal_entry_id'  => (string) $posted->journal_entry_id,
-                    'company_id'         => (string) $original->company_id,
+                    'journal_entry_id'  => (string) $original->journal_entry_id,
+                    'reversal_entry_id' => (string) $posted->journal_entry_id,
+                    'company_id'        => (string) $original->company_id,
                 ]
             );
 
@@ -362,6 +406,8 @@ class JournalEntryService
 
     protected function assertCanMutateDraft(JournalEntry $entry, ?string $actorId): void
     {
+        $this->companyScope->assertCanAccessCompany((string) $entry->company_id);
+
         if ($actorId === null || $actorId === '') {
             throw new DomainException(
                 'شناسه کاربر برای این عملیات لازم است.',
@@ -434,14 +480,18 @@ class JournalEntryService
         }
     }
 
+    /**
+     * ADR-FIN-002 N02: KIND-FY-SEQ6 e.g. DR-2026-000001 / JE-2026-000001.
+     * FY key is calendar year of document_date until company fiscal calendar is wired.
+     */
     protected function nextSequenceNumber(
         string $companyId,
-        string $periodId,
+        string $fiscalYearKey,
         string $sequenceKey,
         string $defaultPrefix
     ): string {
         $tenantId = $this->requireTenantId();
-        $yearKey = substr(str_replace('-', '', $periodId), 0, 8) ?: date('Y');
+        $yearKey = $fiscalYearKey !== '' ? $fiscalYearKey : date('Y');
 
         $seq = DocumentSequence::query()
             ->where('company_id', $companyId)
@@ -476,7 +526,22 @@ class JournalEntryService
         $prefix = $seq->prefix ?: $defaultPrefix;
         $pad = max(1, (int) $seq->pad_length);
 
-        return $prefix.'-'.str_pad((string) $n, $pad, '0', STR_PAD_LEFT);
+        return $prefix.'-'.$yearKey.'-'.str_pad((string) $n, $pad, '0', STR_PAD_LEFT);
+    }
+
+    protected function resolveFiscalYearKey(string $periodId, string $documentDate): string
+    {
+        if ($documentDate !== '') {
+            $ts = strtotime(substr($documentDate, 0, 10));
+            if ($ts !== false) {
+                return date('Y', $ts);
+            }
+        }
+
+        // Fallback: avoid using raw UUID; use current year
+        unset($periodId);
+
+        return date('Y');
     }
 
     protected function resolveLeadingLedgerId(string $companyId): string
