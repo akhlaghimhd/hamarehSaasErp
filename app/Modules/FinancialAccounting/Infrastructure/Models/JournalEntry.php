@@ -16,7 +16,9 @@ class JournalEntry extends Model
     use HasUuids, SoftDeletes, TenantScoped;
 
     public const STATUS_DRAFT = 'DRAFT';
+
     public const STATUS_POSTED = 'POSTED';
+
     public const STATUS_REVERSED = 'REVERSED';
 
     protected $table = 'fin_acc_journal_entries';
@@ -33,6 +35,7 @@ class JournalEntry extends Model
         'company_id',
         'period_id',
         'entry_number',
+        'draft_number',
         'document_date',
         'posting_date',
         'status',
@@ -84,5 +87,15 @@ class JournalEntry extends Model
     public function isPosted(): bool
     {
         return $this->status === self::STATUS_POSTED;
+    }
+
+    /** Display number: JE for posted/reversed, DR for draft (ADR-FIN-002 N10). */
+    public function displayNumber(): ?string
+    {
+        if ($this->status === self::STATUS_DRAFT) {
+            return $this->draft_number ?? $this->entry_number;
+        }
+
+        return $this->entry_number ?? $this->draft_number;
     }
 }
