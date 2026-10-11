@@ -47,6 +47,8 @@ Route::middleware([
         ->middleware('permission:finance.journal.update');
     Route::delete('/journals/{journal}', [JournalEntryController::class, 'destroy'])
         ->middleware('permission:finance.journal.delete');
+    Route::post('/journals/{journal}/restore', [JournalEntryController::class, 'restore'])
+        ->middleware('permission:finance.journal.delete');
     Route::post('/journals/{journal}/post', [JournalEntryController::class, 'post'])
         ->middleware('permission:finance.journal.post');
     Route::post('/journals/{journal}/reverse', [JournalEntryController::class, 'reverse'])
