@@ -6,7 +6,6 @@ namespace App\Modules\FinancialAccounting\Controllers;
 
 use App\Base\Controller;
 use App\Modules\FinancialAccounting\Application\Services\JournalEntryService;
-use App\Modules\FinancialAccounting\Infrastructure\Models\JournalEntry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,27 +18,17 @@ class JournalEntryController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $q = JournalEntry::query()->with('items')->orderByDesc('created_at');
-
-        if ($request->boolean('deleted')) {
-            $q->onlyTrashed();
-        }
-
-        if ($request->filled('company_id')) {
-            $q->where('company_id', $request->string('company_id'));
-        }
-        if ($request->filled('period_id')) {
-            $q->where('period_id', $request->string('period_id'));
-        }
-        if ($request->filled('status')) {
-            $q->where('status', $request->string('status'));
-        }
-
-        $limit = min(100, max(1, (int) $request->input('limit', 100)));
+        $rows = $this->service->list([
+            'deleted'    => $request->boolean('deleted'),
+            'company_id' => $request->filled('company_id') ? (string) $request->string('company_id') : null,
+            'period_id'  => $request->filled('period_id') ? (string) $request->string('period_id') : null,
+            'status'     => $request->filled('status') ? (string) $request->string('status') : null,
+            'limit'      => (int) $request->input('limit', 100),
+        ]);
 
         return response()->json([
             'status' => 'success',
-            'data'   => $q->limit($limit)->get(),
+            'data'   => $rows,
         ]);
     }
 
@@ -54,18 +43,18 @@ class JournalEntryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'ledger_id'            => 'nullable|uuid',
-            'company_id'           => 'required|uuid',
-            'period_id'            => 'required|uuid',
-            'document_date'        => 'required|date',
-            'description'          => 'nullable|string|max:500',
-            'source_document_type' => 'nullable|string|max:100',
-            'source_document_id'   => 'nullable|uuid',
-            'lines'                => 'required|array|min:1',
-            'lines.*.account_id'   => 'required|uuid',
-            'lines.*.debit_amount' => 'nullable|numeric|min:0',
-            'lines.*.credit_amount'=> 'nullable|numeric|min:0',
-            'lines.*.description'  => 'nullable|string|max:500',
+            'ledger_id'              => 'nullable|uuid',
+            'company_id'             => 'required|uuid',
+            'period_id'              => 'required|uuid',
+            'document_date'          => 'required|date',
+            'description'            => 'nullable|string|max:500',
+            'source_document_type'   => 'nullable|string|max:100',
+            'source_document_id'     => 'nullable|uuid',
+            'lines'                  => 'required|array|min:1',
+            'lines.*.account_id'     => 'required|uuid',
+            'lines.*.debit_amount'   => 'nullable|numeric|min:0',
+            'lines.*.credit_amount'  => 'nullable|numeric|min:0',
+            'lines.*.description'    => 'nullable|string|max:500',
             'lines.*.cost_center_id' => 'nullable|uuid',
             'lines.*.business_unit_id' => 'nullable|uuid',
         ]);
@@ -83,15 +72,15 @@ class JournalEntryController extends Controller
     public function update(string $journal, Request $request): JsonResponse
     {
         $data = $request->validate([
-            'document_date' => 'sometimes|date',
-            'description'   => 'nullable|string|max:500',
-            'period_id'     => 'sometimes|uuid',
-            'lines'         => 'sometimes|array|min:1',
-            'lines.*.account_id' => 'required_with:lines|uuid',
-            'lines.*.debit_amount' => 'nullable|numeric|min:0',
-            'lines.*.credit_amount'=> 'nullable|numeric|min:0',
-            'lines.*.description'  => 'nullable|string|max:500',
-            'lines.*.cost_center_id' => 'nullable|uuid',
+            'document_date'            => 'sometimes|date',
+            'description'              => 'nullable|string|max:500',
+            'period_id'                => 'sometimes|uuid',
+            'lines'                    => 'sometimes|array|min:1',
+            'lines.*.account_id'       => 'required_with:lines|uuid',
+            'lines.*.debit_amount'     => 'nullable|numeric|min:0',
+            'lines.*.credit_amount'    => 'nullable|numeric|min:0',
+            'lines.*.description'      => 'nullable|string|max:500',
+            'lines.*.cost_center_id'   => 'nullable|uuid',
             'lines.*.business_unit_id' => 'nullable|uuid',
         ]);
 
