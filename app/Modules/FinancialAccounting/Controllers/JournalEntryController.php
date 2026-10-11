@@ -21,6 +21,10 @@ class JournalEntryController extends Controller
     {
         $q = JournalEntry::query()->with('items')->orderByDesc('created_at');
 
+        if ($request->boolean('deleted')) {
+            $q->onlyTrashed();
+        }
+
         if ($request->filled('company_id')) {
             $q->where('company_id', $request->string('company_id'));
         }
@@ -31,9 +35,11 @@ class JournalEntryController extends Controller
             $q->where('status', $request->string('status'));
         }
 
+        $limit = min(100, max(1, (int) $request->input('limit', 100)));
+
         return response()->json([
             'status' => 'success',
-            'data'   => $q->limit(200)->get(),
+            'data'   => $q->limit($limit)->get(),
         ]);
     }
 
@@ -64,7 +70,8 @@ class JournalEntryController extends Controller
             'lines.*.business_unit_id' => 'nullable|uuid',
         ]);
 
-        $row = $this->service->createDraft($data);
+        $actorId = auth()->id() ? (string) auth()->id() : null;
+        $row = $this->service->createDraft($data, $actorId);
 
         return response()->json([
             'status'  => 'success',
@@ -88,7 +95,8 @@ class JournalEntryController extends Controller
             'lines.*.business_unit_id' => 'nullable|uuid',
         ]);
 
-        $row = $this->service->updateDraft($journal, $data);
+        $actorId = auth()->id() ? (string) auth()->id() : null;
+        $row = $this->service->updateDraft($journal, $data, $actorId);
 
         return response()->json([
             'status'  => 'success',
@@ -99,11 +107,24 @@ class JournalEntryController extends Controller
 
     public function destroy(string $journal): JsonResponse
     {
-        $this->service->deleteDraft($journal);
+        $actorId = auth()->id() ? (string) auth()->id() : null;
+        $this->service->deleteDraft($journal, $actorId);
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'پیش‌نویس حذف شد.',
+            'message' => 'پیش‌نویس به سطل حذف منتقل شد.',
+        ]);
+    }
+
+    public function restore(string $journal): JsonResponse
+    {
+        $actorId = auth()->id() ? (string) auth()->id() : null;
+        $row = $this->service->restoreDraft($journal, $actorId);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'پیش‌نویس از سطل حذف بازیابی شد.',
+            'data'    => $row,
         ]);
     }
 
