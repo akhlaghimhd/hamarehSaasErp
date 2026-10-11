@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
  * FIN-P0-12..14 — Draft CRUD, post (balanced + numbered), reverse.
  * FIN-P3-06 — outbox finance.journal.posted.v1 / reversed.v1 on post/reverse.
  * FIN-P4-04 — required analytical dimensions on post when account flagged.
+ * Product law: reverse is one-shot; a reversing entry cannot itself be reversed.
  */
 class JournalEntryService
 {
@@ -241,6 +242,13 @@ class JournalEntryService
             throw new DomainException(
                 'این سند قبلاً برگشت خورده است.',
                 'fin.journal.already_reversed'
+            );
+        }
+
+        if (! empty($original->reverses_entry_id)) {
+            throw new DomainException(
+                'سند برگشت قابل برگشت مجدد نیست. برای اصلاح، سند جدید ثبت کنید.',
+                'fin.journal.cannot_reverse_reversal'
             );
         }
 
