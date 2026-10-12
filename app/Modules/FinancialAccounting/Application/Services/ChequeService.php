@@ -7,14 +7,45 @@ namespace App\Modules\FinancialAccounting\Application\Services;
 use App\Base\Context\TenantContext;
 use App\Base\Exceptions\DomainException;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Cheque;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-/** FIN-P1-07 — Cheque lifecycle transitions. */
+/** FIN-P1-07 + ADR-FIN-002 — Cheque lifecycle gated by company Scope. */
 class ChequeService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
+    /**
+     * @param  array{company_id?: string|null, status?: string|null, limit?: int}  $filters
+     * @return Collection<int, Cheque>
+     */
+    public function list(array $filters = []): Collection
+    {
+        $q = Cheque::query()->orderByDesc('due_date');
+
+        $companyFilter = isset($filters['company_id']) && $filters['company_id'] !== ''
+            ? (string) $filters['company_id']
+            : null;
+        $this->companyScope->applyToQuery($q, $companyFilter);
+
+        if (! empty($filters['status'])) {
+            $q->where('status', (string) $filters['status']);
+        }
+
+        $limit = min(200, max(1, (int) ($filters['limit'] ?? 200)));
+
+        return $q->limit($limit)->get();
+    }
+
     public function create(array $data): Cheque
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $direction = (string) ($data['direction'] ?? '');
         if (! in_array($direction, [Cheque::DIR_IN, Cheque::DIR_OUT], true)) {
             throw new DomainException('جهت چک نامعتبر است.', 'fin.cheque.direction');
@@ -27,7 +58,7 @@ class ChequeService
         return Cheque::create([
             'cheque_id'       => (string) Str::uuid(),
             'tenant_id'       => $tenantId,
-            'company_id'      => $data['company_id'],
+            'company_id'      => $companyId,
             'direction'       => $direction,
             'cheque_number'   => (string) $data['cheque_number'],
             'bank_name'       => $data['bank_name'] ?? null,
@@ -47,6 +78,8 @@ class ChequeService
     public function transition(string $chequeId, string $toStatus): Cheque
     {
         $cheque = Cheque::where('cheque_id', $chequeId)->firstOrFail();
+        $this->companyScope->assertCanAccessCompany((string) $cheque->company_id);
+
         $from = (string) $cheque->status;
         $allowed = Cheque::TRANSITIONS[$from] ?? [];
 
