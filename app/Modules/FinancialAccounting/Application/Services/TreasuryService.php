@@ -13,19 +13,23 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P1-06 — Receipt/payment documents; optional GL draft+post via JournalEntryService.
+ * FIN-P1-06 + ADR-FIN-002 — treasury gated by company Scope.
  */
 class TreasuryService
 {
     public function __construct(
         protected JournalEntryService $journals = new JournalEntryService(),
-        protected OpenItemService $openItems = new OpenItemService()
+        protected OpenItemService $openItems = new OpenItemService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
     public function createCashAccount(array $data): CashAccount
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $code = trim((string) ($data['code'] ?? ''));
         if ($code === '') {
             throw new DomainException('کد حساب نقدی الزامی است.', 'fin.cash.code_required');
@@ -34,7 +38,7 @@ class TreasuryService
         return CashAccount::create([
             'cash_account_id' => (string) Str::uuid(),
             'tenant_id'       => $tenantId,
-            'company_id'      => $data['company_id'],
+            'company_id'      => $companyId,
             'bank_account_id' => $data['bank_account_id'] ?? null,
             'gl_account_id'   => $data['gl_account_id'],
             'code'            => $code,
@@ -65,6 +69,9 @@ class TreasuryService
     public function createDocument(array $data): TreasuryDocument
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $type = (string) ($data['document_type'] ?? '');
         if (! in_array($type, [TreasuryDocument::TYPE_RECEIPT, TreasuryDocument::TYPE_PAYMENT], true)) {
             throw new DomainException('نوع سند خزانه نامعتبر است.', 'fin.treasury.invalid_type');
@@ -80,11 +87,11 @@ class TreasuryService
             throw new DomainException('حساب نقدی یافت نشد.', 'fin.treasury.cash_missing');
         }
 
-        return DB::transaction(function () use ($tenantId, $data, $type, $amount, $cash) {
+        return DB::transaction(function () use ($tenantId, $data, $type, $amount, $cash, $companyId) {
             $doc = TreasuryDocument::create([
                 'treasury_document_id'      => (string) Str::uuid(),
                 'tenant_id'                 => $tenantId,
-                'company_id'                => $data['company_id'],
+                'company_id'                => $companyId,
                 'period_id'                 => $data['period_id'],
                 'cash_account_id'           => $cash->cash_account_id,
                 'document_type'             => $type,
@@ -115,6 +122,7 @@ class TreasuryService
     public function postToGl(string $treasuryDocumentId, array $opts): TreasuryDocument
     {
         $doc = TreasuryDocument::where('treasury_document_id', $treasuryDocumentId)->firstOrFail();
+        $this->companyScope->assertCanAccessCompany((string) $doc->company_id);
 
         if (! $doc->isDraft()) {
             throw new DomainException('فقط پیش‌نویس خزانه قابل ثبت در دفتر است.', 'fin.treasury.not_draft');
