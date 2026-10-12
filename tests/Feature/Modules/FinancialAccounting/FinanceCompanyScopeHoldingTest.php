@@ -8,10 +8,12 @@ use App\Base\Context\ScopeContext;
 use App\Base\Context\TenantContext;
 use App\Base\Exceptions\DomainException;
 use App\Modules\FinancialAccounting\Application\Services\ChartOfAccountsService;
+use App\Modules\FinancialAccounting\Application\Services\FinanceCompanyScope;
 use App\Modules\FinancialAccounting\Application\Services\JournalEntryService;
 use App\Modules\FinancialAccounting\Application\Services\TrialBalanceService;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Account;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Ledger;
+use App\Modules\Organization\Models\Company;
 use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
@@ -19,8 +21,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * ADR-FIN-002 FIN-CSN-F3 — FinanceCompanyScope: child COMPANY scope vs sibling / group-wide.
- * Soft path (no COMPANY scopes) remains group-wide (SME).
+ * ADR-FIN-002 FIN-CSN-F3 / D7 — Scope matrix + SME primary-only soft path.
  */
 class FinanceCompanyScopeHoldingTest extends TestCase
 {
@@ -51,6 +52,31 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $this->companyA = (string) Str::uuid();
         $this->companyB = (string) Str::uuid();
         $this->periodId = (string) Str::uuid();
+
+        Company::withoutGlobalScopes()->create([
+            'company_id'  => $this->companyA,
+            'tenant_id'   => $this->tenant->tenant_id,
+            'code'        => 'CO-A',
+            'name'        => 'Company A',
+            'legal_name'  => 'Company A',
+            'is_active'   => true,
+            'is_primary'  => true,
+            'entity_kind' => Company::ENTITY_KIND_OPERATING,
+            'status'      => 1,
+            'row_version' => 1,
+        ]);
+        Company::withoutGlobalScopes()->create([
+            'company_id'  => $this->companyB,
+            'tenant_id'   => $this->tenant->tenant_id,
+            'code'        => 'CO-B',
+            'name'        => 'Company B',
+            'legal_name'  => 'Company B',
+            'is_active'   => true,
+            'is_primary'  => false,
+            'entity_kind' => Company::ENTITY_KIND_OPERATING,
+            'status'      => 1,
+            'row_version' => 1,
+        ]);
 
         $this->ledgerA = Ledger::create([
             'ledger_id'   => (string) Str::uuid(),
@@ -116,11 +142,24 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         ]);
     }
 
-    protected function actAsGroupWide(): void
+    /** Group-wide = tenant owner (ADR-FIN-002 parent/owner), not empty-scope SME. */
+    protected function actAsOwnerGroupWide(): void
+    {
+        Context::add('security_context', [
+            'is_owner'  => true,
+            'tenant_id' => $this->tenant->tenant_id,
+        ]);
+        ScopeContext::resetInstance();
+        ScopeContext::getInstance()->setScopes([]);
+    }
+
+    /** SME: authenticated, no COMPANY scopes → primary only. */
+    protected function actAsSmeNoCompanyScope(): void
     {
         Context::add('security_context', [
             'is_owner'  => false,
             'tenant_id' => $this->tenant->tenant_id,
+            'user_id'   => (string) Str::uuid(),
         ]);
         ScopeContext::resetInstance();
         ScopeContext::getInstance()->setScopes([]);
@@ -166,7 +205,7 @@ class FinanceCompanyScopeHoldingTest extends TestCase
     #[Test]
     public function company_scoped_list_excludes_sibling_journals(): void
     {
-        $this->actAsGroupWide();
+        $this->actAsOwnerGroupWide();
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
 
@@ -205,9 +244,9 @@ class FinanceCompanyScopeHoldingTest extends TestCase
     }
 
     #[Test]
-    public function group_wide_actor_can_access_both_companies(): void
+    public function owner_group_wide_can_access_both_companies(): void
     {
-        $this->actAsGroupWide();
+        $this->actAsOwnerGroupWide();
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
 
@@ -233,5 +272,20 @@ class FinanceCompanyScopeHoldingTest extends TestCase
 
         $found = $svc->find((string) $b->journal_entry_id);
         $this->assertSame($this->companyB, $found->company_id);
+    }
+
+    #[Test]
+    public function sme_without_company_scope_only_primary_company(): void
+    {
+        $this->actAsSmeNoCompanyScope();
+        $scope = new FinanceCompanyScope();
+
+        $this->assertFalse($scope->isGroupWide());
+        $this->assertSame([$this->companyA], $scope->allowedCompanyIds());
+
+        $scope->assertCanAccessCompany($this->companyA);
+
+        $this->expectException(DomainException::class);
+        $scope->assertCanAccessCompany($this->companyB);
     }
 }
