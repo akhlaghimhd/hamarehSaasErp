@@ -6,7 +6,6 @@ namespace App\Modules\FinancialAccounting\Controllers;
 
 use App\Base\Controller;
 use App\Modules\FinancialAccounting\Application\Services\ChequeService;
-use App\Modules\FinancialAccounting\Infrastructure\Models\Cheque;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,15 +18,13 @@ class ChequeController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $q = Cheque::query()->orderByDesc('due_date');
-        if ($request->filled('company_id')) {
-            $q->where('company_id', $request->string('company_id'));
-        }
-        if ($request->filled('status')) {
-            $q->where('status', $request->string('status'));
-        }
+        $rows = $this->service->list([
+            'company_id' => $request->filled('company_id') ? (string) $request->string('company_id') : null,
+            'status'     => $request->filled('status') ? (string) $request->string('status') : null,
+            'limit'      => (int) $request->input('limit', 200),
+        ]);
 
-        return response()->json(['status' => 'success', 'data' => $q->limit(200)->get()]);
+        return response()->json(['status' => 'success', 'data' => $rows]);
     }
 
     public function store(Request $request): JsonResponse
