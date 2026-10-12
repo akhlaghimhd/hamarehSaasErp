@@ -7,19 +7,25 @@ namespace App\Modules\FinancialAccounting\Application\Services;
 use App\Modules\FinancialAccounting\Infrastructure\Models\Account;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalEntry;
 use App\Modules\FinancialAccounting\Infrastructure\Models\JournalItem;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P0-15 — Trial balance for company + period (posted only).
+ * FIN-P0-15 + ADR-FIN-002 FIN-CSN-F2-06 — trial balance gated by company Scope.
  */
 class TrialBalanceService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     /**
      * @return list<array{account_id: string, account_code: string, name: string, account_type: int, debit: string, credit: string, balance: string}>
      */
     public function run(string $companyId, string $periodId): array
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $entryIds = JournalEntry::query()
             ->where('company_id', $companyId)
             ->where('period_id', $periodId)
