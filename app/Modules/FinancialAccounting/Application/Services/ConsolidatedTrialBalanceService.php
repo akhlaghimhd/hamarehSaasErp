@@ -13,8 +13,9 @@ use App\Modules\Organization\Models\Company;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P5-04 + ADR-FIN-002 — consolidated TB requires Scope on consolidation root.
- * Descendant walk remains structural; entry visibility still tenant-scoped via models.
+ * FIN-P5-04 + ADR-FIN-002 — consolidated TB:
+ * - assert access to consolidation root
+ * - descendant operating companies ∩ allowedCompanyIds (unless group-wide)
  */
 class ConsolidatedTrialBalanceService
 {
@@ -46,6 +47,17 @@ class ConsolidatedTrialBalanceService
             if ($root->entity_kind === Company::ENTITY_KIND_OPERATING) {
                 $companyIds = [$consolidationCompanyId];
             }
+        }
+
+        // ADR-FIN-002: never include companies outside actor Scope (except group-wide owner).
+        if (! $this->companyScope->isGroupWide()) {
+            $allowed = $this->companyScope->allowedCompanyIds();
+            if ($allowed === []) {
+                return [];
+            }
+            $companyIds = array_values(array_intersect($companyIds, $allowed));
+            // Root may be consolidation-only and not in operating set; still require access already asserted.
+            // If root itself is OPERATING and in tree, intersection already applied.
         }
 
         if ($companyIds === []) {
