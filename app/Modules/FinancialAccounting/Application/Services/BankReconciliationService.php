@@ -11,18 +11,25 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\BankStatementLine;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** FIN-P1-10 — Bank statement + match lines. */
+/** FIN-P1-10 + ADR-FIN-002 FIN-CSN-F2-04 — bank recon gated by company Scope. */
 class BankReconciliationService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     public function createStatement(array $data): BankStatement
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
 
-        return DB::transaction(function () use ($tenantId, $data) {
+        return DB::transaction(function () use ($tenantId, $data, $companyId) {
             $stmt = BankStatement::create([
                 'bank_statement_id' => (string) Str::uuid(),
                 'tenant_id'         => $tenantId,
-                'company_id'        => $data['company_id'],
+                'company_id'        => $companyId,
                 'cash_account_id'   => $data['cash_account_id'],
                 'statement_date'    => $data['statement_date'],
                 'reference'         => $data['reference'] ?? null,
@@ -58,6 +65,11 @@ class BankReconciliationService
         ?string $journalEntryId = null
     ): BankStatementLine {
         $line = BankStatementLine::where('bank_statement_line_id', $lineId)->firstOrFail();
+
+        $stmt = BankStatement::where('bank_statement_id', $line->bank_statement_id)->first();
+        if ($stmt) {
+            $this->companyScope->assertCanAccessCompany((string) $stmt->company_id);
+        }
 
         if ($line->status === BankStatementLine::STATUS_MATCHED) {
             throw new DomainException('سطر قبلاً تطبیق شده است.', 'fin.recon.already_matched');
