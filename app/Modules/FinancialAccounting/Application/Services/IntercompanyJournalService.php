@@ -15,13 +15,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P5-02/03 — Paired IC journal drafts + elimination draft on ELIMINATION entity.
- * Never auto-posts.
+ * FIN-P5-02/03 + ADR-FIN-002 F2-07 — Paired IC drafts require Scope on BOTH companies;
+ * elimination requires Scope on elimination entity. Never auto-posts.
  */
 class IntercompanyJournalService
 {
     public function __construct(
-        protected JournalEntryService $journals = new JournalEntryService()
+        protected JournalEntryService $journals = new JournalEntryService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
@@ -47,6 +48,9 @@ class IntercompanyJournalService
         $fromId = (string) $data['from_company_id'];
         $toId = (string) $data['to_company_id'];
         $amount = round((float) $data['amount'], 4);
+
+        $this->companyScope->assertCanAccessCompany($fromId);
+        $this->companyScope->assertCanAccessCompany($toId);
 
         if ($fromId === $toId) {
             throw new DomainException('شرکت مبدأ و مقصد IC یکسان است.', 'fin.ic.same_company');
@@ -167,9 +171,9 @@ class IntercompanyJournalService
     public function createEliminationDraft(array $data): array
     {
         $elimId = (string) $data['elimination_company_id'];
+        $this->companyScope->assertCanAccessCompany($elimId);
         $tenantId = $this->requireTenantId();
 
-        // Logical read of Org SoT — bypass Eloquent global scopes / model UUID hooks
         $entityKind = DB::table('erp_companies')
             ->where('company_id', $elimId)
             ->where('tenant_id', $tenantId)
@@ -220,10 +224,14 @@ class IntercompanyJournalService
     public function upsertAccountMap(array $data): IcAccountMap
     {
         $tenantId = $this->requireTenantId();
+        $fromId = (string) ($data['from_company_id'] ?? '');
+        $toId = (string) ($data['to_company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($fromId);
+        $this->companyScope->assertCanAccessCompany($toId);
 
         $existing = IcAccountMap::query()
-            ->where('from_company_id', $data['from_company_id'])
-            ->where('to_company_id', $data['to_company_id'])
+            ->where('from_company_id', $fromId)
+            ->where('to_company_id', $toId)
             ->first();
 
         if ($existing) {
@@ -242,8 +250,8 @@ class IntercompanyJournalService
         $row->forceFill([
             'ic_account_map_id'   => (string) Str::uuid(),
             'tenant_id'           => $tenantId,
-            'from_company_id'     => $data['from_company_id'],
-            'to_company_id'       => $data['to_company_id'],
+            'from_company_id'     => $fromId,
+            'to_company_id'       => $toId,
             'due_from_account_id' => $data['due_from_account_id'],
             'due_to_account_id'   => $data['due_to_account_id'],
             'ic_partner_id'       => $data['ic_partner_id'] ?? null,
