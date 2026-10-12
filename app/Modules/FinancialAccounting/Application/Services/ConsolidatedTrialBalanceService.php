@@ -13,16 +13,23 @@ use App\Modules\Organization\Models\Company;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P5-04 — Lean consolidated TB: sum POSTED of OPERATING companies under a root.
- * Reads Company without ScopeScoped (group walk is structural, not user-scope).
+ * FIN-P5-04 + ADR-FIN-002 — consolidated TB requires Scope on consolidation root.
+ * Descendant walk remains structural; entry visibility still tenant-scoped via models.
  */
 class ConsolidatedTrialBalanceService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     /**
      * @return list<array{account_id: string, account_code: string, name: string, account_type: int, debit: string, credit: string, balance: string}>
      */
     public function run(string $consolidationCompanyId, string $periodId): array
     {
+        $this->companyScope->assertCanAccessCompany($consolidationCompanyId);
+
         $tenantId = TenantContext::getInstance()->getTenantId();
 
         $root = Company::withoutGlobalScopes()
