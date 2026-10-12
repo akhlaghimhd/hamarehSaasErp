@@ -12,12 +12,20 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** FIN-P1-08/09 — AR/AP open items, allocate, aging. */
+/** FIN-P1-08/09 + ADR-FIN-002 — AR/AP open items gated by company Scope. */
 class OpenItemService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     public function registerManualInvoice(array $data): OpenItem
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $side = (string) ($data['side'] ?? '');
         if (! in_array($side, [OpenItem::SIDE_AR, OpenItem::SIDE_AP], true)) {
             throw new DomainException('طرف حساب (AR/AP) نامعتبر است.', 'fin.oi.side');
@@ -31,7 +39,7 @@ class OpenItemService
         return OpenItem::create([
             'open_item_id'        => (string) Str::uuid(),
             'tenant_id'           => $tenantId,
-            'company_id'          => $data['company_id'],
+            'company_id'          => $companyId,
             'side'                => $side,
             'document_type'       => $data['document_type'] ?? 'MANUAL_INVOICE',
             'document_number'     => $data['document_number'] ?? null,
@@ -55,6 +63,7 @@ class OpenItemService
     public function allocate(string $openItemId, float $amount, array $meta = []): OpenItem
     {
         $item = OpenItem::where('open_item_id', $openItemId)->firstOrFail();
+        $this->companyScope->assertCanAccessCompany((string) $item->company_id);
 
         if (in_array($item->status, [OpenItem::STATUS_CLOSED, OpenItem::STATUS_VOID], true)) {
             throw new DomainException('آیتم بسته یا باطل است.', 'fin.oi.closed');
@@ -91,12 +100,12 @@ class OpenItemService
     }
 
     /**
-     * Aging buckets: current, 1-30, 31-60, 61-90, 90+.
-     *
      * @return list<array{bucket: string, count: int, amount: string}>
      */
     public function aging(string $companyId, string $side, ?string $asOf = null): array
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $asOfDate = $asOf ? new \DateTimeImmutable($asOf) : new \DateTimeImmutable('today');
 
         $items = OpenItem::query()
@@ -119,7 +128,6 @@ class OpenItemService
                 ? \DateTimeImmutable::createFromMutable($item->due_date->toDateTime())
                 : \DateTimeImmutable::createFromMutable($item->document_date->toDateTime());
             $days = (int) $asOfDate->diff($due)->format('%r%a');
-            // positive days = overdue
             $overdue = $days < 0 ? abs($days) : 0;
 
             $key = match (true) {
@@ -148,6 +156,8 @@ class OpenItemService
 
     public function listOpen(string $companyId, ?string $side = null): Collection
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $q = OpenItem::query()
             ->where('company_id', $companyId)
             ->whereIn('status', [OpenItem::STATUS_OPEN, OpenItem::STATUS_PARTIAL]);
