@@ -16,6 +16,7 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\Ledger;
 use App\Modules\Organization\Models\Company;
 use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -53,30 +54,47 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $this->companyB = (string) Str::uuid();
         $this->periodId = (string) Str::uuid();
 
-        Company::withoutGlobalScopes()->create([
-            'company_id'  => $this->companyA,
-            'tenant_id'   => $this->tenant->tenant_id,
-            'code'        => 'CO-A',
-            'name'        => 'Company A',
-            'legal_name'  => 'Company A',
-            'is_active'   => true,
-            'is_primary'  => true,
-            'entity_kind' => Company::ENTITY_KIND_OPERATING,
-            'status'      => 1,
-            'row_version' => 1,
+        // Insert via query builder so company_id / is_primary are exact (HasUuids can rewrite id).
+        DB::table('erp_companies')->insert([
+            [
+                'company_id'  => $this->companyA,
+                'tenant_id'   => $this->tenant->tenant_id,
+                'code'        => 'CO-A',
+                'name'        => 'Company A',
+                'legal_name'  => 'Company A',
+                'is_active'   => true,
+                'is_primary'  => true,
+                'entity_kind' => Company::ENTITY_KIND_OPERATING,
+                'status'      => 1,
+                'row_version' => 1,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ],
+            [
+                'company_id'  => $this->companyB,
+                'tenant_id'   => $this->tenant->tenant_id,
+                'code'        => 'CO-B',
+                'name'        => 'Company B',
+                'legal_name'  => 'Company B',
+                'is_active'   => true,
+                'is_primary'  => false,
+                'entity_kind' => Company::ENTITY_KIND_OPERATING,
+                'status'      => 1,
+                'row_version' => 1,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ],
         ]);
-        Company::withoutGlobalScopes()->create([
-            'company_id'  => $this->companyB,
-            'tenant_id'   => $this->tenant->tenant_id,
-            'code'        => 'CO-B',
-            'name'        => 'Company B',
-            'legal_name'  => 'Company B',
-            'is_active'   => true,
-            'is_primary'  => false,
-            'entity_kind' => Company::ENTITY_KIND_OPERATING,
-            'status'      => 1,
-            'row_version' => 1,
-        ]);
+
+        // Demote any other primary rows for this tenant (factory side-effects).
+        DB::table('erp_companies')
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('company_id', '!=', $this->companyA)
+            ->update(['is_primary' => false]);
+        DB::table('erp_companies')
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('company_id', $this->companyA)
+            ->update(['is_primary' => true]);
 
         $this->ledgerA = Ledger::create([
             'ledger_id'   => (string) Str::uuid(),
@@ -281,7 +299,17 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $scope = new FinanceCompanyScope();
 
         $this->assertFalse($scope->isGroupWide());
-        $this->assertSame([$this->companyA], $scope->allowedCompanyIds());
+
+        $allowed = $scope->allowedCompanyIds();
+        $this->assertCount(1, $allowed);
+        $this->assertSame($this->companyA, $allowed[0]);
+
+        $primaryInDb = DB::table('erp_companies')
+            ->where('tenant_id', $this->tenant->tenant_id)
+            ->where('is_primary', true)
+            ->whereNull('deleted_at')
+            ->value('company_id');
+        $this->assertSame($this->companyA, (string) $primaryInDb);
 
         $scope->assertCanAccessCompany($this->companyA);
 
