@@ -9,10 +9,15 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\TaxTransaction;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P2-06 / P2-07 — VAT period summary + ledger (tax tx) vs Moodian recon.
+ * FIN-P2-06/07 + ADR-FIN-002 FIN-CSN-F2-05 — tax reports gated by company Scope.
  */
 class TaxReportingService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     /**
      * @return array{
      *   company_id: string,
@@ -24,6 +29,8 @@ class TaxReportingService
      */
     public function vatPeriodSummary(string $companyId, string $from, string $to): array
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $rows = TaxTransaction::query()
             ->where('company_id', $companyId)
             ->whereDate('transaction_date', '>=', $from)
@@ -77,8 +84,6 @@ class TaxReportingService
     }
 
     /**
-     * Compare tax transactions in window vs Moodian submissions for same company.
-     *
      * @return array{
      *   company_id: string,
      *   from: string,
@@ -92,6 +97,8 @@ class TaxReportingService
      */
     public function moodianLedgerRecon(string $companyId, string $from, string $to): array
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $txns = TaxTransaction::query()
             ->where('company_id', $companyId)
             ->whereDate('transaction_date', '>=', $from)
