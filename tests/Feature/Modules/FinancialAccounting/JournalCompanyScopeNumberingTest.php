@@ -16,8 +16,7 @@ use Tests\TestCase;
 
 /**
  * ADR-FIN-002 / FIN-CSN-F0-08 — numbering format and dual series basics.
- * Full sibling/parent Scope matrix is covered when Holding Scope fixtures are available;
- * soft-path (no COMPANY scopes) is the default in this test harness.
+ * DB stores full Jalali year (DR-1405-000001); UI shows 2-digit (DR-05-000001).
  */
 class JournalCompanyScopeNumberingTest extends TestCase
 {
@@ -71,17 +70,40 @@ class JournalCompanyScopeNumberingTest extends TestCase
         ]);
     }
 
+    /** Mirror service Gregorian→Jalali year for assertions. */
+    private function jalaliYearOf(string $ymd): string
+    {
+        $ts = strtotime(substr($ymd, 0, 10));
+        $gy = (int) date('Y', $ts);
+        $gm = (int) date('n', $ts);
+        $gd = (int) date('j', $ts);
+        $g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+        $gy2 = $gm > 2 ? $gy + 1 : $gy;
+        $days = 355666 + (365 * $gy) + intdiv($gy2 + 3, 4) - intdiv($gy2 + 99, 100)
+            + intdiv($gy2 + 399, 400) + $gd + $g_d_m[$gm - 1];
+        $jy = -1595 + (33 * intdiv($days, 12053));
+        $days %= 12053;
+        $jy += 4 * intdiv($days, 1461);
+        $days %= 1461;
+        if ($days > 365) {
+            $jy += intdiv($days - 1, 365);
+        }
+
+        return (string) $jy;
+    }
+
     #[Test]
     public function draft_uses_dr_fy_seq_and_post_assigns_je_keeping_draft_number(): void
     {
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
-        $year = date('Y');
+        $docDate = '2026-06-15';
+        $jy = $this->jalaliYearOf($docDate);
 
         $draft = $svc->createDraft([
             'company_id'    => $this->companyId,
             'period_id'     => $this->periodId,
-            'document_date' => $year.'-06-15',
+            'document_date' => $docDate,
             'description'   => 'CSN draft',
             'lines'         => [
                 ['account_id' => $this->cash->account_id, 'debit_amount' => 100, 'credit_amount' => 0],
@@ -90,13 +112,13 @@ class JournalCompanyScopeNumberingTest extends TestCase
         ], $actor);
 
         $this->assertNotNull($draft->draft_number);
-        $this->assertMatchesRegularExpression('/^DR-'.$year.'-\d{6}$/', (string) $draft->draft_number);
+        $this->assertMatchesRegularExpression('/^DR-'.$jy.'-\\d{6}$/', (string) $draft->draft_number);
         $this->assertSame($draft->draft_number, $draft->entry_number);
 
         $posted = $svc->post((string) $draft->journal_entry_id, $actor);
 
-        $this->assertMatchesRegularExpression('/^JE-'.$year.'-\d{6}$/', (string) $posted->entry_number);
-        $this->assertMatchesRegularExpression('/^DR-'.$year.'-\d{6}$/', (string) $posted->draft_number);
+        $this->assertMatchesRegularExpression('/^JE-'.$jy.'-\\d{6}$/', (string) $posted->entry_number);
+        $this->assertMatchesRegularExpression('/^DR-'.$jy.'-\\d{6}$/', (string) $posted->draft_number);
         $this->assertNotSame($posted->draft_number, $posted->entry_number);
     }
 
@@ -117,7 +139,8 @@ class JournalCompanyScopeNumberingTest extends TestCase
 
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
-        $year = date('Y');
+        $docDate = '2026-06-15';
+        $jy = $this->jalaliYearOf($docDate);
         $lines = function () {
             return [
                 ['account_id' => $this->cash->account_id, 'debit_amount' => 10, 'credit_amount' => 0],
@@ -128,19 +151,19 @@ class JournalCompanyScopeNumberingTest extends TestCase
         $a = $svc->createDraft([
             'company_id'    => $this->companyId,
             'period_id'     => $this->periodId,
-            'document_date' => $year.'-01-01',
+            'document_date' => $docDate,
             'lines'         => $lines(),
         ], $actor);
 
         $b = $svc->createDraft([
             'company_id'    => $companyB,
             'period_id'     => $this->periodId,
-            'document_date' => $year.'-01-01',
+            'document_date' => $docDate,
             'lines'         => $lines(),
         ], $actor);
 
-        $this->assertSame('DR-'.$year.'-000001', $a->draft_number);
-        $this->assertSame('DR-'.$year.'-000001', $b->draft_number);
+        $this->assertSame('DR-'.$jy.'-000001', $a->draft_number);
+        $this->assertSame('DR-'.$jy.'-000001', $b->draft_number);
         $this->assertNotSame($a->company_id, $b->company_id);
     }
 }
