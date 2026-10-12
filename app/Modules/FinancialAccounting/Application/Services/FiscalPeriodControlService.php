@@ -10,12 +10,18 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\PeriodControl;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P0-11 — OPEN / SOFT_CLOSED / HARD_CLOSED controls for posting.
+ * FIN-P0-11 + ADR-FIN-002 FIN-CSN-F2-03 — period controls gated by company Scope.
  */
 class FiscalPeriodControlService
 {
+    public function __construct(
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
+    ) {
+    }
+
     public function getOrCreate(string $companyId, string $periodId): PeriodControl
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
         $tenantId = $this->requireTenantId();
 
         $existing = PeriodControl::query()
