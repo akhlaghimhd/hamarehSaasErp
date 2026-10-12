@@ -15,17 +15,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P4-03 — Fixed assets + depreciation run → journal DRAFT only (never auto-post).
+ * FIN-P4-03 + ADR-FIN-002 — fixed assets gated by company Scope.
  */
 class FixedAssetService
 {
     public function __construct(
-        protected JournalEntryService $journals = new JournalEntryService()
+        protected JournalEntryService $journals = new JournalEntryService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
     public function list(string $companyId): Collection
     {
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         return FixedAsset::query()
             ->where('company_id', $companyId)
             ->orderBy('asset_code')
@@ -39,6 +42,9 @@ class FixedAssetService
     public function create(array $data): FixedAsset
     {
         $tenantId = $this->requireTenantId();
+        $companyId = (string) ($data['company_id'] ?? '');
+        $this->companyScope->assertCanAccessCompany($companyId);
+
         $cost = round((float) ($data['acquisition_cost'] ?? 0), 4);
         $salvage = round((float) ($data['salvage_value'] ?? 0), 4);
         $months = (int) ($data['useful_life_months'] ?? 0);
@@ -50,7 +56,7 @@ class FixedAssetService
         return FixedAsset::create([
             'fixed_asset_id'           => (string) Str::uuid(),
             'tenant_id'                => $tenantId,
-            'company_id'               => $data['company_id'],
+            'company_id'               => $companyId,
             'asset_code'               => trim((string) $data['asset_code']),
             'name'                     => (string) $data['name'],
             'asset_account_id'         => $data['asset_account_id'],
@@ -70,8 +76,6 @@ class FixedAssetService
     }
 
     /**
-     * Run monthly straight-line depreciation for active assets → DRAFT journal.
-     *
      * @return array{run: DepreciationRun, journal_entry_id: string|null}
      */
     public function runDepreciation(
@@ -80,6 +84,7 @@ class FixedAssetService
         string $ledgerId,
         ?string $actorId = null
     ): array {
+        $this->companyScope->assertCanAccessCompany($companyId);
         $tenantId = $this->requireTenantId();
 
         if (! Ledger::where('ledger_id', $ledgerId)->exists()) {
@@ -158,7 +163,6 @@ class FixedAssetService
                 throw new DomainException('مبلغ استهلاک صفر است.', 'fin.fa.zero_depr');
             }
 
-            // Parent row FIRST so FK on lines succeeds
             $run = new DepreciationRun();
             $run->forceFill([
                 'depreciation_run_id' => $runId,
