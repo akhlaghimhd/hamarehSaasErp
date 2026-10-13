@@ -32,6 +32,20 @@ class JournalEntryController extends Controller
         ]);
     }
 
+    /** Badge counts only — no journal rows (list-page perf). */
+    public function summary(Request $request): JsonResponse
+    {
+        $data = $this->service->statusSummary([
+            'company_id' => $request->filled('company_id') ? (string) $request->string('company_id') : null,
+            'period_id'  => $request->filled('period_id') ? (string) $request->string('period_id') : null,
+        ]);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $data,
+        ]);
+    }
+
     public function show(string $journal): JsonResponse
     {
         return response()->json([

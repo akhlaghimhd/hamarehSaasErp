@@ -215,6 +215,42 @@ class JournalEntryService
         return $q->limit($limit)->get();
     }
 
+    /**
+     * Lightweight status/deleted counts for list badges (no row payload).
+     *
+     * @param  array{company_id?: string|null, period_id?: string|null}  $filters
+     * @return array{all: int, DRAFT: int, POSTED: int, REVERSED: int, DELETED: int}
+     */
+    public function statusSummary(array $filters = []): array
+    {
+        $q = JournalEntry::query();
+        $companyFilter = isset($filters['company_id']) ? (string) $filters['company_id'] : null;
+        $this->companyScope->applyToQuery($q, $companyFilter !== '' ? $companyFilter : null);
+
+        if (! empty($filters['period_id'])) {
+            $q->where('period_id', $filters['period_id']);
+        }
+
+        $byStatus = (clone $q)
+            ->selectRaw('status, COUNT(*) as c')
+            ->groupBy('status')
+            ->pluck('c', 'status');
+
+        $deleted = (clone $q)->onlyTrashed()->count();
+
+        $draft = (int) ($byStatus['DRAFT'] ?? 0);
+        $posted = (int) ($byStatus['POSTED'] ?? 0);
+        $reversed = (int) ($byStatus['REVERSED'] ?? 0);
+
+        return [
+            'all' => $draft + $posted + $reversed,
+            'DRAFT' => $draft,
+            'POSTED' => $posted,
+            'REVERSED' => $reversed,
+            'DELETED' => (int) $deleted,
+        ];
+    }
+
     public function post(string $journalEntryId, ?string $actorId = null): JournalEntry
     {
         $entry = $this->find($journalEntryId);

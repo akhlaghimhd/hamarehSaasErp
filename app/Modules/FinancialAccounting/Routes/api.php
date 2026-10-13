@@ -39,6 +39,8 @@ Route::middleware([
 
     Route::get('/journals', [JournalEntryController::class, 'index'])
         ->middleware('permission:finance.journal.view');
+    Route::get('/journals/summary', [JournalEntryController::class, 'summary'])
+        ->middleware('permission:finance.journal.view');
     Route::post('/journals', [JournalEntryController::class, 'store'])
         ->middleware('permission:finance.journal.create');
     Route::get('/journals/{journal}', [JournalEntryController::class, 'show'])
