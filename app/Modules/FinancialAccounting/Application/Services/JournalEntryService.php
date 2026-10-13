@@ -190,7 +190,11 @@ class JournalEntryService
      */
     public function list(array $filters = []): Collection
     {
-        $q = JournalEntry::query()->with('items')->orderByDesc('created_at');
+        // List: aggregate line totals only — avoid N×items payload (FIN list perf).
+        $q = JournalEntry::query()
+            ->withSum('items as items_debit_sum', 'debit_amount')
+            ->withSum('items as items_credit_sum', 'credit_amount')
+            ->orderByDesc('created_at');
 
         if (! empty($filters['deleted'])) {
             $q->onlyTrashed();
