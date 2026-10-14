@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** FIN-P1-08/09 + ADR-FIN-002 — AR/AP open items gated by company Scope. */
+/** FIN-P1-08/09 + ADR-FIN-002 + FIN-HOLD-W1 — AR/AP; write=operate, aging/list=read. */
 class OpenItemService
 {
     public function __construct(
@@ -24,7 +24,7 @@ class OpenItemService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $side = (string) ($data['side'] ?? '');
         if (! in_array($side, [OpenItem::SIDE_AR, OpenItem::SIDE_AP], true)) {
@@ -63,7 +63,7 @@ class OpenItemService
     public function allocate(string $openItemId, float $amount, array $meta = []): OpenItem
     {
         $item = OpenItem::where('open_item_id', $openItemId)->firstOrFail();
-        $this->companyScope->assertCanAccessCompany((string) $item->company_id);
+        $this->companyScope->assertCanOperateCompany((string) $item->company_id);
 
         if (in_array($item->status, [OpenItem::STATUS_CLOSED, OpenItem::STATUS_VOID], true)) {
             throw new DomainException('آیتم بسته یا باطل است.', 'fin.oi.closed');
