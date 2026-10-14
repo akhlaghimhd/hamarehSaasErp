@@ -2,6 +2,7 @@
 
 namespace App\Modules\IdentityCore\Services;
 
+use App\Base\Services\HoldingAccessService;
 use App\Modules\IdentityCore\DTOs\CreateScopeDTO;
 use App\Modules\IdentityCore\DTOs\UpdateScopeDTO;
 use App\Modules\IdentityCore\DTOs\AssignScopeToUserDTO;
@@ -248,6 +249,10 @@ class ScopeService
     {
         $tenantId = $this->getTenantId();
 
+        $holding = app(HoldingAccessService::class);
+        $holding->assertCanManageTenantUser($dto->tenantUserId);
+        $holding->assertCanGrantScopeIds($dto->scopeIds);
+
         $this->assertTenantUserBelongsToTenant($tenantId, $dto->tenantUserId);
 
         foreach ($dto->scopeIds as $scopeId) {
@@ -295,6 +300,10 @@ class ScopeService
     public function unassignScopeFromUser(string $tenantUserId, string $scopeId): void
     {
         $tenantId = $this->getTenantId();
+
+        $holding = app(HoldingAccessService::class);
+        $holding->assertCanManageTenantUser($tenantUserId);
+        $holding->assertCanGrantScopeIds([$scopeId]);
 
         DB::transaction(function () use ($tenantUserId, $scopeId, $tenantId) {
             $row = TenantUserScope::withoutGlobalScopes()
