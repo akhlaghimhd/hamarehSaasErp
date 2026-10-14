@@ -6,6 +6,7 @@ use App\Base\Context\ScopeContext;
 use App\Base\Services\HoldingAccessService;
 use Illuminate\Support\Facades\Context;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 use Tests\TestCase;
 
 class HoldingAccessServiceTest extends TestCase
@@ -17,6 +18,24 @@ class HoldingAccessServiceTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * @param  int  $companyCount
+     */
+    private function serviceWithCompanyCount(int $companyCount): HoldingAccessService
+    {
+        return new class($companyCount) extends HoldingAccessService {
+            public function __construct(private readonly int $forcedCompanyCount)
+            {
+                parent::__construct();
+            }
+
+            protected function tenantActiveCompanyCount(): int
+            {
+                return $this->forcedCompanyCount;
+            }
+        };
+    }
+
     #[Test]
     public function owner_is_group_wide_for_identity_visibility_but_not_operator(): void
     {
@@ -25,34 +44,54 @@ class HoldingAccessServiceTest extends TestCase
             ['scope_id' => 's1', 'scope_type' => 'COMPANY', 'reference_id' => 'c1'],
         ]);
 
-        $svc = new HoldingAccessService();
+        $svc = $this->serviceWithCompanyCount(3);
 
         $this->assertTrue($svc->isTechnicalOwner());
         $this->assertSame(HoldingAccessService::ACTOR_TECHNICAL_OWNER, $svc->resolveActorKind());
-        // Identity list/membership visibility still group-wide for technical owner.
         $this->assertTrue($svc->isGroupWideActor());
-        // IDORG-T01 / FIN-HOLD-L06: owner is NOT silent super-operator on all companies.
         $this->assertFalse($svc->isGroupWideOperator());
         $this->assertFalse($svc->isSoftSmePath());
         $this->assertFalse($svc->isCompanyOperator());
     }
 
     #[Test]
-    public function actor_without_company_scopes_is_soft_sme_group_wide_and_operator(): void
+    public function actor_without_company_scopes_on_single_company_is_soft_sme(): void
     {
         Context::add('security_context', ['is_owner' => false, 'tenant_id' => 't1']);
         ScopeContext::getInstance()->setScopes([
             ['scope_id' => 's1', 'scope_type' => 'BRANCH', 'reference_id' => 'b1'],
         ]);
 
-        $svc = new HoldingAccessService();
+        $svc = $this->serviceWithCompanyCount(1);
 
         $this->assertFalse($svc->isTechnicalOwner());
+        $this->assertTrue($svc->isTenantSingleCompany());
         $this->assertTrue($svc->isSoftSmePath());
         $this->assertSame(HoldingAccessService::ACTOR_SOFT_SME, $svc->resolveActorKind());
         $this->assertTrue($svc->isGroupWideActor());
         $this->assertTrue($svc->isGroupWideOperator());
         $this->assertSame([], $svc->actorCompanyIds());
+    }
+
+    #[Test]
+    public function actor_without_company_scopes_on_multi_company_is_not_group_wide(): void
+    {
+        Context::add('security_context', ['is_owner' => false, 'tenant_id' => 't1']);
+        ScopeContext::getInstance()->setScopes([
+            ['scope_id' => 's1', 'scope_type' => 'BRANCH', 'reference_id' => 'b1'],
+        ]);
+
+        $svc = $this->serviceWithCompanyCount(3);
+
+        $this->assertFalse($svc->isTenantSingleCompany());
+        $this->assertFalse($svc->isSoftSmePath());
+        $this->assertFalse($svc->isGroupWideActor());
+        $this->assertFalse($svc->isGroupWideOperator());
+        $this->assertSame(HoldingAccessService::ACTOR_COMPANY_OPERATOR, $svc->resolveActorKind());
+        $this->assertSame([], $svc->actorCompanyIds());
+
+        $this->expectException(RuntimeException::class);
+        $svc->assertCanManageTenantUser('any-tu-id');
     }
 
     #[Test]
@@ -64,7 +103,7 @@ class HoldingAccessServiceTest extends TestCase
             ['scope_id' => 's2', 'scope_type' => 'COMPANY', 'reference_id' => 'c-b'],
         ]);
 
-        $svc = new HoldingAccessService();
+        $svc = $this->serviceWithCompanyCount(3);
 
         $this->assertFalse($svc->isTechnicalOwner());
         $this->assertTrue($svc->isCompanyOperator());
@@ -82,7 +121,7 @@ class HoldingAccessServiceTest extends TestCase
         Context::add('security_context', ['is_owner' => false, 'tenant_id' => 't1']);
         ScopeContext::getInstance()->setScopes([]);
 
-        $svc = new HoldingAccessService();
+        $svc = $this->serviceWithCompanyCount(1);
 
         $this->assertFalse($svc->isGroupObserver());
     }
