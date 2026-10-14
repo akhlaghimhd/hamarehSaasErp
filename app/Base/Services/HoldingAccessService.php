@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01) — Holding Access Model & Actor Kinds.
+ * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01/G02) — Holding Access Model & Actor Kinds.
  *
  * Actor kinds (IDORG-T01):
  * - TECHNICAL_OWNER  : tenant is_owner flag — technical/admin identity only.
@@ -18,7 +18,10 @@ use RuntimeException;
  * - GROUP_OBSERVER   : explicit read-only group capability (Wave 1 / IDORG-T09).
  *                      Placeholder until observer permission is seeded.
  * - COMPANY_OPERATOR : actor holds one or more COMPANY scopes — write/manage own only.
- * - SOFT_SME         : no COMPANY scopes and not owner — legacy single-company path.
+ * - SOFT_SME         : no COMPANY scopes, not owner, and tenant has ≤1 active company.
+ *
+ * IDORG-T02: empty COMPANY scopes on a multi-company tenant is NOT group-wide.
+ * Soft SME path is only for single-company (or zero-company bootstrap) tenants.
  *
  * isGroupWideActor() remains the Identity list/membership visibility helper
  * (owner + soft SME). Operational modules MUST use isGroupWideOperator() /
@@ -50,8 +53,18 @@ class HoldingAccessService
     }
 
     /**
-     * Soft SME path: no COMPANY scopes assigned.
-     * Valid only as gradual single-company behaviour (IDORG-T02 hardens multi-company).
+     * Active companies in current tenant (non-deleted).
+     * ≤1 ⇒ single-company / SME-eligible; >1 ⇒ multi-company holding.
+     */
+    public function isTenantSingleCompany(): bool
+    {
+        return $this->tenantActiveCompanyCount() <= 1;
+    }
+
+    /**
+     * Soft SME path: no COMPANY scopes, not owner, and tenant is single-company.
+     *
+     * IDORG-T02: on multi-company tenants, empty COMPANY scopes never open group-wide access.
      */
     public function isSoftSmePath(): bool
     {
@@ -59,7 +72,11 @@ class HoldingAccessService
             return false;
         }
 
-        return empty($this->scopeContext->getScopesByType('COMPANY'));
+        if (!empty($this->scopeContext->getScopesByType('COMPANY'))) {
+            return false;
+        }
+
+        return $this->isTenantSingleCompany();
     }
 
     /**
@@ -83,6 +100,9 @@ class HoldingAccessService
 
     /**
      * Resolve primary actor kind for diagnostics and policy branches.
+     *
+     * Actors with no COMPANY scopes on a multi-company tenant fall through to
+     * COMPANY_OPERATOR semantics with empty allowed set (no group power).
      */
     public function resolveActorKind(): string
     {
@@ -98,15 +118,20 @@ class HoldingAccessService
             return self::ACTOR_COMPANY_OPERATOR;
         }
 
-        return self::ACTOR_SOFT_SME;
+        if ($this->isSoftSmePath()) {
+            return self::ACTOR_SOFT_SME;
+        }
+
+        // Multi-company + no COMPANY scopes: constrained empty operator (not soft SME).
+        return self::ACTOR_COMPANY_OPERATOR;
     }
 
     /**
      * Identity membership list/visibility across the tenant.
      *
      * Technical owner may still see all members (tenant admin surface).
-     * Soft SME path keeps current single-company behaviour.
-     * Company operators are constrained to their COMPANY scopes.
+     * Soft SME path keeps single-company behaviour.
+     * Company operators (and multi-company empty-scope actors) are constrained.
      *
      * This is NOT an operational write grant on child company ledgers.
      */
@@ -132,12 +157,10 @@ class HoldingAccessService
      */
     public function isGroupWideOperator(): bool
     {
-        // Technical owner must obtain explicit operate grants (or soft SME path only).
         if ($this->isTechnicalOwner()) {
             return false;
         }
 
-        // Soft SME: no COMPANY scopes → gradual single-company operate path.
         return $this->isSoftSmePath();
     }
 
@@ -207,7 +230,8 @@ class HoldingAccessService
 
         $companyIds = $this->actorCompanyIds();
         if ($companyIds === []) {
-            return;
+            // IDORG-T02: multi-company actor without COMPANY scope has no manage power.
+            throw new RuntimeException('دسترسی به این عضو در محدوده شرکت شما مجاز نیست.');
         }
 
         $tenantId = $this->currentTenantId();
@@ -256,6 +280,28 @@ class HoldingAccessService
             return true;
         } catch (RuntimeException) {
             return false;
+        }
+    }
+
+    /**
+     * Count non-deleted companies for the current tenant.
+     * Overridable in unit tests. Returns 0 when tenant context is missing
+     * (treat as SME-eligible bootstrap / pure unit without DB).
+     */
+    protected function tenantActiveCompanyCount(): int
+    {
+        $tenantId = $this->currentTenantId();
+        if ($tenantId === '') {
+            return 0;
+        }
+
+        try {
+            return (int) DB::table('erp_companies')
+                ->where('tenant_id', $tenantId)
+                ->whereNull('deleted_at')
+                ->count();
+        } catch (\Throwable) {
+            return 0;
         }
     }
 
