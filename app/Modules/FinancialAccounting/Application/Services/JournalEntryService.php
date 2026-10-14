@@ -491,19 +491,30 @@ class JournalEntryService
     {
         $order = 0;
         foreach ($lines as $line) {
+            $debit = (float) ($line['debit_amount'] ?? 0);
+            $credit = (float) ($line['credit_amount'] ?? 0);
+            if ($debit <= 0 && $credit <= 0) {
+                continue;
+            }
+            $lineAmount = $debit > 0 ? $debit : $credit;
+            $sourceAmount = array_key_exists('source_currency_amount', $line) && $line['source_currency_amount'] !== null
+                ? (float) $line['source_currency_amount']
+                : $lineAmount;
+
             JournalItem::create([
                 'journal_item_id'        => (string) Str::uuid(),
                 'tenant_id'              => $tenantId,
                 'journal_entry_id'       => $entry->journal_entry_id,
                 'account_id'             => $line['account_id'],
-                'debit_amount'           => (float) ($line['debit_amount'] ?? 0),
-                'credit_amount'          => (float) ($line['credit_amount'] ?? 0),
+                'debit_amount'           => $debit,
+                'credit_amount'          => $credit,
                 'description'            => $line['description'] ?? null,
                 'cost_center_id'         => $line['cost_center_id'] ?? null,
                 'business_unit_id'       => $line['business_unit_id'] ?? null,
-                'source_currency_amount' => $line['source_currency_amount'] ?? null,
+                'currency_id'            => $line['currency_id'] ?? null,
+                'exchange_rate'          => $line['exchange_rate'] ?? 1,
+                'source_currency_amount' => $sourceAmount,
                 'sort_order'             => $order++,
-                'row_version'            => 1,
             ]);
         }
     }
