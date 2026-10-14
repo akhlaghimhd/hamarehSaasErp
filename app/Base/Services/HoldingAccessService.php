@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01/G02) — Holding Access Model & Actor Kinds.
+ * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01/G02/G03) — Holding Access Model & Actor Kinds.
  *
  * Actor kinds (IDORG-T01):
  * - TECHNICAL_OWNER  : tenant is_owner flag — technical/admin identity only.
@@ -23,8 +23,12 @@ use RuntimeException;
  * IDORG-T02: empty COMPANY scopes on a multi-company tenant is NOT group-wide.
  * Soft SME path is only for single-company (or zero-company bootstrap) tenants.
  *
- * isGroupWideActor() remains the Identity list/membership visibility helper
- * (owner + soft SME). Operational modules MUST use isGroupWideOperator() /
+ * IDORG-T03 / FIN-HOLD-L03 — Identity list/read ≠ mutate:
+ * - List/visibility  → isGroupWideActor()  (owner + soft SME + future observer)
+ * - Mutate members   → isIdentityMutateGroupWide() (owner + soft SME only)
+ *   Group observer must NEVER pass assertCanManage*; company operators use actorCompanyIds.
+ *
+ * Operational modules (Finance, …) MUST use isGroupWideOperator() /
  * assertCanOperateCompany-style helpers and must NOT treat is_owner as operate-all.
  */
 class HoldingAccessService
@@ -127,13 +131,14 @@ class HoldingAccessService
     }
 
     /**
-     * Identity membership list/visibility across the tenant.
+     * Identity membership list/visibility across the tenant (READ).
      *
      * Technical owner may still see all members (tenant admin surface).
      * Soft SME path keeps single-company behaviour.
+     * Future group observer may list (read-only).
      * Company operators (and multi-company empty-scope actors) are constrained.
      *
-     * This is NOT an operational write grant on child company ledgers.
+     * This is NOT a mutate grant and NOT an operational write on child ledgers.
      */
     public function isGroupWideActor(): bool
     {
@@ -149,7 +154,25 @@ class HoldingAccessService
     }
 
     /**
-     * Operational group-wide operate capability.
+     * Identity membership mutate group-wide (WRITE on members).
+     *
+     * IDORG-T03 / FIN-HOLD-L03: group read ≠ group mutate.
+     * - technical_owner: allowed (tenant Identity admin pack — not FIN operate-all).
+     * - soft_sme: allowed on single-company path.
+     * - group_observer: NEVER (read-only).
+     * - company_operator: never group-wide; uses actorCompanyIds match.
+     */
+    public function isIdentityMutateGroupWide(): bool
+    {
+        if ($this->isTechnicalOwner()) {
+            return true;
+        }
+
+        return $this->isSoftSmePath();
+    }
+
+    /**
+     * Operational group-wide operate capability (Finance / ops modules).
      *
      * IDORG-T01 / FIN-HOLD-L03/L06: is_owner is NOT a group-wide operator.
      * Soft SME path remains operate-capable on the implied single-company path.
@@ -192,7 +215,9 @@ class HoldingAccessService
     }
 
     /**
-     * Apply delegated-admin filter to a TenantUser query.
+     * Apply delegated-admin filter to a TenantUser query (LIST / READ).
+     *
+     * Uses isGroupWideActor() so owner + soft SME + future observer can list.
      *
      * @param  Builder<\App\Modules\IdentityCore\Models\TenantUser>  $query
      */
@@ -222,15 +247,22 @@ class HoldingAccessService
         return $this->whereTenantUserInCompanies($query, $tenantId, $companyIds);
     }
 
+    /**
+     * Mutate guard for a tenant membership (update / soft-delete / role assign target).
+     *
+     * IDORG-T03: uses isIdentityMutateGroupWide(), NOT isGroupWideActor().
+     * Group observer can list but cannot manage.
+     */
     public function assertCanManageTenantUser(string $tenantUserId): void
     {
-        if ($this->isGroupWideActor()) {
+        if ($this->isIdentityMutateGroupWide()) {
             return;
         }
 
         $companyIds = $this->actorCompanyIds();
         if ($companyIds === []) {
             // IDORG-T02: multi-company actor without COMPANY scope has no manage power.
+            // IDORG-T03: pure group observer (when enabled) also has no manage power.
             throw new RuntimeException('دسترسی به این عضو در محدوده شرکت شما مجاز نیست.');
         }
 
@@ -249,12 +281,12 @@ class HoldingAccessService
     }
 
     /**
-     * Resolve membership by platform user_id then apply company-scope guard.
+     * Resolve membership by platform user_id then apply company-scope manage guard.
      * Used by role assign (AssignRoleToUserDTO carries user_id, not tenant_user_id).
      */
     public function assertCanManageUserId(string $userId): void
     {
-        if ($this->isGroupWideActor()) {
+        if ($this->isIdentityMutateGroupWide()) {
             return;
         }
 
