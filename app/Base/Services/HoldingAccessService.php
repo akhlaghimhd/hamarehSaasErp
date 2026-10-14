@@ -207,6 +207,20 @@ class HoldingAccessService
         return array_values(array_unique($ids));
     }
 
+    /** IDORG-T15 / G09 */
+    public function actorBranchIds(): array
+    {
+        return array_values(array_unique(array_filter(
+            $this->scopeContext()->getReferenceIdsByType('BRANCH')
+        )));
+    }
+
+    public function isBranchOperator(): bool
+    {
+        return !$this->isTechnicalOwner()
+            && !empty($this->scopeContext()->getScopesByType('BRANCH'));
+    }
+
     /**
      * @param  Builder<\App\Modules\IdentityCore\Models\TenantUser>  $query
      */
@@ -232,8 +246,31 @@ class HoldingAccessService
         }
 
         $companyIds = $this->actorCompanyIds();
+        $branchIds = $this->actorBranchIds();
 
-        return $this->whereTenantUserInCompanies($query, $tenantId, $companyIds);
+        if ($companyIds === [] && $branchIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        if ($branchIds === []) {
+            return $this->whereTenantUserInCompanies($query, $tenantId, $companyIds);
+        }
+
+        if ($companyIds === []) {
+            return $this->whereTenantUserInBranches($query, $tenantId, $branchIds);
+        }
+
+        $query->where(function ($q) use ($tenantId, $companyIds, $branchIds) {
+            $q->where(function ($q2) use ($tenantId, $companyIds) {
+                $this->whereTenantUserInCompanies($q2, $tenantId, $companyIds);
+            })->orWhere(function ($q3) use ($tenantId, $branchIds) {
+                $this->whereTenantUserInBranches($q3, $tenantId, $branchIds);
+            });
+        });
+
+        return $query;
     }
 
     public function assertCanManageTenantUser(string $tenantUserId): void
@@ -369,6 +406,39 @@ class HoldingAccessService
         return $query;
     }
 
+
+    /** IDORG-T15 — members with BRANCH scope in $branchIds */
+    protected function whereTenantUserInBranches(Builder $query, string $tenantId, array $branchIds): Builder
+    {
+        $branchIds = array_values(array_unique(array_filter($branchIds)));
+        if ($branchIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return $query;
+        }
+
+        $query->whereIn('tenant_users.tenant_user_id', function ($sub) use ($tenantId, $branchIds) {
+            $sub->select('tenant_user_scopes.tenant_user_id')
+                ->from('tenant_user_scopes')
+                ->join('tenant_scopes', 'tenant_user_scopes.scope_id', '=', 'tenant_scopes.scope_id')
+                ->where('tenant_user_scopes.tenant_id', $tenantId)
+                ->whereNull('tenant_user_scopes.deleted_at')
+                ->whereNull('tenant_scopes.deleted_at')
+                ->where('tenant_scopes.is_active', true)
+                ->whereRaw('UPPER(tenant_scopes.scope_type) = ?', ['BRANCH'])
+                ->where(function ($w) use ($branchIds) {
+                    $w->whereIn('tenant_scopes.reference_id', $branchIds)
+                        ->orWhereExists(function ($ex) use ($branchIds) {
+                            $ex->selectRaw('1')
+                                ->from('tenant_scope_members')
+                                ->whereColumn('tenant_scope_members.scope_id', 'tenant_scopes.scope_id')
+                                ->whereIn('tenant_scope_members.reference_id', $branchIds);
+                        });
+                });
+        });
+
+        return $query;
+    }
     protected function resolveTenantId(Builder $query): string
     {
         $fromContext = $this->currentTenantId();
