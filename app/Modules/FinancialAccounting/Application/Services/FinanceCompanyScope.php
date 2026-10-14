@@ -12,12 +12,17 @@ use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
 
 /**
- * ADR-FIN-002 / FIN-CSN-F0-01 + D7/A01 — Company Scope for FinancialAccounting.
+ * ADR-FIN-003 FIN-HOLD-W1 — Company Scope for FinancialAccounting.
  *
- * - Tenant owner (is_owner): group-wide (all companies).
- * - COMPANY scopes present: only those company_ids (child / parent multi).
- * - Authenticated actor with zero COMPANY scopes (SME): **primary company only** — not whole tenant.
- * - No security context (CLI / bare unit tests): group-wide so service tests stay practical.
+ * Hard split (FIN-HOLD-L03):
+ * - Read  → assertCanReadCompany / isGroupWideRead / applyToQuery
+ * - Write → assertCanOperateCompany / isGroupWideOperate
+ *
+ * Rules:
+ * - is_owner is NOT group-wide finance operator (FIN-HOLD-L06).
+ * - Group observer may read group-wide; never operate.
+ * - Soft SME (≤1 company, no COMPANY scopes) keeps soft read+operate on primary.
+ * - No security context (CLI / bare unit tests): group-wide read+operate so internal tests stay practical.
  */
 class FinanceCompanyScope
 {
@@ -27,34 +32,38 @@ class FinanceCompanyScope
         $this->holding = $holding ?? new HoldingAccessService();
     }
 
-    public function isGroupWide(): bool
+    public function isGroupWideRead(): bool
     {
-        $ctx = Context::get('security_context');
-
-        if (is_array($ctx) && ! empty($ctx['is_owner'])) {
+        if ($this->isUnauthenticatedInternalContext()) {
             return true;
         }
 
-        $scoped = $this->holding->actorCompanyIds();
-        if ($scoped !== []) {
-            return false;
-        }
+        return $this->holding->isGroupWideActor();
+    }
 
-        // No actor bound → internal/tests without security_context
-        if (! is_array($ctx) || $ctx === []) {
+    public function isGroupWideOperate(): bool
+    {
+        if ($this->isUnauthenticatedInternalContext()) {
             return true;
         }
 
-        // Authenticated non-owner, no COMPANY scopes → SME soft path (not group-wide)
-        return false;
+        return $this->holding->isGroupWideOperator();
     }
 
     /**
-     * @return list<string> Empty means group-wide (caller must not treat as "none").
+     * @deprecated Use isGroupWideRead(). Means READ only.
      */
-    public function allowedCompanyIds(): array
+    public function isGroupWide(): bool
     {
-        if ($this->isGroupWide()) {
+        return $this->isGroupWideRead();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allowedCompanyIdsForRead(): array
+    {
+        if ($this->isGroupWideRead()) {
             return [];
         }
 
@@ -68,7 +77,38 @@ class FinanceCompanyScope
         return $primary !== null ? [$primary] : [];
     }
 
-    public function assertCanAccessCompany(string $companyId): void
+    /**
+     * @return list<string>
+     */
+    public function allowedCompanyIdsForOperate(): array
+    {
+        if ($this->isGroupWideOperate()) {
+            return [];
+        }
+
+        $scoped = $this->holding->actorCompanyIds();
+        if ($scoped !== []) {
+            return $scoped;
+        }
+
+        if (! $this->isUnauthenticatedInternalContext()) {
+            return [];
+        }
+
+        $primary = $this->resolvePrimaryCompanyId();
+
+        return $primary !== null ? [$primary] : [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function allowedCompanyIds(): array
+    {
+        return $this->allowedCompanyIdsForRead();
+    }
+
+    public function assertCanReadCompany(string $companyId): void
     {
         if ($companyId === '') {
             throw new DomainException(
@@ -77,17 +117,47 @@ class FinanceCompanyScope
             );
         }
 
-        if ($this->isGroupWide()) {
+        if ($this->isGroupWideRead()) {
             return;
         }
 
-        $allowed = $this->allowedCompanyIds();
+        $allowed = $this->allowedCompanyIdsForRead();
         if ($allowed === [] || ! in_array($companyId, $allowed, true)) {
             throw new DomainException(
-                'دسترسی به اسناد این شرکت برای شما مجاز نیست.',
-                'fin.company_scope.denied'
+                'مشاهده اسناد این شرکت برای شما مجاز نیست.',
+                'fin.company_scope.read_denied'
             );
         }
+    }
+
+    public function assertCanOperateCompany(string $companyId): void
+    {
+        if ($companyId === '') {
+            throw new DomainException(
+                'شناسه شرکت الزامی است.',
+                'fin.company_scope.company_required'
+            );
+        }
+
+        if ($this->isGroupWideOperate()) {
+            return;
+        }
+
+        $allowed = $this->allowedCompanyIdsForOperate();
+        if ($allowed === [] || ! in_array($companyId, $allowed, true)) {
+            throw new DomainException(
+                'ثبت یا ویرایش اسناد این شرکت برای شما مجاز نیست.',
+                'fin.company_scope.operate_denied'
+            );
+        }
+    }
+
+    /**
+     * @deprecated Defaults to **read** (FIN-HOLD-L03).
+     */
+    public function assertCanAccessCompany(string $companyId): void
+    {
+        $this->assertCanReadCompany($companyId);
     }
 
     /**
@@ -96,17 +166,17 @@ class FinanceCompanyScope
     public function applyToQuery(Builder $query, ?string $companyIdFilter = null): Builder
     {
         if ($companyIdFilter !== null && $companyIdFilter !== '') {
-            $this->assertCanAccessCompany($companyIdFilter);
+            $this->assertCanReadCompany($companyIdFilter);
             $query->where('company_id', $companyIdFilter);
 
             return $query;
         }
 
-        if ($this->isGroupWide()) {
+        if ($this->isGroupWideRead()) {
             return $query;
         }
 
-        $ids = $this->allowedCompanyIds();
+        $ids = $this->allowedCompanyIdsForRead();
         if ($ids === []) {
             $query->whereRaw('1 = 0');
 
@@ -116,6 +186,13 @@ class FinanceCompanyScope
         $query->whereIn('company_id', $ids);
 
         return $query;
+    }
+
+    protected function isUnauthenticatedInternalContext(): bool
+    {
+        $ctx = Context::get('security_context');
+
+        return ! is_array($ctx) || $ctx === [];
     }
 
     protected function resolvePrimaryCompanyId(): ?string
