@@ -9,7 +9,10 @@ use App\Modules\IdentityCore\Models\TenantScope;
 use App\Modules\IdentityCore\Models\TenantUser;
 use App\Modules\IdentityCore\Models\TenantUserScope;
 use App\Modules\IdentityCore\Models\User;
+use App\Modules\IdentityCore\DTOs\UpdateTenantUserDTO;
+use App\Modules\IdentityCore\DTOs\AssignRoleToUserDTO;
 use App\Modules\IdentityCore\Services\UserService;
+use App\Modules\IdentityCore\Services\RoleService;
 use App\Modules\Organization\Models\Company;
 use App\Modules\SaasPlatform\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,7 +22,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * ADR-ID-ORG-003 H1/H2: delegated admin member list isolation.
+ * ADR-ID-ORG-003 + IDORG-T10/T11: delegated admin member list/show/mutate isolation.
  */
 class HoldingDelegatedAdminTest extends TestCase
 {
@@ -114,7 +117,6 @@ class HoldingDelegatedAdminTest extends TestCase
             'scope_id'       => $scopeB->scope_id,
         ]);
 
-        // Act as company-A admin (not owner)
         Context::add('security_context', [
             'is_owner'       => false,
             'tenant_id'      => $this->tenant->tenant_id,
@@ -152,7 +154,6 @@ class HoldingDelegatedAdminTest extends TestCase
     #[Test]
     public function delegated_admin_cannot_show_sibling_member(): void
     {
-        // Global holding scope on TenantUser → firstOrFail → ModelNotFoundException
         $this->expectException(\Illuminate\Database\Eloquent\ModelNotFoundException::class);
         app(UserService::class)->getTenantUser((string) $this->memberB->tenant_user_id);
     }
@@ -172,5 +173,34 @@ class HoldingDelegatedAdminTest extends TestCase
 
         $list = app(UserService::class)->listTenantUsers('active');
         $this->assertCount(0, $list);
+    }
+
+    #[Test]
+    public function company_operator_cannot_update_sibling_member(): void
+    {
+        // IDORG-T10: mutate denied for sibling company member.
+        $this->expectException(\RuntimeException::class);
+        app(UserService::class)->updateTenantUser(UpdateTenantUserDTO::fromRequest(
+            (string) $this->memberB->tenant_user_id,
+            ['first_name' => 'Hacked'],
+        ));
+    }
+
+    #[Test]
+    public function company_operator_cannot_soft_delete_sibling_member(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        app(UserService::class)->softDeleteTenantUser((string) $this->memberB->tenant_user_id);
+    }
+
+    #[Test]
+    public function company_operator_cannot_assign_role_to_sibling_user(): void
+    {
+        // IDORG-T11: role assign uses assertCanManageUserId — sibling denied.
+        $this->expectException(\RuntimeException::class);
+        app(RoleService::class)->assignRoleToUser(AssignRoleToUserDTO::fromRequest([
+            'user_id'  => (string) $this->memberB->user_id,
+            'role_ids' => [],
+        ]));
     }
 }
