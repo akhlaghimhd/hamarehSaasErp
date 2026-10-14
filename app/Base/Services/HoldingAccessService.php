@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 namespace App\Base\Services;
 
@@ -10,30 +10,30 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01╪╕┬├┤G05/G15╪╕┬├┤G17 Wave 1) ╪╕┬┬ج Holding Access Model & Actor Kinds.
+ * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01ظôG05/G15ظôG17 Wave 1) ظ¤ Holding Access Model & Actor Kinds.
  *
  * Actor kinds (IDORG-T01):
- * - TECHNICAL_OWNER  : tenant is_owner flag ╪╕┬┬ج technical/admin identity only.
+ * - TECHNICAL_OWNER  : tenant is_owner flag ظ¤ technical/admin identity only.
  *                      NOT silent super-operator of every company (FIN-HOLD-L06).
  * - GROUP_OBSERVER   : explicit read-only group capability (Wave 1 / IDORG-T09).
  *                      Detected via identity.group.observe or role group-observer (T09).
- * - COMPANY_OPERATOR : actor holds one or more COMPANY scopes ╪╕┬┬ج write/manage own only.
- * - SOFT_SME         : no COMPANY scopes, not owner, and tenant has ╪╕├س╪ش1 active company.
+ * - COMPANY_OPERATOR : actor holds one or more COMPANY scopes ظ¤ write/manage own only.
+ * - SOFT_SME         : no COMPANY scopes, not owner, and tenant has ظëج1 active company.
  *
  * IDORG-T02: empty COMPANY scopes on a multi-company tenant is NOT group-wide.
  * Soft SME path is only for single-company (or zero-company bootstrap) tenants.
  *
- * IDORG-T03 / FIN-HOLD-L03 ╪╕┬┬ج Identity list/read ╪╕├س╪ذ mutate:
- * - List/visibility  ╪╕┬┘ْ isGroupWideActor()  (owner + soft SME + future observer)
- * - Mutate members   ╪╕┬┘ْ isIdentityMutateGroupWide() (owner + soft SME only)
+ * IDORG-T03 / FIN-HOLD-L03 ظ¤ Identity list/read ظëب mutate:
+ * - List/visibility  ظْ isGroupWideActor()  (owner + soft SME + future observer)
+ * - Mutate members   ظْ isIdentityMutateGroupWide() (owner + soft SME only)
  *   Group observer must NEVER pass assertCanManage*; company operators use actorCompanyIds.
  *
- * IDORG-T04 / G04 ╪╕┬┬ج Role catalog mutate:
- * - create/update/soft-delete role + assignPermissionsToRole ╪╕┬┘ْ assertCanManageRoleCatalog()
+ * IDORG-T04 / G04 ظ¤ Role catalog mutate:
+ * - create/update/soft-delete role + assignPermissionsToRole ظْ assertCanManageRoleCatalog()
  * - Allowed: technical_owner + soft_sme only. Company operators assign existing roles to users
  *   in scope but cannot inflate the tenant-wide catalog.
  *
- * Operational modules (Finance, ╪╕┬╪«) MUST use isGroupWideOperator() /
+ * Operational modules (Finance, ظخ) MUST use isGroupWideOperator() /
  * assertCanOperateCompany-style helpers and must NOT treat is_owner as operate-all.
  */
 class HoldingAccessService
@@ -89,7 +89,7 @@ class HoldingAccessService
 
     /**
      * Group observer: explicit identity.group.observe permission or group-observer role (IDORG-T09).
-     * Read-only group visibility ╪╕┬┬ج never mutate members or role catalog.
+     * Read-only group visibility ظ¤ never mutate members or role catalog.
      */
     public function isGroupObserver(): bool
     {
@@ -244,7 +244,7 @@ class HoldingAccessService
 
         $companyIds = $this->actorCompanyIds();
         if ($companyIds === []) {
-            throw new RuntimeException('ظـز┬╗ظـزظ¤éظـز╪▓ظـزظûْظـزظ¤éظûê├« ظـز╪░ظ¤ء├د ظـز╪»ظûê├«ظ¤ء┬ ظـزظـثظـزظـتظ¤ء├ز ظـز┬╗ظـزظûْ ظ¤ء├بظـز╪╡ظـز┬╗ظ¤ء├زظـز┬╗ظ¤ء├د ظـزظ¤جظـزظûْظ¤î╪▒ظـز╪▓ ظـزظ¤جظ¤ء├بظـز╪» ظ¤ء├بظـز╪┤ظـز╪»ظـزظûô ظ¤ء┬ظûê├«ظـزظ¤éظـز╪▓.');
+            throw new RuntimeException('╪»╪│╪ز╪▒╪│█î ╪ذ┘ç ╪د█î┘ ╪╣╪╢┘ê ╪»╪▒ ┘à╪ص╪»┘ê╪»┘ç ╪┤╪▒┌ر╪ز ╪┤┘à╪د ┘à╪ش╪د╪▓ ┘█î╪│╪ز.');
         }
 
         $tenantId = $this->currentTenantId();
@@ -257,7 +257,7 @@ class HoldingAccessService
             ->exists();
 
         if (!$exists) {
-            throw new RuntimeException('ظـز┬╗ظـزظ¤éظـز╪▓ظـزظûْظـزظ¤éظûê├« ظـز╪░ظ¤ء├د ظـز╪»ظûê├«ظ¤ء┬ ظـزظـثظـزظـتظ¤ء├ز ظـز┬╗ظـزظûْ ظ¤ء├بظـز╪╡ظـز┬╗ظ¤ء├زظـز┬╗ظ¤ء├د ظـزظ¤جظـزظûْظ¤î╪▒ظـز╪▓ ظـزظ¤جظ¤ء├بظـز╪» ظ¤ء├بظـز╪┤ظـز╪»ظـزظûô ظ¤ء┬ظûê├«ظـزظ¤éظـز╪▓.');
+            throw new RuntimeException('╪»╪│╪ز╪▒╪│█î ╪ذ┘ç ╪د█î┘ ╪╣╪╢┘ê ╪»╪▒ ┘à╪ص╪»┘ê╪»┘ç ╪┤╪▒┌ر╪ز ╪┤┘à╪د ┘à╪ش╪د╪▓ ┘█î╪│╪ز.');
         }
     }
 
@@ -275,7 +275,7 @@ class HoldingAccessService
             ->first();
 
         if (!$tu) {
-            throw new RuntimeException('ظ¤î╪▒ظـز╪»ظـزظûْظـز╪░ظـزظûْ ظـزظ¤éظـز╪»ظـزظûôظ¤ء├بظـز╪»ظ¤ء┬ ظûê├«ظـز╪»ظ¤ء┬ظـز╪▓ ظ¤ء┬ظـزظ¤جظـز┬╗.');
+            throw new RuntimeException('┌ر╪د╪▒╪ذ╪▒ ╪│╪د╪▓┘à╪د┘ █î╪د┘╪ز ┘╪┤╪».');
         }
 
         $this->assertCanManageTenantUser((string) $tu->tenant_user_id);
@@ -298,7 +298,7 @@ class HoldingAccessService
      * IDORG-T04 / G04: default deny for child company operators.
      * Allowed: technical_owner (tenant security admin pack) and soft_sme path.
      * Company operators may still assign existing roles to users in their company
-     * via assertCanManageUserId ╪╕┬┬ج they must not invent or inflate the tenant catalog.
+     * via assertCanManageUserId ظ¤ they must not invent or inflate the tenant catalog.
      * Group observer is read-only (denied).
      */
     public function assertCanManageRoleCatalog(): void
@@ -308,7 +308,7 @@ class HoldingAccessService
         }
 
         throw new RuntimeException(
-            'ظ¤ء├بظـز┬╗ظûê├«ظـزظûْظûê├«ظـز╪▓ ظ¤î╪▒ظـز╪»ظـز╪▓ظـز╪»ظ¤ء┬ظ¤ء├زظ¤î┬╗ ظ¤ء┬ظ¤ء├رظـزظ¤ج ظ¤ء├ز ظـز╪▓ظـز┬سظـزظـةظûê├«ظـزظـة ظ¤ء├بظـز╪┤ظ¤ء├زظـزظûô ظـز╪░ظ¤ء├د ظ¤ء┬ظ¤ء├رظـزظ¤ج ظ¤ء┬ظ¤ء├رظـزظـû ظـز╪░ظـزظûْظـز╪»ظûê├« ظ¤ء├بظـز╪»ظ¤ء┬ظ¤î╪▒ ظ¤ء┬ظ¤ء┬ظûê├« ظـزظ¤éظـز╪»ظـزظûôظ¤ء├بظـز╪»ظ¤ء┬ ظûê├«ظـز╪» ظ¤ء├بظـزظ¤éظûê├«ظـزظûْ ظـز╪▓ظ¤î╪▒╪╕┬├«ظـزظ¤جظـزظûْظ¤î╪▒ظـز╪▓ظûê├« ظ¤ء├بظـز╪┤ظـز╪»ظـزظûô ظـز╪»ظـزظ¤éظـز╪▓.'
+            '┘à╪»█î╪▒█î╪ز ┌ر╪د╪ز╪د┘┘ê┌» ┘┘é╪┤ ┘ê ╪ز╪«╪╡█î╪╡ ┘à╪ش┘ê╪▓ ╪ذ┘ç ┘┘é╪┤ ┘┘é╪╖ ╪ذ╪▒╪د█î ┘à╪د┘┌ر ┘┘█î ╪│╪د╪▓┘à╪د┘ █î╪د ┘à╪│█î╪▒ ╪ز┌رظî╪┤╪▒┌ر╪ز█î ┘à╪ش╪د╪▓ ╪د╪│╪ز.'
         );
     }
 
@@ -410,7 +410,7 @@ class HoldingAccessService
         return false;
     }
     /**
-     * IDORG-T13 / G10 ظ¤ grant/revoke only COMPANY scopes inside actor company set.
+     * IDORG-T13 / G10 — grant/revoke only COMPANY scopes inside actor company set.
      *
      * @param  list<string>  $scopeIds
      */
@@ -428,7 +428,7 @@ class HoldingAccessService
         $tenantId = $this->currentTenantId();
         $allowedCompanies = $this->actorCompanyIds();
         if ($allowedCompanies === []) {
-            throw new RuntimeException('╪د╪╣╪╖╪د█î ┘à╪ص╪»┘ê╪»┘ç ╪«╪د╪▒╪ش ╪د╪▓ ╪┤╪▒┌ر╪زظî┘ç╪د█î ┘à╪ش╪د╪▓ ╪┤┘à╪د ╪د┘à┌ر╪د┘ظî┘╛╪░█î╪▒ ┘█î╪│╪ز.');
+            throw new RuntimeException('اعطای محدوده خارج از شرکت‌های مجاز شما امکان‌پذیر نیست.');
         }
 
         $scopes = DB::table('tenant_scopes')
@@ -442,7 +442,7 @@ class HoldingAccessService
             $found[] = (string) $row->scope_id;
             $type = strtoupper((string) $row->scope_type);
             if ($type !== 'COMPANY') {
-                throw new RuntimeException('╪د╪╣╪╖╪د█î ╪د█î┘ ┘┘ê╪╣ ┘à╪ص╪»┘ê╪»┘ç ┘┘é╪╖ ╪ذ╪▒╪د█î ┘à╪د┘┌ر ┘┘█î █î╪د ┘à╪│█î╪▒ ╪ز┌رظî╪┤╪▒┌ر╪ز█î ┘à╪ش╪د╪▓ ╪د╪│╪ز.');
+                throw new RuntimeException('اعطای این نوع محدوده فقط برای مالک فنی یا مسیر تک‌شرکتی مجاز است.');
             }
             $ref = (string) ($row->reference_id ?? '');
             $refs = $ref !== '' ? [$ref] : [];
@@ -457,17 +457,17 @@ class HoldingAccessService
             } catch (\Throwable) {
             }
             if ($refs === []) {
-                throw new RuntimeException('┘à╪ص╪»┘ê╪»┘ç ╪ذ╪»┘ê┘ ┘à╪▒╪ش╪╣ ╪┤╪▒┌ر╪ز ┘é╪د╪ذ┘ ╪د╪╣╪╖╪د ╪ز┘ê╪│╪╖ ╪د┘╛╪▒╪د╪ز┘ê╪▒ ╪┤╪▒┌ر╪ز ┘█î╪│╪ز.');
+                throw new RuntimeException('محدوده بدون مرجع شرکت قابل اعطا توسط اپراتور شرکت نیست.');
             }
             foreach ($refs as $rid) {
                 if (! in_array($rid, $allowedCompanies, true)) {
-                    throw new RuntimeException('╪د╪╣╪╖╪د█î ┘à╪ص╪»┘ê╪»┘ç ╪«╪د╪▒╪ش ╪د╪▓ ╪┤╪▒┌ر╪زظî┘ç╪د█î ┘à╪ش╪د╪▓ ╪┤┘à╪د ╪د┘à┌ر╪د┘ظî┘╛╪░█î╪▒ ┘█î╪│╪ز.');
+                    throw new RuntimeException('اعطای محدوده خارج از شرکت‌های مجاز شما امکان‌پذیر نیست.');
                 }
             }
         }
 
         if (array_diff($scopeIds, $found) !== []) {
-            throw new RuntimeException('█î┌ر █î╪د ┌┘╪» ┘à╪ص╪»┘ê╪»┘ç █î╪د┘╪ز ┘╪┤╪».');
+            throw new RuntimeException('یک یا چند محدوده یافت نشد.');
         }
     }
 
