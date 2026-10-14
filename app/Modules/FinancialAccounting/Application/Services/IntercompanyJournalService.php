@@ -15,8 +15,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P5-02/03 + ADR-FIN-002 F2-07 — Paired IC drafts require Scope on BOTH companies;
- * elimination requires Scope on elimination entity. Never auto-posts.
+ * FIN-P5-02/03 + ADR-FIN-002 F2-07 + FIN-HOLD-W1 — IC drafts require operate on BOTH companies;
+ * elimination requires operate on elimination entity. Never auto-posts.
  */
 class IntercompanyJournalService
 {
@@ -49,8 +49,8 @@ class IntercompanyJournalService
         $toId = (string) $data['to_company_id'];
         $amount = round((float) $data['amount'], 4);
 
-        $this->companyScope->assertCanAccessCompany($fromId);
-        $this->companyScope->assertCanAccessCompany($toId);
+        $this->companyScope->assertCanOperateCompany($fromId);
+        $this->companyScope->assertCanOperateCompany($toId);
 
         if ($fromId === $toId) {
             throw new DomainException('شرکت مبدأ و مقصد IC یکسان است.', 'fin.ic.same_company');
@@ -171,7 +171,7 @@ class IntercompanyJournalService
     public function createEliminationDraft(array $data): array
     {
         $elimId = (string) $data['elimination_company_id'];
-        $this->companyScope->assertCanAccessCompany($elimId);
+        $this->companyScope->assertCanOperateCompany($elimId);
         $tenantId = $this->requireTenantId();
 
         $entityKind = DB::table('erp_companies')
@@ -226,8 +226,8 @@ class IntercompanyJournalService
         $tenantId = $this->requireTenantId();
         $fromId = (string) ($data['from_company_id'] ?? '');
         $toId = (string) ($data['to_company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($fromId);
-        $this->companyScope->assertCanAccessCompany($toId);
+        $this->companyScope->assertCanOperateCompany($fromId);
+        $this->companyScope->assertCanOperateCompany($toId);
 
         $existing = IcAccountMap::query()
             ->where('from_company_id', $fromId)
