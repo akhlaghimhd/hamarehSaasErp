@@ -10,7 +10,7 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\Cheque;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
-/** FIN-P1-07 + ADR-FIN-002 — Cheque lifecycle gated by company Scope. */
+/** FIN-P1-07 + ADR-FIN-002 + FIN-HOLD-W1 — Cheque lifecycle; list=read, create/transition=operate. */
 class ChequeService
 {
     public function __construct(
@@ -44,7 +44,7 @@ class ChequeService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $direction = (string) ($data['direction'] ?? '');
         if (! in_array($direction, [Cheque::DIR_IN, Cheque::DIR_OUT], true)) {
@@ -78,7 +78,7 @@ class ChequeService
     public function transition(string $chequeId, string $toStatus): Cheque
     {
         $cheque = Cheque::where('cheque_id', $chequeId)->firstOrFail();
-        $this->companyScope->assertCanAccessCompany((string) $cheque->company_id);
+        $this->companyScope->assertCanOperateCompany((string) $cheque->company_id);
 
         $from = (string) $cheque->status;
         $allowed = Cheque::TRANSITIONS[$from] ?? [];
