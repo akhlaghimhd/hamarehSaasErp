@@ -10,7 +10,7 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\PeriodControl;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P0-11 + ADR-FIN-002 FIN-CSN-F2-03 — period controls gated by company Scope.
+ * FIN-P0-11 + ADR-FIN-002 FIN-CSN-F2-03 + FIN-HOLD-W1 — period controls gated by operate scope.
  */
 class FiscalPeriodControlService
 {
@@ -21,7 +21,8 @@ class FiscalPeriodControlService
 
     public function getOrCreate(string $companyId, string $periodId): PeriodControl
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        // FIN-HOLD-W1: creating period control is operate (not read-only group observer)
+        $this->companyScope->assertCanOperateCompany($companyId);
         $tenantId = $this->requireTenantId();
 
         $existing = PeriodControl::query()
