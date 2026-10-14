@@ -158,19 +158,19 @@ class HoldingDelegatedAdminTest extends TestCase
     }
 
     #[Test]
-    public function group_wide_actor_sees_all_when_no_company_scopes(): void
+    public function multi_company_empty_scopes_is_not_group_wide(): void
     {
-        Context::add('security_context', [
-            'is_owner'  => false,
-            'tenant_id' => $this->tenant->tenant_id,
-        ]);
+        // IDORG-T02: >1 active company + empty COMPANY scopes ≠ group-wide.
+        // List path returns empty (constrain 1=0), does not throw.
         ScopeContext::resetInstance();
         ScopeContext::getInstance()->setScopes([]);
 
         $svc = app(HoldingAccessService::class);
-        $this->assertTrue($svc->isGroupWideActor());
+        $this->assertFalse($svc->isGroupWideActor());
+        $this->assertFalse($svc->isIdentityMutateGroupWide());
+        $this->assertFalse($svc->isSoftSmePath());
 
         $list = app(UserService::class)->listTenantUsers('active');
-        $this->assertGreaterThanOrEqual(3, $list->count());
+        $this->assertCount(0, $list);
     }
 }
