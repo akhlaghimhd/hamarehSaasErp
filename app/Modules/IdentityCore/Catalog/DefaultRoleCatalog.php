@@ -5,6 +5,7 @@ namespace App\Modules\IdentityCore\Catalog;
 /**
  * Default tenant roles, permission bundles, and SoD pairs.
  * Bootstrap skips missing permission codes and feature-gated roles without entitlement.
+ * IDORG-T06: holding templates platform-admin / group-observer / company-operator / company-user.
  */
 final class DefaultRoleCatalog
 {
@@ -357,6 +358,51 @@ final class DefaultRoleCatalog
                     'inventory.document.view', 'inventory.document.create', 'inventory.document.post',
                 ]),
             ],
+            // --- IDORG-T06 holding access templates (G15) ---
+            [
+                'code' => 'platform-admin',
+                'name' => 'مدیر فنی مستأجر',
+                'description' => 'پک ادمین فنی/امنیت هویت — نه عملیات‌گر تمام شرکت‌ها (IDORG-T05/T07)',
+                'parent_code' => 'group-identity',
+                'is_group' => false,
+                'is_privileged' => true,
+                'required_feature' => null,
+                'required_any_permission_prefix' => 'identity.',
+                'permission_codes' => AccessLayerCatalog::platformAdminPermissionCodes(),
+            ],
+            [
+                'code' => 'group-observer',
+                'name' => 'ناظر گروه (هلدینگ)',
+                'description' => 'فقط خواندن/گزارش روی شرکت‌های مجاز — بدون ثبت و ویرایش (IDORG-T06/T09)',
+                'parent_code' => 'group-identity',
+                'is_group' => false,
+                'is_privileged' => false,
+                'required_feature' => null,
+                'required_any_permission_prefix' => 'identity.group',
+                'permission_codes' => AccessLayerCatalog::groupReadPermissionCodes(),
+            ],
+            [
+                'code' => 'company-operator',
+                'name' => 'اپراتور شرکت',
+                'description' => 'عملیات و مدیریت اعضا فقط در Scope شرکت خود (IDORG-T06)',
+                'parent_code' => 'group-identity',
+                'is_group' => false,
+                'is_privileged' => false,
+                'required_feature' => null,
+                'required_any_permission_prefix' => 'identity.user',
+                'permission_codes' => AccessLayerCatalog::companyOperatePermissionCodes(),
+            ],
+            [
+                'code' => 'company-user',
+                'name' => 'کاربر شرکت',
+                'description' => 'کاربر نهایی با حداقل دسترسی داخل شرکت',
+                'parent_code' => 'group-identity',
+                'is_group' => false,
+                'is_privileged' => false,
+                'required_feature' => null,
+                'required_any_permission_prefix' => null,
+                'permission_codes' => AccessLayerCatalog::companyUserPermissionCodes(),
+            ],
             [
                 'code' => 'viewer',
                 'name' => 'مشاهده‌گر عمومی',
@@ -389,20 +435,11 @@ final class DefaultRoleCatalog
             [
                 'code' => 'sod-accountant-senior-purchase-manager',
                 'name' => 'حسابدار ارشد × مدیر خرید',
-                'description' => 'جداسازی قطعی مالی از مدیریت خرید',
+                'description' => 'جداسازی قطعی‌سازی مالی از مدیریت خرید',
                 'role_a_code' => 'accountant-senior',
                 'role_b_code' => 'purchase-manager',
                 'severity' => 3,
                 'enforcement' => 'BLOCK',
-            ],
-            [
-                'code' => 'sod-identity-manager-access-certifier',
-                'name' => 'مدیر هویت × بازبین دسترسی',
-                'description' => 'جداسازی تعریف دسترسی از بازبینی',
-                'role_a_code' => 'identity-manager',
-                'role_b_code' => 'access-certifier',
-                'severity' => 2,
-                'enforcement' => 'WARN',
             ],
         ];
     }
