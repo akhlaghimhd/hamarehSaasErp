@@ -11,7 +11,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * ADR-FIN-002 FIN-CSN-F2-01 — ledgers per company, gated by FinanceCompanyScope.
+ * ADR-FIN-002 FIN-CSN-F2-01 + FIN-HOLD-W1 — ledgers per company; create=operate, list/find=read.
  */
 class LedgerService
 {
@@ -49,7 +49,7 @@ class LedgerService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $code = trim((string) ($data['code'] ?? ''));
         $name = trim((string) ($data['name'] ?? ''));
@@ -81,7 +81,7 @@ class LedgerService
     /** Ensure a leading ledger exists for company (idempotent helper for onboarding). */
     public function ensureLeading(string $companyId, string $code = 'LG', string $name = 'Leading'): Ledger
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $existing = Ledger::query()
             ->where('company_id', $companyId)
