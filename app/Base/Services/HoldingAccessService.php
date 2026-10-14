@@ -10,30 +10,135 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * ADR-ID-ORG-003 — Holding Access Model & Delegated Administration.
+ * ADR-ID-ORG-003 + ADR-ID-ORG-004 (G01) — Holding Access Model & Actor Kinds.
  *
- * - Tenant owner / group-wide actor (no COMPANY scopes): full tenant member visibility.
- * - Actor with COMPANY scopes: may only list/manage members whose COMPANY scopes intersect.
- * - Optional company_id filter further narrows (parent per-company view).
- * - Gradual-safe: empty COMPANY scopes keeps current SME behaviour (no extra filter).
+ * Actor kinds (IDORG-T01):
+ * - TECHNICAL_OWNER  : tenant is_owner flag — technical/admin identity only.
+ *                      NOT silent super-operator of every company (FIN-HOLD-L06).
+ * - GROUP_OBSERVER   : explicit read-only group capability (Wave 1 / IDORG-T09).
+ *                      Placeholder until observer permission is seeded.
+ * - COMPANY_OPERATOR : actor holds one or more COMPANY scopes — write/manage own only.
+ * - SOFT_SME         : no COMPANY scopes and not owner — legacy single-company path.
+ *
+ * isGroupWideActor() remains the Identity list/membership visibility helper
+ * (owner + soft SME). Operational modules MUST use isGroupWideOperator() /
+ * assertCanOperateCompany-style helpers and must NOT treat is_owner as operate-all.
  */
 class HoldingAccessService
 {
+    public const ACTOR_TECHNICAL_OWNER = 'technical_owner';
+
+    public const ACTOR_GROUP_OBSERVER = 'group_observer';
+
+    public const ACTOR_COMPANY_OPERATOR = 'company_operator';
+
+    public const ACTOR_SOFT_SME = 'soft_sme';
+
     public function __construct(
         protected ?ScopeContext $scopeContext = null
     ) {
         $this->scopeContext = $scopeContext ?? ScopeContext::getInstance();
     }
 
+    /**
+     * Platform/tenant technical owner (is_owner on TenantUser).
+     * Admin/bootstrap identity — not automatic operate-on-all-companies.
+     */
+    public function isTechnicalOwner(): bool
+    {
+        return $this->currentUserIsTenantOwner();
+    }
+
+    /**
+     * Soft SME path: no COMPANY scopes assigned.
+     * Valid only as gradual single-company behaviour (IDORG-T02 hardens multi-company).
+     */
+    public function isSoftSmePath(): bool
+    {
+        if ($this->isTechnicalOwner()) {
+            return false;
+        }
+
+        return empty($this->scopeContext->getScopesByType('COMPANY'));
+    }
+
+    /**
+     * Actor holds explicit COMPANY scope(s) — delegated company operator.
+     */
+    public function isCompanyOperator(): bool
+    {
+        return !$this->isTechnicalOwner()
+            && !empty($this->scopeContext->getScopesByType('COMPANY'));
+    }
+
+    /**
+     * Future group-observer role/permission (IDORG-T05/T09).
+     * Currently always false until observer capability is seeded.
+     */
+    public function isGroupObserver(): bool
+    {
+        // Wave 1 will detect explicit group-read permission / role template.
+        return false;
+    }
+
+    /**
+     * Resolve primary actor kind for diagnostics and policy branches.
+     */
+    public function resolveActorKind(): string
+    {
+        if ($this->isTechnicalOwner()) {
+            return self::ACTOR_TECHNICAL_OWNER;
+        }
+
+        if ($this->isGroupObserver()) {
+            return self::ACTOR_GROUP_OBSERVER;
+        }
+
+        if ($this->isCompanyOperator()) {
+            return self::ACTOR_COMPANY_OPERATOR;
+        }
+
+        return self::ACTOR_SOFT_SME;
+    }
+
+    /**
+     * Identity membership list/visibility across the tenant.
+     *
+     * Technical owner may still see all members (tenant admin surface).
+     * Soft SME path keeps current single-company behaviour.
+     * Company operators are constrained to their COMPANY scopes.
+     *
+     * This is NOT an operational write grant on child company ledgers.
+     */
     public function isGroupWideActor(): bool
     {
-        if ($this->currentUserIsTenantOwner()) {
+        if ($this->isTechnicalOwner()) {
             return true;
         }
 
-        $companyScopes = $this->scopeContext->getScopesByType('COMPANY');
+        if ($this->isGroupObserver()) {
+            return true;
+        }
 
-        return empty($companyScopes);
+        return $this->isSoftSmePath();
+    }
+
+    /**
+     * Operational group-wide operate capability.
+     *
+     * IDORG-T01 / FIN-HOLD-L03/L06: is_owner is NOT a group-wide operator.
+     * Soft SME path remains operate-capable on the implied single-company path.
+     * Explicit company operators never pass this check (they use actorCompanyIds).
+     */
+    public function isGroupWideOperator(): bool
+    {
+        // Technical owner must obtain explicit operate grants (or soft SME path only).
+        if ($this->isTechnicalOwner()) {
+            return false;
+        }
+
+        // Soft SME: no COMPANY scopes → gradual single-company operate path.
+        return $this->isSoftSmePath();
     }
 
     /**
