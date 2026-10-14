@@ -49,7 +49,13 @@ class HoldingAccessService
     public function __construct(
         protected ?ScopeContext $scopeContext = null
     ) {
-        $this->scopeContext = $scopeContext ?? ScopeContext::getInstance();
+        // Keep explicit injection for tests; otherwise resolve live singleton each call
+        // so ScopeContext::resetInstance() cannot leave a stale empty context (FIN-HOLD-W1).
+    }
+
+    protected function scopeContext(): ScopeContext
+    {
+        return $this->scopeContext ?? ScopeContext::getInstance();
     }
 
     public function isTechnicalOwner(): bool
@@ -68,7 +74,7 @@ class HoldingAccessService
             return false;
         }
 
-        if (!empty($this->scopeContext->getScopesByType('COMPANY'))) {
+        if (!empty($this->scopeContext()->getScopesByType('COMPANY'))) {
             return false;
         }
 
@@ -78,7 +84,7 @@ class HoldingAccessService
     public function isCompanyOperator(): bool
     {
         return !$this->isTechnicalOwner()
-            && !empty($this->scopeContext->getScopesByType('COMPANY'));
+            && !empty($this->scopeContext()->getScopesByType('COMPANY'));
     }
 
     /**
@@ -182,7 +188,7 @@ class HoldingAccessService
     public function actorCompanyIds(): array
     {
         return array_values(array_unique(array_filter(
-            $this->scopeContext->getReferenceIdsByType('COMPANY')
+            $this->scopeContext()->getReferenceIdsByType('COMPANY')
         )));
     }
 
@@ -192,7 +198,7 @@ class HoldingAccessService
     public function actorCompanyScopeIds(): array
     {
         $ids = [];
-        foreach ($this->scopeContext->getScopesByType('COMPANY') as $scope) {
+        foreach ($this->scopeContext()->getScopesByType('COMPANY') as $scope) {
             if (!empty($scope['scope_id'])) {
                 $ids[] = (string) $scope['scope_id'];
             }
