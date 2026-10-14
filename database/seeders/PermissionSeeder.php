@@ -11,6 +11,7 @@ use Illuminate\Support\Str;
 /**
  * Ensures permission catalog + tenant-admin, then default system roles + SoD.
  * RBAC roles via TenantRbacBootstrapService so tenants are not empty on first login.
+ * IDORG-T08: identity.group.observe tags Group-Read capability (G17).
  */
 class PermissionSeeder extends Seeder
 {
@@ -98,6 +99,7 @@ class PermissionSeeder extends Seeder
             ['code' => 'identity.privileged.view', 'name' => 'مشاهده دسترسی اضطراری', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
             ['code' => 'identity.privileged.request', 'name' => 'درخواست دسترسی اضطراری', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
             ['code' => 'identity.privileged.approve', 'name' => 'تأیید دسترسی اضطراری', 'module_name' => 'هویت و دسترسی', 'action_type' => 'EXECUTE'],
+            ['code' => 'identity.group.observe', 'name' => 'مشاهده گروهی هلدینگ (فقط خواندن)', 'module_name' => 'هویت و دسترسی', 'action_type' => 'READ'],
             ['code' => 'organization.company.view', 'name' => 'مشاهده شرکت‌ها', 'module_name' => 'سازمان', 'action_type' => 'READ'],
             ['code' => 'organization.company.create', 'name' => 'ایجاد شرکت', 'module_name' => 'سازمان', 'action_type' => 'CREATE'],
             ['code' => 'organization.company.update', 'name' => 'ویرایش شرکت', 'module_name' => 'سازمان', 'action_type' => 'UPDATE'],
