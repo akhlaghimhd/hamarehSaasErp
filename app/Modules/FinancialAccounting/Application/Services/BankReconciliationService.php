@@ -11,7 +11,7 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\BankStatementLine;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** FIN-P1-10 + ADR-FIN-002 FIN-CSN-F2-04 — bank recon gated by company Scope. */
+/** FIN-P1-10 + ADR-FIN-002 FIN-CSN-F2-04 + FIN-HOLD-W1 — bank recon gated by operate scope. */
 class BankReconciliationService
 {
     public function __construct(
@@ -23,7 +23,7 @@ class BankReconciliationService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         return DB::transaction(function () use ($tenantId, $data, $companyId) {
             $stmt = BankStatement::create([
@@ -68,7 +68,7 @@ class BankReconciliationService
 
         $stmt = BankStatement::where('bank_statement_id', $line->bank_statement_id)->first();
         if ($stmt) {
-            $this->companyScope->assertCanAccessCompany((string) $stmt->company_id);
+            $this->companyScope->assertCanOperateCompany((string) $stmt->company_id);
         }
 
         if ($line->status === BankStatementLine::STATUS_MATCHED) {
