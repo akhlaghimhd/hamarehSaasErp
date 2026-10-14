@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P1-06 + ADR-FIN-002 — treasury gated by company Scope.
+ * FIN-P1-06 + ADR-FIN-002 + FIN-HOLD-W1 — treasury mutations gated by operate scope.
  */
 class TreasuryService
 {
@@ -28,7 +28,7 @@ class TreasuryService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $code = trim((string) ($data['code'] ?? ''));
         if ($code === '') {
@@ -70,7 +70,7 @@ class TreasuryService
     {
         $tenantId = $this->requireTenantId();
         $companyId = (string) ($data['company_id'] ?? '');
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         $type = (string) ($data['document_type'] ?? '');
         if (! in_array($type, [TreasuryDocument::TYPE_RECEIPT, TreasuryDocument::TYPE_PAYMENT], true)) {
@@ -122,7 +122,7 @@ class TreasuryService
     public function postToGl(string $treasuryDocumentId, array $opts): TreasuryDocument
     {
         $doc = TreasuryDocument::where('treasury_document_id', $treasuryDocumentId)->firstOrFail();
-        $this->companyScope->assertCanAccessCompany((string) $doc->company_id);
+        $this->companyScope->assertCanOperateCompany((string) $doc->company_id);
 
         if (! $doc->isDraft()) {
             throw new DomainException('فقط پیش‌نویس خزانه قابل ثبت در دفتر است.', 'fin.treasury.not_draft');
