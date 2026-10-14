@@ -22,7 +22,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * ADR-FIN-002 FIN-CSN-F3 / D7 — Scope matrix + SME primary-only soft path.
+ * ADR-FIN-003 FIN-HOLD-W1 — read vs operate company scope.
  */
 class FinanceCompanyScopeHoldingTest extends TestCase
 {
@@ -54,7 +54,6 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $this->companyB = (string) Str::uuid();
         $this->periodId = (string) Str::uuid();
 
-        // Insert via query builder so company_id / is_primary are exact (HasUuids can rewrite id).
         DB::table('erp_companies')->insert([
             [
                 'company_id'  => $this->companyA,
@@ -86,7 +85,6 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             ],
         ]);
 
-        // Demote any other primary rows for this tenant (factory side-effects).
         DB::table('erp_companies')
             ->where('tenant_id', $this->tenant->tenant_id)
             ->where('company_id', '!=', $this->companyA)
@@ -160,7 +158,7 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         ]);
     }
 
-    /** Group-wide = tenant owner (ADR-FIN-002 parent/owner), not empty-scope SME. */
+    /** Tenant owner: group-wide READ only under FIN-HOLD-W1 (not operate-all). */
     protected function actAsOwnerGroupWide(): void
     {
         Context::add('security_context', [
@@ -223,10 +221,10 @@ class FinanceCompanyScopeHoldingTest extends TestCase
     #[Test]
     public function company_scoped_list_excludes_sibling_journals(): void
     {
-        $this->actAsOwnerGroupWide();
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
 
+        $this->actAsCompanyScoped($this->companyA);
         $a = $svc->createDraft([
             'ledger_id'     => $this->ledgerA->ledger_id,
             'company_id'    => $this->companyA,
@@ -234,6 +232,8 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             'document_date' => '2026-06-15',
             'lines'         => $this->balancedLines(),
         ], $actor);
+
+        $this->actAsCompanyScoped($this->companyB);
         $b = $svc->createDraft([
             'ledger_id'     => $this->ledgerB->ledger_id,
             'company_id'    => $this->companyB,
@@ -262,12 +262,11 @@ class FinanceCompanyScopeHoldingTest extends TestCase
     }
 
     #[Test]
-    public function owner_group_wide_can_access_both_companies(): void
+    public function owner_group_wide_can_read_both_companies_but_cannot_operate(): void
     {
-        $this->actAsOwnerGroupWide();
+        $this->actAsCompanyScoped($this->companyA);
         $svc = new JournalEntryService();
         $actor = (string) Str::uuid();
-
         $a = $svc->createDraft([
             'ledger_id'     => $this->ledgerA->ledger_id,
             'company_id'    => $this->companyA,
@@ -275,6 +274,8 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             'document_date' => '2026-06-15',
             'lines'         => $this->balancedLines(),
         ], $actor);
+
+        $this->actAsCompanyScoped($this->companyB);
         $b = $svc->createDraft([
             'ledger_id'     => $this->ledgerB->ledger_id,
             'company_id'    => $this->companyB,
@@ -283,6 +284,11 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             'lines'         => $this->balancedLines(),
         ], $actor);
 
+        $this->actAsOwnerGroupWide();
+        $scope = new FinanceCompanyScope();
+        $this->assertTrue($scope->isGroupWideRead());
+        $this->assertFalse($scope->isGroupWideOperate());
+
         $list = $svc->list([]);
         $ids = $list->pluck('journal_entry_id')->map(fn ($id) => (string) $id)->all();
         $this->assertContains((string) $a->journal_entry_id, $ids);
@@ -290,6 +296,15 @@ class FinanceCompanyScopeHoldingTest extends TestCase
 
         $found = $svc->find((string) $b->journal_entry_id);
         $this->assertSame($this->companyB, $found->company_id);
+
+        $this->expectException(DomainException::class);
+        $svc->createDraft([
+            'ledger_id'     => $this->ledgerB->ledger_id,
+            'company_id'    => $this->companyB,
+            'period_id'     => $this->periodId,
+            'document_date' => '2026-06-15',
+            'lines'         => $this->balancedLines(),
+        ], $actor);
     }
 
     #[Test]
@@ -298,7 +313,8 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $this->actAsSmeNoCompanyScope();
         $scope = new FinanceCompanyScope();
 
-        $this->assertFalse($scope->isGroupWide());
+        $this->assertFalse($scope->isGroupWideRead());
+        $this->assertFalse($scope->isGroupWideOperate());
 
         $allowed = $scope->allowedCompanyIds();
         $this->assertCount(1, $allowed);
