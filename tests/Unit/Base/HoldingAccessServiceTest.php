@@ -36,6 +36,31 @@ class HoldingAccessServiceTest extends TestCase
         };
     }
 
+    /**
+     * Force isGroupObserver() true for T03 list-vs-mutate coverage before Wave 1 seed.
+     *
+     * @param  int  $companyCount
+     */
+    private function serviceAsGroupObserver(int $companyCount): HoldingAccessService
+    {
+        return new class($companyCount) extends HoldingAccessService {
+            public function __construct(private readonly int $forcedCompanyCount)
+            {
+                parent::__construct();
+            }
+
+            protected function tenantActiveCompanyCount(): int
+            {
+                return $this->forcedCompanyCount;
+            }
+
+            public function isGroupObserver(): bool
+            {
+                return true;
+            }
+        };
+    }
+
     #[Test]
     public function owner_is_group_wide_for_identity_visibility_but_not_operator(): void
     {
@@ -49,6 +74,7 @@ class HoldingAccessServiceTest extends TestCase
         $this->assertTrue($svc->isTechnicalOwner());
         $this->assertSame(HoldingAccessService::ACTOR_TECHNICAL_OWNER, $svc->resolveActorKind());
         $this->assertTrue($svc->isGroupWideActor());
+        $this->assertTrue($svc->isIdentityMutateGroupWide());
         $this->assertFalse($svc->isGroupWideOperator());
         $this->assertFalse($svc->isSoftSmePath());
         $this->assertFalse($svc->isCompanyOperator());
@@ -69,6 +95,7 @@ class HoldingAccessServiceTest extends TestCase
         $this->assertTrue($svc->isSoftSmePath());
         $this->assertSame(HoldingAccessService::ACTOR_SOFT_SME, $svc->resolveActorKind());
         $this->assertTrue($svc->isGroupWideActor());
+        $this->assertTrue($svc->isIdentityMutateGroupWide());
         $this->assertTrue($svc->isGroupWideOperator());
         $this->assertSame([], $svc->actorCompanyIds());
     }
@@ -86,6 +113,7 @@ class HoldingAccessServiceTest extends TestCase
         $this->assertFalse($svc->isTenantSingleCompany());
         $this->assertFalse($svc->isSoftSmePath());
         $this->assertFalse($svc->isGroupWideActor());
+        $this->assertFalse($svc->isIdentityMutateGroupWide());
         $this->assertFalse($svc->isGroupWideOperator());
         $this->assertSame(HoldingAccessService::ACTOR_COMPANY_OPERATOR, $svc->resolveActorKind());
         $this->assertSame([], $svc->actorCompanyIds());
@@ -109,6 +137,7 @@ class HoldingAccessServiceTest extends TestCase
         $this->assertTrue($svc->isCompanyOperator());
         $this->assertSame(HoldingAccessService::ACTOR_COMPANY_OPERATOR, $svc->resolveActorKind());
         $this->assertFalse($svc->isGroupWideActor());
+        $this->assertFalse($svc->isIdentityMutateGroupWide());
         $this->assertFalse($svc->isGroupWideOperator());
         $this->assertFalse($svc->isSoftSmePath());
         $this->assertEqualsCanonicalizing(['c-a', 'c-b'], $svc->actorCompanyIds());
@@ -124,5 +153,23 @@ class HoldingAccessServiceTest extends TestCase
         $svc = $this->serviceWithCompanyCount(1);
 
         $this->assertFalse($svc->isGroupObserver());
+    }
+
+    #[Test]
+    public function group_observer_can_list_but_cannot_mutate_members(): void
+    {
+        Context::add('security_context', ['is_owner' => false, 'tenant_id' => 't1']);
+        ScopeContext::getInstance()->setScopes([]);
+
+        $svc = $this->serviceAsGroupObserver(3);
+
+        $this->assertTrue($svc->isGroupObserver());
+        $this->assertSame(HoldingAccessService::ACTOR_GROUP_OBSERVER, $svc->resolveActorKind());
+        $this->assertTrue($svc->isGroupWideActor());
+        $this->assertFalse($svc->isIdentityMutateGroupWide());
+        $this->assertFalse($svc->isGroupWideOperator());
+
+        $this->expectException(RuntimeException::class);
+        $svc->assertCanManageTenantUser('any-tu-id');
     }
 }
