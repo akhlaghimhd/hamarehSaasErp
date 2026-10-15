@@ -13,6 +13,11 @@ use Illuminate\Support\Facades\DB;
  */
 class AnomalyAmountService
 {
+    protected function companyScope(): FinanceCompanyScope
+    {
+        return app(FinanceCompanyScope::class);
+    }
+
     public function __construct(
         protected SmartActionAuditService $audit = new SmartActionAuditService()
     ) {
@@ -29,6 +34,7 @@ class AnomalyAmountService
         }
 
         $companyId = (string) $entry->company_id;
+        $this->companyScope()->assertCanReadCompany($companyId);
         $alerts = [];
 
         foreach ($entry->items as $item) {
@@ -42,7 +48,6 @@ class AnomalyAmountService
                 continue;
             }
 
-            // flag if > 5x median or > mean + 3*stddev (approx using avg)
             $median = $stats['median'];
             $avg = $stats['avg'];
             $threshold = max($median * 5, $avg * 4, 0.0001);
