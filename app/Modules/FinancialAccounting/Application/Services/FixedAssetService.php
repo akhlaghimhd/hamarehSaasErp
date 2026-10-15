@@ -27,7 +27,7 @@ class FixedAssetService
 
     public function list(string $companyId): Collection
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         return FixedAsset::query()
             ->where('company_id', $companyId)

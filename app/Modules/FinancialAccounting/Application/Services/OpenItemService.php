@@ -104,7 +104,7 @@ class OpenItemService
      */
     public function aging(string $companyId, string $side, ?string $asOf = null): array
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         $asOfDate = $asOf ? new \DateTimeImmutable($asOf) : new \DateTimeImmutable('today');
 
@@ -156,7 +156,7 @@ class OpenItemService
 
     public function listOpen(string $companyId, ?string $side = null): Collection
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         $q = OpenItem::query()
             ->where('company_id', $companyId)

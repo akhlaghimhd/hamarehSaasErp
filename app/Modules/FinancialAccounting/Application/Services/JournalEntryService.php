@@ -180,7 +180,7 @@ class JournalEntryService
             throw new DomainException('سند یافت نشد.', 'fin.journal.not_found');
         }
 
-        $this->companyScope->assertCanAccessCompany((string) $entry->company_id);
+        $this->companyScope->assertCanReadCompany((string) $entry->company_id);
 
         return $entry;
     }
