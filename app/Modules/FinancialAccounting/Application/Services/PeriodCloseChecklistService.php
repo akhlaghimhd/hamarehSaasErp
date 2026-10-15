@@ -19,7 +19,8 @@ use Illuminate\Support\Str;
 class PeriodCloseChecklistService
 {
     public function __construct(
-        protected FiscalPeriodControlService $periods = new FiscalPeriodControlService()
+        protected FiscalPeriodControlService $periods = new FiscalPeriodControlService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
@@ -28,6 +29,7 @@ class PeriodCloseChecklistService
      */
     public function evaluate(string $companyId, string $periodId, ?string $actorId = null): array
     {
+        $this->companyScope->assertCanOperateCompany($companyId);
         $tenantId = $this->requireTenantId();
         $items = [];
 

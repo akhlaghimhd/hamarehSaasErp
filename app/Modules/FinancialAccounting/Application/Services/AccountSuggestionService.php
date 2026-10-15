@@ -17,6 +17,11 @@ use Illuminate\Support\Facades\DB;
  */
 class AccountSuggestionService
 {
+    protected function companyScope(): FinanceCompanyScope
+    {
+        return app(FinanceCompanyScope::class);
+    }
+
     public function __construct(
         protected SmartActionAuditService $audit = new SmartActionAuditService()
     ) {
@@ -34,6 +39,7 @@ class AccountSuggestionService
         ?int $side = null, // 1 debit preference, 2 credit
         ?string $actorId = null,
     ): array {
+        $this->companyScope()->assertCanReadCompany($companyId);
         $this->requireTenant();
 
         $entryIds = JournalEntry::query()

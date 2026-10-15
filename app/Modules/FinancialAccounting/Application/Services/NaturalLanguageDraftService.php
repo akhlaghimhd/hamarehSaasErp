@@ -17,7 +17,8 @@ class NaturalLanguageDraftService
     public function __construct(
         protected JournalEntryService $journals = new JournalEntryService(),
         protected AccountSuggestionService $suggest = new AccountSuggestionService(),
-        protected SmartActionAuditService $audit = new SmartActionAuditService()
+        protected SmartActionAuditService $audit = new SmartActionAuditService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
@@ -34,6 +35,8 @@ class NaturalLanguageDraftService
      */
     public function createDraftFromCommand(array $data): array
     {
+        $this->companyScope->assertCanOperateCompany((string) $data['company_id']);
+
         $command = trim((string) ($data['command'] ?? ''));
         if ($command === '') {
             throw new DomainException('دستور خالی است.', 'fin.nl.empty');

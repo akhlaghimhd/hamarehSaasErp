@@ -13,6 +13,11 @@ use Illuminate\Support\Str;
 /** FIN-P2-03 — Split net/tax using configurable rates. */
 class VatCalculationService
 {
+    protected function companyScope(): FinanceCompanyScope
+    {
+        return app(FinanceCompanyScope::class);
+    }
+
     public function upsertRate(array $data): TaxRateConfig
     {
         $tenantId = $this->requireTenantId();
@@ -105,6 +110,7 @@ class VatCalculationService
 
     public function recordTransaction(array $data): TaxTransaction
     {
+        $this->companyScope()->assertCanOperateCompany((string) $data['company_id']);
         $tenantId = $this->requireTenantId();
         $onDate = (string) $data['transaction_date'];
         $split = isset($data['gross_amount'])

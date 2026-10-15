@@ -15,6 +15,11 @@ use Illuminate\Support\Str;
 /** FIN-P2-08 K3 — Missing Moodian submit, gaps, rate issues. */
 class FinanceComplianceAlertService
 {
+    protected function companyScope(): FinanceCompanyScope
+    {
+        return app(FinanceCompanyScope::class);
+    }
+
     public function raise(
         string $alertCode,
         string $title,
@@ -43,6 +48,7 @@ class FinanceComplianceAlertService
 
     public function listOpen(?string $companyId = null): Collection
     {
+        if ($companyId) { $this->companyScope()->assertCanReadCompany($companyId); }
         $q = ComplianceAlert::query()->where('is_resolved', false)->orderByDesc('created_at');
         if ($companyId) {
             $q->where('company_id', $companyId);
@@ -54,6 +60,7 @@ class FinanceComplianceAlertService
     public function resolve(string $alertId, ?string $actorId = null): ComplianceAlert
     {
         $alert = ComplianceAlert::where('compliance_alert_id', $alertId)->firstOrFail();
+        if ($alert->company_id) { $this->companyScope()->assertCanOperateCompany((string) $alert->company_id); }
         $alert->is_resolved = true;
         $alert->resolved_at = now();
         $alert->resolved_by = $actorId;
@@ -64,6 +71,7 @@ class FinanceComplianceAlertService
 
     public function scanMissingMoodian(string $companyId): int
     {
+        $this->companyScope()->assertCanReadCompany($companyId);
         $txns = TaxTransaction::query()
             ->where('company_id', $companyId)
             ->get();

@@ -21,7 +21,8 @@ class SuggestedJournalService
 {
     public function __construct(
         protected AccountDeterminationService $determination = new AccountDeterminationService(),
-        protected JournalEntryService $journals = new JournalEntryService()
+        protected JournalEntryService $journals = new JournalEntryService(),
+        protected FinanceCompanyScope $companyScope = new FinanceCompanyScope()
     ) {
     }
 
@@ -107,6 +108,7 @@ class SuggestedJournalService
     public function accept(string $suggestedJournalId, ?string $actorId = null, ?string $note = null): SuggestedJournal
     {
         $sug = SuggestedJournal::with('lines')->where('suggested_journal_id', $suggestedJournalId)->firstOrFail();
+        $this->companyScope->assertCanOperateCompany((string) $sug->company_id);
 
         if (! $sug->isPending()) {
             throw new DomainException('این پیشنهاد قبلاً تصمیم‌گیری شده است.', 'fin.suggest.not_pending');
@@ -155,6 +157,7 @@ class SuggestedJournalService
     public function reject(string $suggestedJournalId, ?string $actorId = null, ?string $note = null): SuggestedJournal
     {
         $sug = SuggestedJournal::where('suggested_journal_id', $suggestedJournalId)->firstOrFail();
+        $this->companyScope->assertCanOperateCompany((string) $sug->company_id);
 
         if (! $sug->isPending()) {
             throw new DomainException('این پیشنهاد قبلاً تصمیم‌گیری شده است.', 'fin.suggest.not_pending');
@@ -176,12 +179,16 @@ class SuggestedJournalService
 
     public function listPending(?string $companyId = null): Collection
     {
+        if ($companyId) { $this->companyScope->assertCanReadCompany($companyId); }
         $q = SuggestedJournal::with('lines')
             ->where('status', SuggestedJournal::STATUS_PENDING)
             ->orderByDesc('created_at');
 
         if ($companyId) {
             $q->where('company_id', $companyId);
+        } elseif (! $this->companyScope->isGroupWideRead()) {
+            $allowed = $this->companyScope->allowedCompanyIdsForRead();
+            if ($allowed === []) { $q->whereRaw('1 = 0'); } else { $q->whereIn('company_id', $allowed); }
         }
 
         return $q->limit(100)->get();
