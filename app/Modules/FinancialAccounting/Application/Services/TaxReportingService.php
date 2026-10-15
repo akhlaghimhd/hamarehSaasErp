@@ -9,7 +9,7 @@ use App\Modules\FinancialAccounting\Infrastructure\Models\TaxTransaction;
 use Illuminate\Support\Facades\DB;
 
 /**
- * FIN-P2-06/07 + ADR-FIN-002 FIN-CSN-F2-05 — tax reports gated by company Scope.
+ * FIN-P2-06/07 + ADR-FIN-002 FIN-CSN-F2-05 — tax reports gated by company Scope (read).
  */
 class TaxReportingService
 {
@@ -29,7 +29,7 @@ class TaxReportingService
      */
     public function vatPeriodSummary(string $companyId, string $from, string $to): array
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         $rows = TaxTransaction::query()
             ->where('company_id', $companyId)
@@ -97,7 +97,7 @@ class TaxReportingService
      */
     public function moodianLedgerRecon(string $companyId, string $from, string $to): array
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         $txns = TaxTransaction::query()
             ->where('company_id', $companyId)
