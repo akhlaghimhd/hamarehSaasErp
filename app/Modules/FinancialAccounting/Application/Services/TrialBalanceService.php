@@ -24,7 +24,7 @@ class TrialBalanceService
      */
     public function run(string $companyId, string $periodId): array
     {
-        $this->companyScope->assertCanAccessCompany($companyId);
+        $this->companyScope->assertCanReadCompany($companyId);
 
         $entryIds = JournalEntry::query()
             ->where('company_id', $companyId)

@@ -37,7 +37,7 @@ class LedgerService
         if (! $ledger) {
             throw new DomainException('دفتر کل یافت نشد.', 'fin.ledger.not_found');
         }
-        $this->companyScope->assertCanAccessCompany((string) $ledger->company_id);
+        $this->companyScope->assertCanReadCompany((string) $ledger->company_id);
 
         return $ledger;
     }
