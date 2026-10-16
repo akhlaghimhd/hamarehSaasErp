@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace App\Modules\FinancialAccounting\Controllers;
 
 use App\Base\Controller;
+use App\Base\Context\TenantContext;
 use App\Modules\FinancialAccounting\Application\Services\ChartOfAccountsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * FIN-HOLD-W4: company_id required on list/create (CoA per company).
+ * FIN-HOLD-W4: CoA per company.
+ * list/create prefer explicit company_id; if omitted, fall back to primary company
+ * so legacy FE (accounts-page locked) keeps working on single-company path.
  */
 class AccountController extends Controller
 {
@@ -21,8 +26,8 @@ class AccountController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $companyId = (string) $request->query('company_id', '');
-        if ($companyId === '') {
+        $companyId = $this->resolveCompanyId($request);
+        if ($companyId === null) {
             return response()->json([
                 'status'  => 'error',
                 'message' => 'شناسه شرکت الزامی است.',
@@ -51,7 +56,7 @@ class AccountController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'company_id'         => 'required|uuid',
+            'company_id'         => 'nullable|uuid',
             'account_code'       => 'required|string|max:50',
             'name'               => 'required|string|max:200',
             'account_type'       => 'required|integer|in:1,2,3,4,5',
@@ -62,6 +67,18 @@ class AccountController extends Controller
             'account_level'      => 'sometimes|integer|min:1',
             'status'             => 'sometimes|integer',
         ]);
+
+        if (empty($data['company_id'])) {
+            $fallback = $this->resolvePrimaryCompanyId();
+            if ($fallback === null) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'شناسه شرکت الزامی است.',
+                    'code'    => 'fin.coa.company_required',
+                ], 422);
+            }
+            $data['company_id'] = $fallback;
+        }
 
         $row = $this->service->create($data);
 
@@ -102,5 +119,32 @@ class AccountController extends Controller
             'status'  => 'success',
             'message' => 'حساب حذف شد.',
         ]);
+    }
+
+    protected function resolveCompanyId(Request $request): ?string
+    {
+        $fromQuery = trim((string) $request->query('company_id', ''));
+        if ($fromQuery !== '') {
+            return $fromQuery;
+        }
+
+        return $this->resolvePrimaryCompanyId();
+    }
+
+    protected function resolvePrimaryCompanyId(): ?string
+    {
+        $tenantId = TenantContext::getInstance()->getTenantId();
+        if (! $tenantId || ! Schema::hasTable('erp_companies')) {
+            return null;
+        }
+
+        $id = DB::table('erp_companies')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderByRaw('CASE WHEN is_primary IS TRUE THEN 0 ELSE 1 END')
+            ->orderBy('created_at')
+            ->value('company_id');
+
+        return $id ? (string) $id : null;
     }
 }
