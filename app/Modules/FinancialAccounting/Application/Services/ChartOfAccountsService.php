@@ -14,30 +14,50 @@ use Illuminate\Support\Str;
 
 /**
  * FIN-P0-10 — Chart of Accounts tree CRUD with soft-delete guards.
+ * FIN-HOLD-W4 / ADR-FIN-003 L09 — CoA is per company (not tenant-shared).
  */
 class ChartOfAccountsService
 {
-    public function listTree(): Collection
+    public function __construct(
+        private readonly FinanceCompanyScope $companyScope,
+    ) {
+    }
+
+    public function listTree(string $companyId): Collection
     {
+        $this->companyScope->assertCanReadCompany($companyId);
+
         $accounts = Account::query()
+            ->where('company_id', $companyId)
             ->orderBy('account_code')
             ->get();
 
         return $this->buildTree($accounts);
     }
 
-    public function listFlat(): Collection
+    public function listFlat(string $companyId): Collection
     {
-        return Account::query()->orderBy('account_code')->get();
+        $this->companyScope->assertCanReadCompany($companyId);
+
+        return Account::query()
+            ->where('company_id', $companyId)
+            ->orderBy('account_code')
+            ->get();
     }
 
     public function find(string $accountId): Account
     {
-        return Account::query()->where('account_id', $accountId)->firstOrFail();
+        $account = Account::query()->where('account_id', $accountId)->firstOrFail();
+        if ($account->company_id) {
+            $this->companyScope->assertCanReadCompany((string) $account->company_id);
+        }
+
+        return $account;
     }
 
     /**
      * @param  array{
+     *   company_id: string,
      *   account_code: string,
      *   name: string,
      *   account_type: int,
@@ -53,6 +73,12 @@ class ChartOfAccountsService
     {
         $tenantId = $this->requireTenantId();
 
+        $companyId = trim((string) ($data['company_id'] ?? ''));
+        if ($companyId === '') {
+            throw new DomainException('شناسه شرکت الزامی است.', 'fin.coa.company_required');
+        }
+        $this->companyScope->assertCanOperateCompany($companyId);
+
         $code = trim((string) ($data['account_code'] ?? ''));
         if ($code === '') {
             throw new DomainException('کد حساب الزامی است.', 'fin.coa.code_required');
@@ -63,14 +89,16 @@ class ChartOfAccountsService
             throw new DomainException('نام حساب الزامی است.', 'fin.coa.name_required');
         }
 
-        $this->assertCodeUnique($code, null);
-        $this->assertNameUnique($name, null);
+        $this->assertCodeUnique($companyId, $code, null);
+        $this->assertNameUnique($companyId, $name, null);
 
         $parentId = $data['parent_account_id'] ?? null;
         $level = (int) ($data['account_level'] ?? 1);
 
         if ($parentId) {
-            $parent = Account::where('account_id', $parentId)->first();
+            $parent = Account::where('account_id', $parentId)
+                ->where('company_id', $companyId)
+                ->first();
             if (! $parent) {
                 throw new DomainException('حساب والد یافت نشد.', 'fin.coa.parent_not_found');
             }
@@ -91,6 +119,7 @@ class ChartOfAccountsService
         return Account::create([
             'account_id'         => (string) Str::uuid(),
             'tenant_id'          => $tenantId,
+            'company_id'         => $companyId,
             'parent_account_id'  => $parentId,
             'account_code'       => $code,
             'name'               => $name,
@@ -109,7 +138,9 @@ class ChartOfAccountsService
      */
     public function update(string $accountId, array $data): Account
     {
-        $account = $this->find($accountId);
+        $account = Account::query()->where('account_id', $accountId)->firstOrFail();
+        $companyId = (string) $account->company_id;
+        $this->companyScope->assertCanOperateCompany($companyId);
 
         if ($this->isRootAccount($account)) {
             throw new DomainException(
@@ -130,7 +161,7 @@ class ChartOfAccountsService
                         'fin.coa.code_locked_has_movement'
                     );
                 }
-                $this->assertCodeUnique($code, $accountId);
+                $this->assertCodeUnique($companyId, $code, $accountId);
             }
             $account->account_code = $code;
         }
@@ -141,7 +172,7 @@ class ChartOfAccountsService
                 throw new DomainException('نام حساب الزامی است.', 'fin.coa.name_required');
             }
             if ($name !== trim((string) $account->name)) {
-                $this->assertNameUnique($name, $accountId);
+                $this->assertNameUnique($companyId, $name, $accountId);
             }
             $account->name = $name;
         }
@@ -166,7 +197,9 @@ class ChartOfAccountsService
                 throw new DomainException('حساب نمی‌تواند والد خودش باشد.', 'fin.coa.parent_cycle');
             }
             if ($parentId) {
-                $parent = Account::where('account_id', $parentId)->first();
+                $parent = Account::where('account_id', $parentId)
+                    ->where('company_id', $companyId)
+                    ->first();
                 if (! $parent) {
                     throw new DomainException('حساب والد یافت نشد.', 'fin.coa.parent_not_found');
                 }
@@ -183,7 +216,8 @@ class ChartOfAccountsService
 
     public function softDelete(string $accountId): void
     {
-        $account = $this->find($accountId);
+        $account = Account::query()->where('account_id', $accountId)->firstOrFail();
+        $this->companyScope->assertCanOperateCompany((string) $account->company_id);
 
         if ($this->isRootAccount($account)) {
             throw new DomainException(
@@ -211,44 +245,99 @@ class ChartOfAccountsService
         $account->delete();
     }
 
-    /** حساب کل (ریشه بدون والد / سطح ۱) — اسکلت ثابت ۵گانه. */
+    /**
+     * Clone full CoA tree from source company into target (for new subsidiary).
+     * Does not copy journal history — only account structure.
+     */
+    public function cloneTreeToCompany(string $sourceCompanyId, string $targetCompanyId): int
+    {
+        $this->companyScope->assertCanOperateCompany($targetCompanyId);
+
+        if (Account::query()->where('company_id', $targetCompanyId)->exists()) {
+            throw new DomainException(
+                'شرکت مقصد از قبل درخت حساب دارد.',
+                'fin.coa.target_has_tree'
+            );
+        }
+
+        $source = Account::query()
+            ->where('company_id', $sourceCompanyId)
+            ->orderBy('account_level')
+            ->orderBy('account_code')
+            ->get();
+
+        if ($source->isEmpty()) {
+            return 0;
+        }
+
+        $tenantId = $this->requireTenantId();
+        $idMap = [];
+        $count = 0;
+
+        DB::transaction(function () use ($source, $targetCompanyId, $tenantId, &$idMap, &$count) {
+            foreach ($source as $row) {
+                $newId = (string) Str::uuid();
+                $idMap[$row->account_id] = $newId;
+                $parentNew = $row->parent_account_id
+                    ? ($idMap[$row->parent_account_id] ?? null)
+                    : null;
+
+                Account::create([
+                    'account_id'         => $newId,
+                    'tenant_id'          => $tenantId,
+                    'company_id'         => $targetCompanyId,
+                    'parent_account_id'  => $parentNew,
+                    'account_code'       => $row->account_code,
+                    'name'               => $row->name,
+                    'account_type'       => $row->account_type,
+                    'account_level'      => $row->account_level,
+                    'normal_balance'     => $row->normal_balance,
+                    'is_control_account' => $row->is_control_account,
+                    'is_postable'        => $row->is_postable,
+                    'status'             => $row->status,
+                    'row_version'        => 1,
+                ]);
+                $count++;
+            }
+        });
+
+        return $count;
+    }
+
     protected function isRootAccount(Account $account): bool
     {
         return $account->parent_account_id === null
             || (int) $account->account_level === 1;
     }
 
-    /**
-     * کد در کل درخت tenant یکتا است (بین همه سطوح).
-     */
-    protected function assertCodeUnique(string $code, ?string $exceptAccountId): void
+    protected function assertCodeUnique(string $companyId, string $code, ?string $exceptAccountId): void
     {
-        $q = Account::query()->where('account_code', $code);
+        $q = Account::query()
+            ->where('company_id', $companyId)
+            ->where('account_code', $code);
         if ($exceptAccountId) {
             $q->where('account_id', '!=', $exceptAccountId);
         }
         if ($q->exists()) {
             throw new DomainException(
-                'کد حساب تکراری است؛ کد باید در تمام سطوح یکتا باشد.',
+                'کد حساب تکراری است؛ کد باید در تمام سطوح این شرکت یکتا باشد.',
                 'fin.coa.code_duplicate'
             );
         }
     }
 
-    /**
-     * نام در کل درخت tenant یکتا است (بدون حساسیت به فاصله ابتدا/انتها و حروف).
-     */
-    protected function assertNameUnique(string $name, ?string $exceptAccountId): void
+    protected function assertNameUnique(string $companyId, string $name, ?string $exceptAccountId): void
     {
         $normalized = mb_strtolower(trim($name), 'UTF-8');
         $q = Account::query()
+            ->where('company_id', $companyId)
             ->whereRaw('lower(trim(name)) = ?', [$normalized]);
         if ($exceptAccountId) {
             $q->where('account_id', '!=', $exceptAccountId);
         }
         if ($q->exists()) {
             throw new DomainException(
-                'نام حساب تکراری است؛ نام باید در تمام سطوح یکتا باشد.',
+                'نام حساب تکراری است؛ نام باید در تمام سطوح این شرکت یکتا باشد.',
                 'fin.coa.name_duplicate'
             );
         }
@@ -266,6 +355,7 @@ class ChartOfAccountsService
             ->map(function (Account $a) use ($accounts) {
                 return [
                     'account_id'         => $a->account_id,
+                    'company_id'         => $a->company_id,
                     'account_code'       => $a->account_code,
                     'name'               => $a->name,
                     'account_type'       => $a->account_type,
