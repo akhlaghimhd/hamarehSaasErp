@@ -30,6 +30,8 @@ readonly class UpdateCompanyDTO
         public bool $chartOfAccountsIdProvided = false,
         public ?string $defaultConsolRateType = null,
         public bool $defaultConsolRateTypeProvided = false,
+        public ?string $refCode = null,
+        public bool $refCodeProvided = false,
     ) {}
 
     public static function fromRequest(array $validatedData): self
@@ -41,6 +43,10 @@ readonly class UpdateCompanyDTO
 
         $isPrimary = array_key_exists('is_primary', $validatedData)
             ? (bool) $validatedData['is_primary']
+            : null;
+
+        $ref = isset($validatedData['ref_code']) && $validatedData['ref_code'] !== ''
+            ? strtoupper(trim((string) $validatedData['ref_code']))
             : null;
 
         return new self(
@@ -71,6 +77,8 @@ readonly class UpdateCompanyDTO
                 ? strtoupper((string) $validatedData['default_consol_rate_type'])
                 : null,
             defaultConsolRateTypeProvided: array_key_exists('default_consol_rate_type', $validatedData),
+            refCode: $ref,
+            refCodeProvided: array_key_exists('ref_code', $validatedData),
         );
     }
 }
