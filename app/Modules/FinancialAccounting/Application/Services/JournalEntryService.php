@@ -182,7 +182,7 @@ class JournalEntryService
         if (! empty($filters['status'])) {
             $q->where('status', $filters['status']);
         }
-        $limit = min(100, max(1, (int) ($filters['limit'] ?? 100));
+        $limit = min(100, max(1, (int) ($filters['limit'] ?? 100)));
 
         return $q->limit($limit)->get();
     }
