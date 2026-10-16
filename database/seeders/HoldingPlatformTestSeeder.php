@@ -7,7 +7,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 
 /**
- * Holding platform TEST seeder — base64 parts + runtime patch for scope_name.
+ * Holding platform TEST seeder — base64 parts + runtime schema patches.
  *
  *   docker compose exec app php artisan db:seed --class=HoldingPlatformTestSeeder
  *
@@ -56,14 +56,13 @@ class HoldingPlatformTestSeeder extends Seeder
             return;
         }
 
-        // Runtime patch: tenant_scopes.scope_name is NOT NULL
+        // Patch 1: tenant_scopes.scope_name NOT NULL
         $php = str_replace(
             "if (Schema::hasColumn('tenant_scopes','code')) \$row['code']=\$code;\n        if (Schema::hasColumn('tenant_scopes','name')) \$row['name']=\$code;",
             "if (Schema::hasColumn('tenant_scopes','scope_name')) \$row['scope_name']=\$code;\n        if (Schema::hasColumn('tenant_scopes','code')) \$row['code']=\$code;\n        if (Schema::hasColumn('tenant_scopes','name')) \$row['name']=\$code;\n        if (Schema::hasColumn('tenant_scopes','include_subtree')) \$row['include_subtree']=false;",
             $php
         );
-        // Fallback if formatting differs
-        if (! str_contains($php, "scope_name")) {
+        if (! str_contains($php, "['scope_name']")) {
             $php = preg_replace(
                 "/(\$row = \['scope_id'=>\$id,'tenant_id'=>\$tenantId,'scope_type'=>\$type,'reference_id'=>\$refId,'created_at'=>now\(\),'updated_at'=>now\(\)\];)/",
                 "$1\n        if (Schema::hasColumn('tenant_scopes','scope_name')) \$row['scope_name']=\$code;",
@@ -71,6 +70,13 @@ class HoldingPlatformTestSeeder extends Seeder
                 1
             );
         }
+
+        // Patch 2: user_credentials PK is credential_id (not user_credential_id)
+        $php = str_replace(
+            "if (Schema::hasColumn('user_credentials','user_credential_id')) \$c['user_credential_id']=(string)Str::uuid();",
+            "if (Schema::hasColumn('user_credentials','credential_id')) \$c['credential_id']=(string)Str::uuid();\n            elseif (Schema::hasColumn('user_credentials','user_credential_id')) \$c['user_credential_id']=(string)Str::uuid();",
+            $php
+        );
 
         $php = preg_replace(
             '/class HoldingPlatformTestSeeder extends Seeder/',
