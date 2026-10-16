@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\FinancialAccounting\Controllers\AccountController;
 use App\Modules\FinancialAccounting\Controllers\BankReconciliationController;
 use App\Modules\FinancialAccounting\Controllers\ChequeController;
+use App\Modules\FinancialAccounting\Controllers\CompanyNumberingController;
 use App\Modules\FinancialAccounting\Controllers\ComplianceAlertController;
 use App\Modules\FinancialAccounting\Controllers\FixedAssetController;
 use App\Modules\FinancialAccounting\Controllers\IntercompanyController;
@@ -66,6 +67,13 @@ Route::middleware([
         ->middleware('permission:finance.period.close');
     Route::post('/period-controls/reopen', [PeriodControlController::class, 'reopen'])
         ->middleware('permission:finance.period.reopen');
+
+    Route::get('/company-numbering', [CompanyNumberingController::class, 'show'])
+        ->middleware('permission:finance.period.view');
+    Route::post('/company-numbering/enable-branch-series', [CompanyNumberingController::class, 'enableBranchSeries'])
+        ->middleware('permission:finance.period.close');
+    Route::post('/company-numbering/disable-branch-series', [CompanyNumberingController::class, 'disableBranchSeries'])
+        ->middleware('permission:finance.period.close');
 
     Route::post('/period-close/evaluate', [PeriodCloseController::class, 'evaluate'])
         ->middleware('permission:finance.period.view');
