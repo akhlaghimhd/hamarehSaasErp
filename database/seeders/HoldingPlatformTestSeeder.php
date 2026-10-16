@@ -7,8 +7,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 
 /**
- * Holding platform TEST seeder — plain PHP via base64 parts (no gzip).
- * status column uses smallint 1.
+ * Holding platform TEST seeder — base64 parts, status=1, scope_name set.
  *
  *   docker compose exec app php artisan db:seed --class=HoldingPlatformTestSeeder
  *
@@ -18,17 +17,17 @@ use Illuminate\Database\Seeder;
 class HoldingPlatformTestSeeder extends Seeder
 {
     private const PART_MD5 = [
-        'd58aeca34ee4373d48dcc01ea496bfee',
-        'c0b1c813df862eef9a4633fe346a0bfb',
-        '3d006fc7bf9c4f4f624e6f99a66d5262',
-        'f35a13edbb98fd6ff74d1ae05893449e',
-        '4febb71d3fd85b81aa90f687a8aedc33',
-        'd03f38dc01f8f390da51a53e9ddf6607',
-        '8e1067e9fa02de5e07a3600af7b2208d',
-        'c097ff32aee2cf42a4024541126c4c0a',
-        'c96fb303545b51f865a7cd23b89c9eb4',
-        '9301eddaa26ec66a322af86c74af8317',
-        'cd1b0e4b9b56e04541d45eb1c1991257'
+        'a3d45dee8056250f78d6f8c840a17054',
+        'f51458225a87d44e498ca992a2410e53',
+        'a43fed23329e436f6200a287ab20d852',
+        '71f872e62c49bc4897134c782ebcf7f1',
+        '888e14db3a0ea4adbc7eadc5bfbbc91c',
+        '3d42a451b58756dddf9760b50c0040ea',
+        '5b40148d61b2fe6c1cfe229b6e104760',
+        'd25e2af7c60991b998c598a55a29292c',
+        '9949d7616804af9eb69cb2d91ef3ec5a',
+        '4f45741ac29682be0c863c99344579da',
+        'fe7f59f0349e604e7a4d20f615fa9f19'
     ];
 
     public function run(): void
