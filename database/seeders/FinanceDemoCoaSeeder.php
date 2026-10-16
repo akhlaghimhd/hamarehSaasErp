@@ -12,8 +12,8 @@ use Illuminate\Support\Str;
 
 /**
  * FIN-P0-18 — Idempotent Iran-minimal CoA + default VAT rate for all tenants.
+ * FIN-HOLD-W4 / ADR-FIN-003 L09 — CoA is per company; seed against primary (or each) company.
  * Coding law: child = parent code + sequential digit (1→11→111).
- * Does not invent fiscal periods (Org remains SoT for calendar).
  */
 class FinanceDemoCoaSeeder extends Seeder
 {
@@ -29,12 +29,39 @@ class FinanceDemoCoaSeeder extends Seeder
             TenantContext::getInstance()->setTenantId($tenantId);
             DB::statement("SELECT set_config('app.current_tenant_id', ?, false)", [$tenantId]);
 
-            $this->seedCoa($tenantId);
+            $companyIds = $this->companyIdsForTenant($tenantId);
+            foreach ($companyIds as $companyId) {
+                $this->seedCoa($tenantId, $companyId);
+            }
             $this->seedDefaultVat($tenantId);
         }
     }
 
-    protected function seedCoa(string $tenantId): void
+    /**
+     * Prefer all active companies so multi-company tenants get a tree each.
+     * Fallback: skip tenant if no company yet (onboarding will seed later).
+     *
+     * @return list<string>
+     */
+    protected function companyIdsForTenant(string $tenantId): array
+    {
+        if (! Schema::hasTable('erp_companies')) {
+            return [];
+        }
+
+        $ids = DB::table('erp_companies')
+            ->where('tenant_id', $tenantId)
+            ->whereNull('deleted_at')
+            ->orderByRaw('CASE WHEN is_primary IS TRUE THEN 0 ELSE 1 END')
+            ->orderBy('created_at')
+            ->pluck('company_id')
+            ->map(fn ($id) => (string) $id)
+            ->all();
+
+        return $ids;
+    }
+
+    protected function seedCoa(string $tenantId, string $companyId): void
     {
         // code => [name, type, level, postable, normal_balance, parent_code|null]
         $tree = [
@@ -70,6 +97,7 @@ class FinanceDemoCoaSeeder extends Seeder
 
             $existing = Account::withTrashed()
                 ->where('tenant_id', $tenantId)
+                ->where('company_id', $companyId)
                 ->where('account_code', $code)
                 ->first();
 
@@ -83,6 +111,7 @@ class FinanceDemoCoaSeeder extends Seeder
             $row = Account::create([
                 'account_id'          => (string) Str::uuid(),
                 'tenant_id'           => $tenantId,
+                'company_id'          => $companyId,
                 'parent_account_id'   => $parentId,
                 'account_code'        => $code,
                 'name'                => $name,

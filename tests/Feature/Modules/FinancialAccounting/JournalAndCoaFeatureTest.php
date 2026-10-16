@@ -19,6 +19,7 @@ use Tests\TestCase;
 
 /**
  * FIN-P0-10..14 feature coverage: CoA, period lock, draft/post/reverse.
+ * FIN-HOLD-W4: CoA create requires company_id; service via container (FinanceCompanyScope).
  */
 class JournalAndCoaFeatureTest extends TestCase
 {
@@ -55,8 +56,9 @@ class JournalAndCoaFeatureTest extends TestCase
             'row_version' => 1,
         ]);
 
-        $coa = new ChartOfAccountsService();
+        $coa = app(ChartOfAccountsService::class);
         $this->cash = $coa->create([
+            'company_id'     => $this->companyId,
             'account_code'   => '1101',
             'name'           => 'صندوق',
             'account_type'   => Account::TYPE_ASSET,
@@ -64,6 +66,7 @@ class JournalAndCoaFeatureTest extends TestCase
             'is_postable'    => true,
         ]);
         $this->revenue = $coa->create([
+            'company_id'     => $this->companyId,
             'account_code'   => '4101',
             'name'           => 'درآمد',
             'account_type'   => Account::TYPE_REVENUE,
@@ -75,10 +78,11 @@ class JournalAndCoaFeatureTest extends TestCase
     #[Test]
     public function coa_rejects_duplicate_code_and_delete_with_movement(): void
     {
-        $coa = new ChartOfAccountsService();
+        $coa = app(ChartOfAccountsService::class);
 
         $this->expectException(DomainException::class);
         $coa->create([
+            'company_id'   => $this->companyId,
             'account_code' => '1101',
             'name'         => 'تکراری',
             'account_type' => Account::TYPE_ASSET,
@@ -88,7 +92,7 @@ class JournalAndCoaFeatureTest extends TestCase
     #[Test]
     public function draft_may_be_unbalanced_but_post_requires_balance(): void
     {
-        $svc = new JournalEntryService();
+        $svc = app(JournalEntryService::class);
 
         $draft = $svc->createDraft([
             'ledger_id'     => $this->ledger->ledger_id,
@@ -112,7 +116,7 @@ class JournalAndCoaFeatureTest extends TestCase
     #[Test]
     public function post_and_reverse_happy_path(): void
     {
-        $svc = new JournalEntryService();
+        $svc = app(JournalEntryService::class);
 
         $draft = $svc->createDraft([
             'ledger_id'     => $this->ledger->ledger_id,
@@ -149,10 +153,10 @@ class JournalAndCoaFeatureTest extends TestCase
     #[Test]
     public function hard_closed_period_blocks_post(): void
     {
-        $periodSvc = new FiscalPeriodControlService();
+        $periodSvc = app(FiscalPeriodControlService::class);
         $periodSvc->hardClose($this->companyId, $this->periodId);
 
-        $svc = new JournalEntryService();
+        $svc = app(JournalEntryService::class);
         $draft = $svc->createDraft([
             'ledger_id'     => $this->ledger->ledger_id,
             'company_id'    => $this->companyId,
@@ -171,7 +175,7 @@ class JournalAndCoaFeatureTest extends TestCase
     #[Test]
     public function cannot_delete_account_with_posted_lines(): void
     {
-        $svc = new JournalEntryService();
+        $svc = app(JournalEntryService::class);
         $draft = $svc->createDraft([
             'ledger_id'     => $this->ledger->ledger_id,
             'company_id'    => $this->companyId,
@@ -184,7 +188,7 @@ class JournalAndCoaFeatureTest extends TestCase
         ]);
         $svc->post($draft->journal_entry_id);
 
-        $coa = new ChartOfAccountsService();
+        $coa = app(ChartOfAccountsService::class);
         $this->expectException(DomainException::class);
         $coa->softDelete($this->cash->account_id);
     }
