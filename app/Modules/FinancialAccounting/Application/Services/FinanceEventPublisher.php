@@ -9,13 +9,17 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
- * FIN-P3-06 — Transactional outbox for finance domain events.
+ * FIN-P3-06 + FIN-HOLD-W6/L15 — Transactional outbox for finance domain events.
+ * Sensitive success path: post, reverse, delete (draft soft-delete).
  */
 class FinanceEventPublisher
 {
     public const JOURNAL_POSTED = 'finance.journal.posted.v1';
 
     public const JOURNAL_REVERSED = 'finance.journal.reversed.v1';
+
+    /** Soft-delete of DRAFT journal (FIN-HOLD-W6 L15). */
+    public const JOURNAL_DELETED = 'finance.journal.deleted.v1';
 
     public function publish(
         string $tenantId,
