@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * erp_branches — Organization core
  *
  * P3 plant-grade: branch_kind, parent_branch_id, default_warehouse_id, logistics flags
+ * ref_code: 3-char stable code for document numbering when branch is set on journal
  */
 class Branch extends Model
 {
@@ -46,6 +47,7 @@ class Branch extends Model
         'tenant_id',
         'company_id',
         'code',
+        'ref_code',
         'name',
         'address',
         'branch_kind',
