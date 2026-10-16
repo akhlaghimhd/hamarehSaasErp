@@ -16,6 +16,7 @@ class UpdateCompanyRequest extends FormRequest
     {
         return [
             'code'                      => ['required', 'string', 'max:50'],
+            'ref_code'                  => ['nullable', 'string', 'size:3', 'regex:/^[A-Z0-9]{3}$/'],
             'name'                      => ['required', 'string', 'max:200'],
             'legal_name'                => ['nullable', 'string', 'max:200'],
             'trade_name'                => ['nullable', 'string', 'max:200'],
@@ -37,5 +38,14 @@ class UpdateCompanyRequest extends FormRequest
             'chart_of_accounts_id'      => ['nullable', 'uuid'],
             'default_consol_rate_type'  => ['nullable', 'string', Rule::in(['CURRENT', 'AVERAGE', 'HISTORICAL'])],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('ref_code') && is_string($this->input('ref_code'))) {
+            $this->merge([
+                'ref_code' => strtoupper(trim((string) $this->input('ref_code'))),
+            ]);
+        }
     }
 }
