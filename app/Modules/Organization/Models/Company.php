@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * P0: legal master enrichment
  * P1: group spine (is_primary, parent, entity_kind)
  * P2: financial attrs (base_currency_id, chart_of_accounts_id, default_consol_rate_type)
+ * ref_code: 3-char stable code for document numbering (DR-A01-05-00001)
  *
  * Address/contact: MasterData SoT (Law 5.1).
  * Currency/CoA: logical UUID only — no physical FK across modules.
@@ -59,6 +60,7 @@ class Company extends Model
     protected $fillable = [
         'tenant_id',
         'code',
+        'ref_code',
         'name',
         'legal_name',
         'trade_name',
