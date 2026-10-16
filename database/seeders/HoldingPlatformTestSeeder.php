@@ -20,13 +20,18 @@ class HoldingPlatformTestSeeder extends Seeder
 {
     public function run(): void
     {
-        $b64File = __DIR__.DIRECTORY_SEPARATOR.'HoldingPlatformTestSeeder.gz.b64';
-        if (! is_file($b64File)) {
-            $this->command?->error('Missing HoldingPlatformTestSeeder.gz.b64');
+        $dir = __DIR__;
+        $b64 = '';
+        foreach (['HoldingPlatformTestSeeder.b64.0.txt', 'HoldingPlatformTestSeeder.b64.1.txt'] as $name) {
+            $f = $dir.DIRECTORY_SEPARATOR.$name;
+            if (! is_file($f)) {
+                $this->command?->error('Missing '.$name);
 
-            return;
+                return;
+            }
+            $b64 .= preg_replace('/\s+/', '', (string) file_get_contents($f));
         }
-        $gz = base64_decode(preg_replace('/\s+/', '', (string) file_get_contents($b64File)), true);
+        $gz = base64_decode($b64, true);
         if ($gz === false) {
             $this->command?->error('base64 decode failed');
 
