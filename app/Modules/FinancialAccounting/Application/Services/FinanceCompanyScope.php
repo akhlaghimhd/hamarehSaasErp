@@ -21,6 +21,11 @@ use Illuminate\Support\Str;
  * - Read  → assertCanReadCompany / isGroupWideRead / applyToQuery
  * - Write → assertCanOperateCompany / isGroupWideOperate
  *
+ * Inactive company law (product B, 2026-10-16):
+ * - Login / membership remain independent of company is_active.
+ * - Operate (create/update/post/delete docs) requires company ACTIVE.
+ * - Read of history on inactive company remains allowed (assertCanReadCompany).
+ *
  * FIN-HOLD-W6 / L15: denied operate attempts are written to event_outbox
  * (finance.access.operate_denied.v1) and application log.
  */
@@ -78,6 +83,8 @@ class FinanceCompanyScope
     }
 
     /**
+     * Active companies only for operate pickers (product B).
+     *
      * @return list<string>
      */
     public function allowedCompanyIdsForOperate(): array
@@ -88,7 +95,7 @@ class FinanceCompanyScope
 
         $scoped = $this->holding->actorCompanyIds();
         if ($scoped !== []) {
-            return $scoped;
+            return $this->filterActiveCompanyIds($scoped);
         }
 
         if (! $this->isUnauthenticatedInternalContext()) {
@@ -96,8 +103,11 @@ class FinanceCompanyScope
         }
 
         $primary = $this->resolvePrimaryCompanyId();
+        if ($primary === null) {
+            return [];
+        }
 
-        return $primary !== null ? [$primary] : [];
+        return $this->filterActiveCompanyIds([$primary]);
     }
 
     /**
@@ -139,12 +149,28 @@ class FinanceCompanyScope
             );
         }
 
+        // Product B: inactive company blocks operate for every authenticated actor.
+        if (! $this->isUnauthenticatedInternalContext()) {
+            $this->assertCompanyIsActiveForOperate($companyId);
+        }
+
         if ($this->isGroupWideOperate()) {
             return;
         }
 
         $allowed = $this->allowedCompanyIdsForOperate();
-        if ($allowed === [] || ! in_array($companyId, $allowed, true)) {
+        $scoped = $this->holding->actorCompanyIds();
+
+        if ($scoped !== [] && ! in_array($companyId, $scoped, true)) {
+            $this->recordOperateDenied($companyId, $allowed);
+
+            throw new DomainException(
+                'ثبت یا ویرایش اسناد این شرکت برای شما مجاز نیست.',
+                'fin.company_scope.operate_denied'
+            );
+        }
+
+        if ($scoped === [] && ($allowed === [] || ! in_array($companyId, $allowed, true))) {
             $this->recordOperateDenied($companyId, $allowed);
 
             throw new DomainException(
@@ -160,6 +186,52 @@ class FinanceCompanyScope
     public function assertCanAccessCompany(string $companyId): void
     {
         $this->assertCanReadCompany($companyId);
+    }
+
+    /**
+     * Whether the company is active for operational writes.
+     * Missing / soft-deleted row ⇒ inactive.
+     */
+    public function isCompanyActive(string $companyId): bool
+    {
+        if ($companyId === '') {
+            return false;
+        }
+
+        $tenantId = TenantContext::getInstance()->getTenantId();
+        if (! $tenantId) {
+            $ctx = Context::get('security_context');
+            $tenantId = is_array($ctx) ? ($ctx['tenant_id'] ?? null) : null;
+        }
+
+        $q = DB::table('erp_companies')
+            ->where('company_id', $companyId)
+            ->whereNull('deleted_at');
+
+        if ($tenantId) {
+            $q->where('tenant_id', $tenantId);
+        }
+
+        $row = $q->first(['is_active', 'status']);
+        if (! $row) {
+            return false;
+        }
+
+        if (property_exists($row, 'is_active') || isset($row->is_active)) {
+            $active = $row->is_active;
+            if ($active === false || $active === 0 || $active === '0') {
+                return false;
+            }
+        }
+
+        if (property_exists($row, 'status') || isset($row->status)) {
+            $status = $row->status;
+            if ($status !== null && (int) $status !== 1) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -188,6 +260,54 @@ class FinanceCompanyScope
         $query->whereIn('company_id', $ids);
 
         return $query;
+    }
+
+    protected function assertCompanyIsActiveForOperate(string $companyId): void
+    {
+        if ($this->isCompanyActive($companyId)) {
+            return;
+        }
+
+        $this->recordOperateDenied($companyId, $this->allowedCompanyIdsForOperate());
+
+        throw new DomainException(
+            'شرکت انتخاب‌شده غیرفعال است؛ ثبت یا ویرایش عملیات برای این شرکت مجاز نیست.',
+            'fin.company_scope.company_inactive'
+        );
+    }
+
+    /**
+     * @param  list<string>  $companyIds
+     * @return list<string>
+     */
+    protected function filterActiveCompanyIds(array $companyIds): array
+    {
+        $companyIds = array_values(array_unique(array_filter($companyIds)));
+        if ($companyIds === []) {
+            return [];
+        }
+
+        $tenantId = TenantContext::getInstance()->getTenantId();
+        if (! $tenantId) {
+            $ctx = Context::get('security_context');
+            $tenantId = is_array($ctx) ? ($ctx['tenant_id'] ?? null) : null;
+        }
+
+        $q = DB::table('erp_companies')
+            ->whereIn('company_id', $companyIds)
+            ->whereNull('deleted_at')
+            ->where(function ($w) {
+                $w->where('is_active', true)->orWhere('is_active', 1);
+            })
+            ->where(function ($w) {
+                $w->where('status', 1)->orWhereNull('status');
+            });
+
+        if ($tenantId) {
+            $q->where('tenant_id', $tenantId);
+        }
+
+        return array_values(array_map('strval', $q->pluck('company_id')->all()));
     }
 
     /**
