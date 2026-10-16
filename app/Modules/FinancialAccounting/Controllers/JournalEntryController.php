@@ -18,19 +18,27 @@ class JournalEntryController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $filters = $request->only(['company_id', 'period_id', 'status', 'deleted', 'limit']);
-        $data = $this->service->list($filters);
+        $rows = $this->service->list([
+            'deleted'    => $request->boolean('deleted'),
+            'company_id' => $request->filled('company_id') ? (string) $request->string('company_id') : null,
+            'period_id'  => $request->filled('period_id') ? (string) $request->string('period_id') : null,
+            'status'     => $request->filled('status') ? (string) $request->string('status') : null,
+            'limit'      => (int) $request->input('limit', 100),
+        ]);
 
         return response()->json([
             'status' => 'success',
-            'data'   => $data,
+            'data'   => $rows,
         ]);
     }
 
+    /** Badge counts only — no journal rows (list-page perf). */
     public function summary(Request $request): JsonResponse
     {
-        $filters = $request->only(['company_id', 'period_id']);
-        $data = $this->service->summary($filters);
+        $data = $this->service->statusSummary([
+            'company_id' => $request->filled('company_id') ? (string) $request->string('company_id') : null,
+            'period_id'  => $request->filled('period_id') ? (string) $request->string('period_id') : null,
+        ]);
 
         return response()->json([
             'status' => 'success',
@@ -108,7 +116,7 @@ class JournalEntryController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'پیش‌نویس حذف شد.',
+            'message' => 'پیش‌نویس به سطل حذف منتقل شد.',
         ]);
     }
 
@@ -119,15 +127,14 @@ class JournalEntryController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'پیش‌نویس بازیابی شد.',
+            'message' => 'پیش‌نویس از سطل حذف بازیابی شد.',
             'data'    => $row,
         ]);
     }
 
     public function post(string $journal): JsonResponse
     {
-        $actorId = auth()->id() ? (string) auth()->id() : null;
-        $row = $this->service->post($journal, $actorId);
+        $row = $this->service->post($journal, auth()->id() ? (string) auth()->id() : null);
 
         return response()->json([
             'status'  => 'success',
@@ -142,8 +149,11 @@ class JournalEntryController extends Controller
             'description' => 'nullable|string|max:500',
         ]);
 
-        $actorId = auth()->id() ? (string) auth()->id() : null;
-        $row = $this->service->reverse($journal, $data['description'] ?? null, $actorId);
+        $row = $this->service->reverse(
+            $journal,
+            auth()->id() ? (string) auth()->id() : null,
+            $data['description'] ?? null
+        );
 
         return response()->json([
             'status'  => 'success',
