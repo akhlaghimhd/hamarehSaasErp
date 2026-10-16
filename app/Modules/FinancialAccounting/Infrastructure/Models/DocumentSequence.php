@@ -23,6 +23,7 @@ class DocumentSequence extends Model
     protected $fillable = [
         'tenant_id',
         'company_id',
+        'branch_id',
         'sequence_key',
         'fiscal_year_key',
         'prefix',
