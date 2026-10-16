@@ -9,6 +9,9 @@ use App\Modules\FinancialAccounting\Application\Services\ChartOfAccountsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/**
+ * FIN-HOLD-W4: company_id required on list/create (CoA per company).
+ */
 class AccountController extends Controller
 {
     public function __construct(
@@ -18,11 +21,22 @@ class AccountController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $companyId = (string) $request->query('company_id', '');
+        if ($companyId === '') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'شناسه شرکت الزامی است.',
+                'code'    => 'fin.coa.company_required',
+            ], 422);
+        }
+
         $tree = $request->boolean('tree', true);
 
         return response()->json([
             'status' => 'success',
-            'data'   => $tree ? $this->service->listTree() : $this->service->listFlat(),
+            'data'   => $tree
+                ? $this->service->listTree($companyId)
+                : $this->service->listFlat($companyId),
         ]);
     }
 
@@ -37,6 +51,7 @@ class AccountController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'company_id'         => 'required|uuid',
             'account_code'       => 'required|string|max:50',
             'name'               => 'required|string|max:200',
             'account_type'       => 'required|integer|in:1,2,3,4,5',

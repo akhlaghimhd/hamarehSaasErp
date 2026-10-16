@@ -34,6 +34,7 @@ class Account extends Model
 
     protected $fillable = [
         'tenant_id',
+        'company_id',
         'parent_account_id',
         'account_code',
         'name',
