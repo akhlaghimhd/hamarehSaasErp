@@ -10,19 +10,19 @@ use App\Base\Services\HoldingAccessService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
- * ADR-FIN-003 FIN-HOLD-W1 — Company Scope for FinancialAccounting.
+ * ADR-FIN-003 FIN-HOLD-W1 + W6 — Company Scope for FinancialAccounting.
  *
  * Hard split (FIN-HOLD-L03):
  * - Read  → assertCanReadCompany / isGroupWideRead / applyToQuery
  * - Write → assertCanOperateCompany / isGroupWideOperate
  *
- * Rules:
- * - is_owner is NOT group-wide finance operator (FIN-HOLD-L06).
- * - Group observer may read group-wide; never operate.
- * - Soft SME (≤1 company, no COMPANY scopes) keeps soft read+operate on primary.
- * - No security context (CLI / bare unit tests): group-wide read+operate so internal tests stay practical.
+ * FIN-HOLD-W6 / L15: denied operate attempts are written to event_outbox
+ * (finance.access.operate_denied.v1) and application log.
  */
 class FinanceCompanyScope
 {
@@ -145,6 +145,8 @@ class FinanceCompanyScope
 
         $allowed = $this->allowedCompanyIdsForOperate();
         if ($allowed === [] || ! in_array($companyId, $allowed, true)) {
+            $this->recordOperateDenied($companyId, $allowed);
+
             throw new DomainException(
                 'ثبت یا ویرایش اسناد این شرکت برای شما مجاز نیست.',
                 'fin.company_scope.operate_denied'
@@ -186,6 +188,61 @@ class FinanceCompanyScope
         $query->whereIn('company_id', $ids);
 
         return $query;
+    }
+
+    /**
+     * FIN-HOLD-W6 / L15 — mandatory audit of denied write attempts.
+     *
+     * @param  list<string>  $allowedCompanyIds
+     */
+    protected function recordOperateDenied(string $companyId, array $allowedCompanyIds): void
+    {
+        $ctx = Context::get('security_context');
+        $userId = is_array($ctx) ? (string) ($ctx['user_id'] ?? '') : '';
+        $tenantId = TenantContext::getInstance()->getTenantId()
+            ?? (is_array($ctx) ? ($ctx['tenant_id'] ?? null) : null);
+
+        Log::warning('finance.access.operate_denied', [
+            'tenant_id' => $tenantId,
+            'user_id' => $userId !== '' ? $userId : null,
+            'company_id' => $companyId,
+            'allowed_company_ids' => $allowedCompanyIds,
+            'error_code' => 'fin.company_scope.operate_denied',
+        ]);
+
+        if (! $tenantId) {
+            return;
+        }
+
+        try {
+            if (! Schema::hasTable('event_outbox')) {
+                return;
+            }
+
+            $aggregateId = $userId !== '' ? $userId : $companyId;
+
+            DB::table('event_outbox')->insert([
+                'event_id' => (string) Str::uuid(),
+                'tenant_id' => (string) $tenantId,
+                'aggregate_type' => 'finance.company_scope',
+                'aggregate_id' => $aggregateId,
+                'event_type' => 'finance.access.operate_denied.v1',
+                'payload' => json_encode([
+                    'company_id' => $companyId,
+                    'user_id' => $userId !== '' ? $userId : null,
+                    'allowed_company_ids' => $allowedCompanyIds,
+                    'error_code' => 'fin.company_scope.operate_denied',
+                ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'status' => 1,
+                'retry_count' => 0,
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('event_outbox write failed', [
+                'event_type' => 'finance.access.operate_denied.v1',
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     protected function isUnauthenticatedInternalContext(): bool
