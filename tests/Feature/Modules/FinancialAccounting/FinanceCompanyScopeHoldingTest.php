@@ -23,6 +23,7 @@ use Tests\TestCase;
 
 /**
  * ADR-FIN-003 FIN-HOLD-W1 — read vs operate company scope.
+ * Product B (2026-10-16): inactive company blocks operate; read remains.
  */
 class FinanceCompanyScopeHoldingTest extends TestCase
 {
@@ -331,5 +332,43 @@ class FinanceCompanyScopeHoldingTest extends TestCase
 
         $this->expectException(DomainException::class);
         $scope->assertCanAccessCompany($this->companyB);
+    }
+
+    #[Test]
+    public function inactive_company_blocks_operate_but_allows_read(): void
+    {
+        DB::table('erp_companies')
+            ->where('company_id', $this->companyA)
+            ->update(['is_active' => false, 'status' => 0, 'updated_at' => now()]);
+
+        $this->actAsCompanyScoped($this->companyA);
+        $scope = new FinanceCompanyScope();
+
+        $this->assertFalse($scope->isCompanyActive($this->companyA));
+        $this->assertTrue($scope->isCompanyActive($this->companyB));
+
+        // Read still allowed on scoped inactive company
+        $scope->assertCanReadCompany($this->companyA);
+
+        // Operate denied with inactive-specific code
+        try {
+            $scope->assertCanOperateCompany($this->companyA);
+            $this->fail('Expected DomainException for inactive company operate');
+        } catch (DomainException $e) {
+            $this->assertSame('fin.company_scope.company_inactive', $e->getErrorCode());
+        }
+
+        $this->assertSame([], $scope->allowedCompanyIdsForOperate());
+
+        $svc = new JournalEntryService();
+        $actor = (string) Str::uuid();
+        $this->expectException(DomainException::class);
+        $svc->createDraft([
+            'ledger_id'     => $this->ledgerA->ledger_id,
+            'company_id'    => $this->companyA,
+            'period_id'     => $this->periodId,
+            'document_date' => '2026-06-15',
+            'lines'         => $this->balancedLines(),
+        ], $actor);
     }
 }
