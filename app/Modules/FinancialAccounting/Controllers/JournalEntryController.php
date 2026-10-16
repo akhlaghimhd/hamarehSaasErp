@@ -157,7 +157,7 @@ class JournalEntryController extends Controller
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'سند برگشت زده شد.',
+            'message' => 'سند برگشت صادر شد.',
             'data'    => $row,
         ]);
     }
