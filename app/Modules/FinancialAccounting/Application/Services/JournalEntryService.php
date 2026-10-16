@@ -334,7 +334,7 @@ class JournalEntryService
         });
     }
 
-    protected function assertCanMutateDraft(JournalEntry $entry, ?string $actorId): void
+    protected function assertCanMutateDraft(JournalEntry $entry, ?string $actorId = null): void
     {
         $this->companyScope->assertCanOperateCompany((string) $entry->company_id);
         if ($actorId === null || $actorId === '') {
@@ -420,14 +420,51 @@ class JournalEntryService
             ]);
             $seq = DocumentSequence::query()->where('sequence_id', $seq->sequence_id)->lockForUpdate()->first();
         }
-        $n = (int) $seq->next_number;
-        $seq->next_number = $n + 1;
-        $seq->row_version = ((int) ($seq->row_version ?? 1)) + 1;
-        $seq->save();
+
         $pad = max(4, (int) ($seq->pad_length ?? 6));
         $prefix = (string) ($seq->prefix ?: $defaultPrefix);
 
+        // Align counter with already-used entry/draft numbers (avoids uq_fin_acc_je_entry_number).
+        $maxUsed = $this->maxUsedSequenceNumber($companyId, $prefix, $seqBranchId);
+        $n = max((int) $seq->next_number, $maxUsed + 1);
+        $seq->next_number = $n + 1;
+        $seq->row_version = ((int) ($seq->row_version ?? 1)) + 1;
+        $seq->save();
+
         return $prefix.'-'.str_pad((string) $n, $pad, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Highest numeric suffix already used for prefix on this company (and branch when series is branch-scoped).
+     * Includes soft-deleted rows because unique index still holds them.
+     */
+    protected function maxUsedSequenceNumber(string $companyId, string $prefix, ?string $branchId): int
+    {
+        $pattern = $prefix.'-%';
+        $q = JournalEntry::withTrashed()
+            ->where('company_id', $companyId)
+            ->where(function ($w) use ($pattern) {
+                $w->where('entry_number', 'like', $pattern)
+                    ->orWhere('draft_number', 'like', $pattern);
+            });
+        if ($branchId !== null && $branchId !== '') {
+            $q->where('branch_id', $branchId);
+        }
+
+        $max = 0;
+        foreach ($q->get(['entry_number', 'draft_number']) as $row) {
+            foreach ([(string) ($row->entry_number ?? ''), (string) ($row->draft_number ?? '')] as $num) {
+                if ($num === '' || ! str_starts_with($num, $prefix.'-')) {
+                    continue;
+                }
+                $suffix = substr($num, strlen($prefix) + 1);
+                if (ctype_digit($suffix)) {
+                    $max = max($max, (int) $suffix);
+                }
+            }
+        }
+
+        return $max;
     }
 
     protected function resolveFiscalYearKey(string $periodId, string $documentDate): string
@@ -445,17 +482,20 @@ class JournalEntryService
 
     protected function fiscalYearFromPeriodId(string $periodId): ?string
     {
-        if ($periodId === '' || ! \Illuminate\Support\Facades\Schema::hasTable('fin_fiscal_periods')) {
+        if ($periodId === '') {
             return null;
         }
         $row = DB::table('fin_fiscal_periods')->where('period_id', $periodId)->first();
         if (! $row) {
             return null;
         }
-        foreach (['fiscal_year_key', 'fiscal_year', 'year_label', 'jalali_year'] as $col) {
-            if (isset($row->$col) && (string) $row->$col !== '') {
+        foreach (['fiscal_year', 'year', 'fy_key', 'fiscal_year_key'] as $col) {
+            if (isset($row->$col) && $row->$col !== null && $row->$col !== '') {
                 return (string) $row->$col;
             }
+        }
+        if (isset($row->start_date) && preg_match('/^(\d{4})-(\d{2})-(\d{2})/', (string) $row->start_date, $m)) {
+            return (string) $this->gregorianToJalaliYear((int) $m[1], (int) $m[2], (int) $m[3]);
         }
 
         return null;
@@ -477,22 +517,34 @@ class JournalEntryService
         return $jy;
     }
 
-    protected function assertLedger(string $ledgerId): void
-    {
-        if (! Ledger::where('ledger_id', $ledgerId)->exists()) {
-            throw new DomainException('دفتر کل نامعتبر است.', 'fin.journal.invalid_ledger');
-        }
-    }
-
     protected function resolveLeadingLedgerId(string $companyId): string
     {
-        $ledger = Ledger::query()->where('company_id', $companyId)->where('is_leading', true)->first()
-            ?? Ledger::query()->where('company_id', $companyId)->orderBy('created_at')->first();
+        $ledger = Ledger::query()
+            ->where('company_id', $companyId)
+            ->where('is_leading', true)
+            ->where('status', 1)
+            ->orderBy('code')
+            ->first();
         if (! $ledger) {
-            throw new DomainException('دفتر کل پیش‌فرض برای شرکت یافت نشد.', 'fin.journal.no_ledger');
+            $ledger = Ledger::query()
+                ->where('company_id', $companyId)
+                ->where('status', 1)
+                ->orderBy('code')
+                ->first();
+        }
+        if (! $ledger) {
+            throw new DomainException('دفتر کل پیش‌فرض برای شرکت یافت نشد.', 'fin.journal.ledger_missing');
         }
 
         return (string) $ledger->ledger_id;
+    }
+
+    protected function assertLedger(string $ledgerId): void
+    {
+        $ok = Ledger::query()->where('ledger_id', $ledgerId)->exists();
+        if (! $ok) {
+            throw new DomainException('دفتر کل نامعتبر است.', 'fin.journal.ledger_invalid');
+        }
     }
 
     protected function requireTenantId(): string
