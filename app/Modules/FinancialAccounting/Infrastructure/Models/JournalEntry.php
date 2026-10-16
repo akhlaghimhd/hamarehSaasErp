@@ -33,6 +33,7 @@ class JournalEntry extends Model
         'tenant_id',
         'ledger_id',
         'company_id',
+        'branch_id',
         'period_id',
         'entry_number',
         'draft_number',
