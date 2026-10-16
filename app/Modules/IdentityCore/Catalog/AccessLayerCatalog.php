@@ -3,16 +3,16 @@
 namespace App\Modules\IdentityCore\Catalog;
 
 /**
- * IDORG-T05 / G05 + T08 / G17 — Access layers & role templates (logical).
+ * IDORG-T05 / G05 + T08 / G17 + FIN-HOLD-W5 (ADR-FIN-003 L12).
  *
- * Layers (product law ADR-ID-ORG-004 / ADR-FIN-003):
- * - PLATFORM_ADMIN  : technical owner / tenant security admin pack (not FIN operate-all)
- * - GROUP_READ      : group observer — list/report across granted companies; no mutate
+ * Layers:
+ * - PLATFORM_ADMIN  : technical owner / tenant security admin (not FIN operate-all)
+ * - GROUP_READ      : group observer — list/report; no mutate
  * - COMPANY_OPERATE : write/manage within actor COMPANY scopes only
- * - BRANCH          : reserved for Wave 3 (IDORG-T15); not enforced yet
+ * - BRANCH          : branch-scoped admin (Wave 3)
  *
- * Physical role table stays tenant-wide; ceilings are logical templates + HoldingAccess guards.
- * Permission tagging is by code convention + this catalog (no DB column required for Wave 1).
+ * FIN-HOLD-W5: prefer finance.* codes for FinancialAccounting module;
+ * legacy accounting.* kept for BC with old Accounting module surfaces.
  */
 final class AccessLayerCatalog
 {
@@ -24,10 +24,8 @@ final class AccessLayerCatalog
 
     public const LAYER_BRANCH = 'branch';
 
-    /** Explicit group-observer capability (IDORG-T09). */
     public const PERM_GROUP_OBSERVE = 'identity.group.observe';
 
-    /** Role template codes (DefaultRoleCatalog / seed). */
     public const ROLE_GROUP_OBSERVER = 'group-observer';
 
     public const ROLE_COMPANY_OPERATOR = 'company-operator';
@@ -37,9 +35,6 @@ final class AccessLayerCatalog
     public const ROLE_PLATFORM_ADMIN = 'platform-admin';
 
     /**
-     * Curated pack for is_owner login bootstrap (IDORG-T07 / G16).
-     * Tenant technical admin only — not every operational permission in the catalog.
-     *
      * @return list<string>
      */
     public static function platformAdminPermissionCodes(): array
@@ -65,48 +60,57 @@ final class AccessLayerCatalog
     }
 
     /**
-     * Group observer read pack (IDORG-T06/T09) — no create/update/post.
+     * Group observer — READ only (no create/update/post/delete/execute).
      *
      * @return list<string>
      */
     public static function groupReadPermissionCodes(): array
     {
-        return [
-            self::PERM_GROUP_OBSERVE,
-            'identity.profile.view',
-            'identity.user.view',
-            'identity.role.view',
-            'identity.permission.view',
-            'identity.membership_history.view',
-            'organization.company.view',
-            'organization.branch.view',
-            'organization.department.view',
-            'organization.hierarchy.view',
-            'organization.business_unit.view',
-            'organization.cost_center.view',
-            'organization.ownership.view',
-            'organization.fiscal.view',
-            'accounting.voucher.view',
-            'accounting.account.view',
-        ];
+        return array_values(array_unique(array_merge(
+            [
+                self::PERM_GROUP_OBSERVE,
+                'identity.profile.view',
+                'identity.user.view',
+                'identity.role.view',
+                'identity.permission.view',
+                'identity.membership_history.view',
+                'organization.company.view',
+                'organization.branch.view',
+                'organization.department.view',
+                'organization.hierarchy.view',
+                'organization.business_unit.view',
+                'organization.cost_center.view',
+                'organization.ownership.view',
+                'organization.fiscal.view',
+                // Legacy Accounting module (BC)
+                'accounting.voucher.view',
+                'accounting.account.view',
+            ],
+            self::financeViewPermissionCodes()
+        )));
     }
 
     /**
-     * Company operator template — members + local operate (Scope still limits company).
+     * Company operator — members + local operate (Scope still limits company).
      *
      * @return list<string>
      */
     public static function companyOperatePermissionCodes(): array
     {
-        return [
-            'identity.profile.view', 'identity.profile.update',
-            'identity.user.view', 'identity.user.create', 'identity.user.update',
-            'identity.role.view', 'identity.role.assign',
-            'identity.membership_history.view',
-            'organization.company.view', 'organization.branch.view', 'organization.department.view',
-            'organization.hierarchy.view',
-            'accounting.voucher.view', 'accounting.voucher.post', 'accounting.account.view',
-        ];
+        return array_values(array_unique(array_merge(
+            [
+                'identity.profile.view', 'identity.profile.update',
+                'identity.user.view', 'identity.user.create', 'identity.user.update',
+                'identity.role.view', 'identity.role.assign',
+                'identity.membership_history.view',
+                'organization.company.view', 'organization.branch.view', 'organization.department.view',
+                'organization.hierarchy.view',
+                // Legacy Accounting module (BC)
+                'accounting.voucher.view', 'accounting.voucher.post', 'accounting.account.view',
+            ],
+            self::financeViewPermissionCodes(),
+            self::financeOperatePermissionCodes()
+        )));
     }
 
     /**
@@ -123,6 +127,63 @@ final class AccessLayerCatalog
     }
 
     /**
+     * FinancialAccounting read surface (FIN-HOLD-W5 / L12).
+     *
+     * @return list<string>
+     */
+    public static function financeViewPermissionCodes(): array
+    {
+        return [
+            'finance.coa.view',
+            'finance.journal.view',
+            'finance.period.view',
+            'finance.report.view',
+            'finance.treasury.view',
+            'finance.ar.view',
+            'finance.ap.view',
+            'finance.tax.view',
+            'finance.moodian.view',
+            'finance.compliance.view',
+            'finance.suggest.view',
+            'finance.fa.view',
+            'finance.ic.view',
+            'finance.smart.view',
+        ];
+    }
+
+    /**
+     * FinancialAccounting mutate/execute surface — company operate only.
+     *
+     * @return list<string>
+     */
+    public static function financeOperatePermissionCodes(): array
+    {
+        return [
+            'finance.coa.create', 'finance.coa.update', 'finance.coa.delete',
+            'finance.journal.create', 'finance.journal.update', 'finance.journal.delete',
+            'finance.journal.post', 'finance.journal.reverse',
+            'finance.period.close', 'finance.period.reopen',
+            'finance.treasury.manage', 'finance.treasury.post',
+            'finance.ar.manage', 'finance.ap.manage',
+            'finance.tax.manage',
+            'finance.moodian.submit',
+            'finance.compliance.manage',
+            'finance.suggest.manage', 'finance.suggest.decide',
+            'finance.fa.manage', 'finance.fa.depreciate',
+            'finance.ic.manage',
+            'finance.smart.decide', 'finance.smart.nl',
+        ];
+    }
+
+    /**
+     * True if code is a finance mutate/execute permission (must not appear on group observer).
+     */
+    public static function isFinanceOperatePermission(string $code): bool
+    {
+        return in_array(strtolower(trim($code)), self::financeOperatePermissionCodes(), true);
+    }
+
+    /**
      * Map a permission code to its primary access layer (T08 tagging convention).
      */
     public static function layerForPermissionCode(string $code): string
@@ -131,6 +192,10 @@ final class AccessLayerCatalog
 
         if ($code === self::PERM_GROUP_OBSERVE) {
             return self::LAYER_GROUP_READ;
+        }
+
+        if (self::isFinanceOperatePermission($code)) {
+            return self::LAYER_COMPANY_OPERATE;
         }
 
         if (str_starts_with($code, 'identity.role.')
