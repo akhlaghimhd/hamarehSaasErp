@@ -159,7 +159,6 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         ]);
     }
 
-    /** Tenant owner: group-wide READ only under FIN-HOLD-W1 (not operate-all). */
     protected function actAsOwnerGroupWide(): void
     {
         Context::add('security_context', [
@@ -170,7 +169,6 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         ScopeContext::getInstance()->setScopes([]);
     }
 
-    /** SME: authenticated, no COMPANY scopes → primary only. */
     protected function actAsSmeNoCompanyScope(): void
     {
         Context::add('security_context', [
@@ -347,15 +345,13 @@ class FinanceCompanyScopeHoldingTest extends TestCase
         $this->assertFalse($scope->isCompanyActive($this->companyA));
         $this->assertTrue($scope->isCompanyActive($this->companyB));
 
-        // Read still allowed on scoped inactive company
         $scope->assertCanReadCompany($this->companyA);
 
-        // Operate denied with inactive-specific code
         try {
             $scope->assertCanOperateCompany($this->companyA);
             $this->fail('Expected DomainException for inactive company operate');
         } catch (DomainException $e) {
-            $this->assertSame('fin.company_scope.company_inactive', $e->getErrorCode());
+            $this->assertSame('fin.company_scope.company_inactive', $e->errorCode);
         }
 
         $this->assertSame([], $scope->allowedCompanyIdsForOperate());
