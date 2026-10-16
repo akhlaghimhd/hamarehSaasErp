@@ -218,7 +218,7 @@ class JournalEntryService
         if (! $entry->isDraft()) {
             throw new DomainException('فقط پیش‌نویس قابل ثبت قطعی است.', 'fin.journal.post_only_draft');
         }
-        $this->periodControl->assertPostingAllowed((string) $entry->period_id, (string) $entry->company_id);
+        $this->periodControl->assertPostingAllowed((string) $entry->company_id, (string) $entry->period_id);
 
         return DB::transaction(function () use ($entry, $actorId) {
             $entry = JournalEntry::query()->where('journal_entry_id', $entry->journal_entry_id)->lockForUpdate()->firstOrFail();
