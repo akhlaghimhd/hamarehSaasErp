@@ -116,8 +116,10 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             'row_version' => 1,
         ]);
 
-        $coa = new ChartOfAccountsService();
+        // setUp has empty security_context → internal/unauthenticated path for seed data
+        $coa = new ChartOfAccountsService(new FinanceCompanyScope());
         $this->cash = $coa->create([
+            'company_id'     => $this->companyA,
             'account_code'   => '1101',
             'name'           => 'صندوق',
             'account_type'   => Account::TYPE_ASSET,
@@ -125,6 +127,7 @@ class FinanceCompanyScopeHoldingTest extends TestCase
             'is_postable'    => true,
         ]);
         $this->revenue = $coa->create([
+            'company_id'     => $this->companyA,
             'account_code'   => '4101',
             'name'           => 'درآمد',
             'account_type'   => Account::TYPE_REVENUE,
