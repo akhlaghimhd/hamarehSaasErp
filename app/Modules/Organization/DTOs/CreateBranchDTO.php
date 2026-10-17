@@ -16,10 +16,15 @@ readonly class CreateBranchDTO
         public bool $supportsShipping = false,
         public bool $supportsReceiving = false,
         public bool $isManufacturingSite = false,
+        public ?string $refCode = null,
     ) {}
 
     public static function fromRequest(array $validatedData): self
     {
+        $ref = isset($validatedData['ref_code']) && $validatedData['ref_code'] !== ''
+            ? strtoupper(trim((string) $validatedData['ref_code']))
+            : null;
+
         return new self(
             companyId: $validatedData['company_id'],
             code: $validatedData['code'],
@@ -34,6 +39,7 @@ readonly class CreateBranchDTO
             supportsShipping: (bool) ($validatedData['supports_shipping'] ?? false),
             supportsReceiving: (bool) ($validatedData['supports_receiving'] ?? false),
             isManufacturingSite: (bool) ($validatedData['is_manufacturing_site'] ?? false),
+            refCode: $ref,
         );
     }
 }
