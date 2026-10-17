@@ -13,6 +13,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 /**
  * ID-W3-02 — Request / approve / reject role assignments.
  * Supports GRANT and REVOKE so existing access stays active until revoke is approved.
+ *
+ * Product law: tenant owner (is_owner) MAY approve/reject their own request.
+ * Non-owner requester cannot self-approve (SoD).
  */
 class RoleAssignmentApprovalService
 {
@@ -24,12 +27,7 @@ class RoleAssignmentApprovalService
 
     public function listPending(string $tenantId): Collection
     {
-        // Keep RLS session var aligned with app tenant (FORCE RLS otherwise hides rows).
-        try {
-            DB::statement("SELECT set_config('app.current_tenant_id', ?, true)", [$tenantId]);
-        } catch (\Throwable) {
-            // best-effort
-        }
+        $this->alignTenantRls($tenantId);
 
         return TenantRoleAssignmentRequest::query()
             ->where('tenant_id', $tenantId)
@@ -77,6 +75,8 @@ class RoleAssignmentApprovalService
         ?string $validTo = null,
         string $requestAction = TenantRoleAssignmentRequest::ACTION_GRANT
     ): TenantRoleAssignmentRequest {
+        $this->alignTenantRls($tenantId);
+
         $requestAction = strtoupper($requestAction);
         if (!in_array($requestAction, [
             TenantRoleAssignmentRequest::ACTION_GRANT,
@@ -116,6 +116,8 @@ class RoleAssignmentApprovalService
         return DB::transaction(function () use (
             $tenantId, $userId, $roleId, $requestedBy, $reason, $validFrom, $validTo, $requestAction
         ) {
+            $this->alignTenantRls($tenantId);
+
             $req = TenantRoleAssignmentRequest::create([
                 'request_id'     => (string) Str::uuid(),
                 'tenant_id'      => $tenantId,
@@ -149,6 +151,8 @@ class RoleAssignmentApprovalService
         ?string $reviewNote = null
     ): TenantRoleAssignmentRequest {
         return DB::transaction(function () use ($tenantId, $requestId, $reviewedBy, $reviewNote) {
+            $this->alignTenantRls($tenantId);
+
             $req = TenantRoleAssignmentRequest::query()
                 ->where('tenant_id', $tenantId)
                 ->where('request_id', $requestId)
@@ -163,7 +167,12 @@ class RoleAssignmentApprovalService
                 throw new HttpException(422, 'فقط درخواست‌های در انتظار قابل تأیید هستند.');
             }
 
-            if ($req->requested_by === $reviewedBy && !$this->isTenantOwner($tenantId, $reviewedBy)) {
+            $requestedBy = $req->requested_by !== null ? (string) $req->requested_by : '';
+            $reviewedBy = (string) $reviewedBy;
+
+            // SoD: requester cannot self-approve — EXCEPTION: tenant owner may act both sides
+            // (product law: owner may approve own role-assignment request).
+            if ($requestedBy !== '' && $requestedBy === $reviewedBy && !$this->isTenantOwner($tenantId, $reviewedBy)) {
                 throw new HttpException(422, 'درخواست‌دهنده نمی‌تواند خودش درخواست را تأیید کند.');
             }
 
@@ -239,6 +248,8 @@ class RoleAssignmentApprovalService
         ?string $reviewNote = null
     ): TenantRoleAssignmentRequest {
         return DB::transaction(function () use ($tenantId, $requestId, $reviewedBy, $reviewNote) {
+            $this->alignTenantRls($tenantId);
+
             $req = TenantRoleAssignmentRequest::query()
                 ->where('tenant_id', $tenantId)
                 ->where('request_id', $requestId)
@@ -287,18 +298,53 @@ class RoleAssignmentApprovalService
         ]);
     }
 
+    /**
+     * Align PostgreSQL RLS session var so FORCE RLS policies on tenant_* tables see rows.
+     */
+    private function alignTenantRls(string $tenantId): void
+    {
+        if ($tenantId === '') {
+            return;
+        }
+
+        try {
+            DB::statement("SELECT set_config('app.current_tenant_id', ?, true)", [$tenantId]);
+        } catch (\Throwable) {
+            // best-effort
+        }
+    }
+
+    /**
+     * Tenant owner (is_owner=true) may approve their own pending role-assignment request.
+     */
     protected function isTenantOwner(string $tenantId, string $userId): bool
     {
-        if ($userId === '') {
+        $userId = (string) $userId;
+        $tenantId = (string) $tenantId;
+        if ($userId === '' || $tenantId === '') {
             return false;
         }
 
-        return DB::table('tenant_users')
+        $this->alignTenantRls($tenantId);
+
+        $row = DB::table('tenant_users')
             ->where('tenant_id', $tenantId)
             ->where('user_id', $userId)
-            ->where('is_owner', true)
-            ->where('status', 1)
             ->whereNull('deleted_at')
-            ->exists();
+            ->first(['is_owner', 'status']);
+
+        if (!$row) {
+            return false;
+        }
+
+        $isOwner = $row->is_owner === true
+            || $row->is_owner === 1
+            || $row->is_owner === '1'
+            || $row->is_owner === 't'
+            || $row->is_owner === 'true';
+
+        $active = (int) ($row->status ?? 0) === 1;
+
+        return $isOwner && $active;
     }
 }
