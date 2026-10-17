@@ -20,6 +20,12 @@ class CreateBranchRequest extends FormRequest
                 'company_id' => $this->route('company'),
             ]);
         }
+
+        if ($this->has('ref_code') && is_string($this->input('ref_code'))) {
+            $this->merge([
+                'ref_code' => strtoupper(trim((string) $this->input('ref_code'))),
+            ]);
+        }
     }
 
     public function rules(): array
@@ -27,6 +33,7 @@ class CreateBranchRequest extends FormRequest
         return [
             'company_id'             => ['required', 'uuid'],
             'code'                   => ['required', 'string', 'max:50'],
+            'ref_code'               => ['nullable', 'string', 'size:3', 'regex:/^[A-Z0-9]{3}$/'],
             'name'                   => ['required', 'string', 'max:200'],
             'address'                => ['nullable', 'string'],
             'is_active'              => ['boolean'],
