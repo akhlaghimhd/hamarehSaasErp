@@ -481,8 +481,8 @@ class HoldingAccessService
         }
 
         $tenantId = $this->currentTenantId();
-        $allowedCompanies = $this->actorCompanyIds();
-        $allowedBranches = $this->actorBranchIds();
+        $allowedCompanies = $this->actorCeilingCompanyIds();
+        $allowedBranches = $this->actorCeilingBranchIds();
         if ($allowedCompanies === [] && $allowedBranches === []) {
             throw new RuntimeException('اعطای محدوده خارج از شرکت‌ها/شعب مجاز شما امکان‌پذیر نیست.');
         }
@@ -552,6 +552,56 @@ class HoldingAccessService
 
         if (array_diff($scopeIds, $found) !== []) {
             throw new RuntimeException('یک یا چند محدوده یافت نشد.');
+        }
+    }
+
+    public function actorCeilingCompanyIds(): array
+    {
+        $support = app(\App\Base\Services\HierarchyCeilingSupport::class);
+        if ($this->isIdentityMutateGroupWide()) {
+            return $support->allActiveCompanyIds($this->currentTenantId());
+        }
+        $roots = $this->actorCompanyIds();
+        if ($roots === []) {
+            $branchIds = $this->actorBranchIds();
+            if ($branchIds === []) {
+                return [];
+            }
+            $roots = $support->companyIdsForBranches($this->currentTenantId(), $branchIds);
+        }
+        return $support->companySubtreeIds($this->currentTenantId(), $roots);
+    }
+
+    public function actorCeilingBranchIds(): array
+    {
+        $support = app(\App\Base\Services\HierarchyCeilingSupport::class);
+        if ($this->isIdentityMutateGroupWide()) {
+            return $support->allActiveBranchIds($this->currentTenantId());
+        }
+        return $support->branchesInCeiling(
+            $this->currentTenantId(),
+            $this->actorCeilingCompanyIds(),
+            $this->actorBranchIds()
+        );
+    }
+
+    public function assertTargetHomeWithinCeiling(string $tenantUserId): void
+    {
+        if ($this->isIdentityMutateGroupWide()) {
+            return;
+        }
+        $tenantId = $this->currentTenantId();
+        $home = \Illuminate\Support\Facades\DB::table('tenant_users')
+            ->where('tenant_id', $tenantId)
+            ->where('tenant_user_id', $tenantUserId)
+            ->whereNull('deleted_at')
+            ->value('home_company_id');
+        if ($home === null || $home === '') {
+            return;
+        }
+        $ceiling = $this->actorCeilingCompanyIds();
+        if ($ceiling === [] || !in_array((string) $home, $ceiling, true)) {
+            throw new \RuntimeException('مدیریت این عضو خارج از سقف سلسله‌مراتب شرکت شما مجاز نیست.');
         }
     }
 }
