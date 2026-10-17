@@ -19,10 +19,16 @@ readonly class UpdateBranchDTO
         public ?bool $supportsShipping = null,
         public ?bool $supportsReceiving = null,
         public ?bool $isManufacturingSite = null,
+        public ?string $refCode = null,
+        public bool $refCodeProvided = false,
     ) {}
 
     public static function fromRequest(array $validatedData): self
     {
+        $ref = isset($validatedData['ref_code']) && $validatedData['ref_code'] !== ''
+            ? strtoupper(trim((string) $validatedData['ref_code']))
+            : null;
+
         return new self(
             code: $validatedData['code'],
             name: $validatedData['name'],
@@ -46,6 +52,8 @@ readonly class UpdateBranchDTO
             isManufacturingSite: array_key_exists('is_manufacturing_site', $validatedData)
                 ? (bool) $validatedData['is_manufacturing_site']
                 : null,
+            refCode: $ref,
+            refCodeProvided: array_key_exists('ref_code', $validatedData),
         );
     }
 }
