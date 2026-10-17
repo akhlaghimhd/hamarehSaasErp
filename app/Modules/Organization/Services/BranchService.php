@@ -51,6 +51,10 @@ class BranchService
             throw new Exception('کد شعبه وارد شده برای این شرکت قبلاً ثبت شده است.');
         }
 
+        if ($dto->refCode !== null && $dto->refCode !== '') {
+            $this->assertRefCodeUnique($tenantId, $dto->refCode, null, null);
+        }
+
         $branchKind = $this->normalizeBranchKind($dto->branchKind);
         $this->assertParentValid($tenantId, $dto->companyId, $dto->parentBranchId, null);
 
@@ -58,6 +62,7 @@ class BranchService
             'tenant_id'              => $tenantId,
             'company_id'             => $dto->companyId,
             'code'                   => $dto->code,
+            'ref_code'               => $dto->refCode,
             'name'                   => $dto->name,
             'address'                => $dto->address,
             'branch_kind'            => $branchKind,
@@ -153,6 +158,10 @@ class BranchService
             }
         }
 
+        if ($dto->refCodeProvided && $dto->refCode !== null && $dto->refCode !== '') {
+            $this->assertRefCodeUnique($tenantId, $dto->refCode, null, $branchId);
+        }
+
         $branchKind = $dto->branchKindProvided
             ? $this->normalizeBranchKind($dto->branchKind)
             : $branch->branch_kind;
@@ -170,6 +179,7 @@ class BranchService
         $branch->update([
             'company_id'             => $targetCompanyId,
             'code'                   => $dto->code,
+            'ref_code'               => $dto->refCodeProvided ? $dto->refCode : $branch->ref_code,
             'name'                   => $dto->name,
             'address'                => $dto->address,
             'branch_kind'            => $branchKind,
@@ -288,6 +298,33 @@ class BranchService
         HierarchySyncService::safe(fn (HierarchySyncService $sync) => $sync->syncBranch($branch));
 
         return $branch;
+    }
+
+    /**
+     * ref_code must be unique across companies and branches of the tenant (document numbering).
+     */
+    private function assertRefCodeUnique(
+        string $tenantId,
+        string $refCode,
+        ?string $exceptCompanyId,
+        ?string $exceptBranchId
+    ): void {
+        $ref = strtoupper(trim($refCode));
+        $companyQ = Company::where('tenant_id', $tenantId)->where('ref_code', $ref);
+        if ($exceptCompanyId) {
+            $companyQ->where('company_id', '!=', $exceptCompanyId);
+        }
+        if ($companyQ->exists()) {
+            throw new Exception('کد ارجاع وارد شده قبلاً برای یک شرکت دیگر ثبت شده است.');
+        }
+
+        $branchQ = Branch::where('tenant_id', $tenantId)->where('ref_code', $ref);
+        if ($exceptBranchId) {
+            $branchQ->where('branch_id', '!=', $exceptBranchId);
+        }
+        if ($branchQ->exists()) {
+            throw new Exception('کد ارجاع وارد شده قبلاً برای یک شعبه دیگر ثبت شده است.');
+        }
     }
 
     private function normalizeBranchKind(?string $kind): string
