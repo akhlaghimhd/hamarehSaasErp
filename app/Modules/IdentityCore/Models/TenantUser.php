@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
  *
  * ADR-ID-ORG-003: global holding filter — actors with COMPANY scopes only see
  * memberships in their company circle; owner / no-COMPANY-scope actors unchanged.
+ * ADR-ID-ORG-005: home_company_id membership anchor (L01).
  */
 class TenantUser extends Model
 {
@@ -35,6 +36,7 @@ class TenantUser extends Model
         'user_id',
         'employee_id',
         'is_owner',
+        'home_company_id',
         'status',
         'created_by',
         'updated_by',
@@ -60,7 +62,6 @@ class TenantUser extends Model
             try {
                 app(HoldingAccessService::class)->constrainTenantUsersQuery($builder);
             } catch (\Throwable) {
-                // CLI / missing container: do not block tenant isolation queries
             }
         });
 
@@ -93,7 +94,6 @@ class TenantUser extends Model
                     ]);
                 }
             } catch (\Throwable) {
-                // best-effort; member create must not fail solely on scope attach
             }
         });
     }
