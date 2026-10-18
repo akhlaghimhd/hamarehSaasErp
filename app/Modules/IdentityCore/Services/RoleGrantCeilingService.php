@@ -43,7 +43,8 @@ class RoleGrantCeilingService
 
     public function targetCapacityRank(string $tenantId, string $userId): int
     {
-        $tu = TenantUser::query()
+        // withoutGlobalScopes: holding TenantUser scopes must not hide the target during capacity checks
+        $tu = TenantUser::withoutGlobalScopes()
             ->where('tenant_id', $tenantId)
             ->where('user_id', $userId)
             ->whereNull('deleted_at')
