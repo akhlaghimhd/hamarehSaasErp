@@ -364,6 +364,11 @@ class RoleService
         $toAdd = array_values(array_diff($desired, $existingRoleIds));
         $toRemove = array_values(array_diff($existingRoleIds, $desired));
 
+        // ADR-ID-ORG-006 — hierarchical role grant ceiling (hard block on new grants)
+        if ($toAdd !== []) {
+            app(RoleGrantCeilingService::class)->assertCanGrantRoleIds($tenantId, $dto->userId, $toAdd);
+        }
+
         $requireApproval = app(TenantIdentitySettingsService::class)
             ->requireRoleAssignmentApproval($tenantId);
 
