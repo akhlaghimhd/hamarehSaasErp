@@ -47,6 +47,7 @@ class ScopeService
 
         $scopes = $query->get()->all();
         $scopes = $this->hydrateReferenceIds($scopes);
+        $scopes = $this->filterScopesByActorCeiling($scopes);
 
         return array_map(static function (TenantScope $s): array {
             $row = $s->toArray();
@@ -58,6 +59,65 @@ class ScopeService
 
             return $row;
         }, $scopes);
+    }
+
+    /**
+     * ADR-ID-ORG-005 L02/L03 — company operators only see COMPANY/BRANCH scopes inside hierarchical ceiling.
+     *
+     * @param  list<TenantScope>  $scopes
+     * @return list<TenantScope>
+     */
+    private function filterScopesByActorCeiling(array $scopes): array
+    {
+        if ($scopes === []) {
+            return [];
+        }
+
+        try {
+            $holding = app(HoldingAccessService::class);
+            if ($holding->isGroupWideActor()) {
+                return $scopes;
+            }
+            $allowedCompanies = $holding->actorCeilingCompanyIds();
+            $allowedBranches = $holding->actorCeilingBranchIds();
+        } catch (\Throwable) {
+            return $scopes;
+        }
+
+        $out = [];
+        foreach ($scopes as $s) {
+            $type = strtoupper((string) ($s->scope_type ?? ''));
+            $refs = $s->getAttribute('reference_ids');
+            if (! is_array($refs) || $refs === []) {
+                $rid = (string) ($s->reference_id ?? '');
+                $refs = $rid !== '' ? [$rid] : [];
+            }
+            $refs = array_values(array_unique(array_filter(array_map('strval', $refs))));
+
+            if ($type === 'COMPANY') {
+                if ($allowedCompanies === []) {
+                    continue;
+                }
+                if ($refs === [] || array_diff($refs, $allowedCompanies) !== []) {
+                    continue;
+                }
+                $out[] = $s;
+                continue;
+            }
+
+            if ($type === 'BRANCH') {
+                if ($allowedBranches === []) {
+                    continue;
+                }
+                if ($refs === [] || array_diff($refs, $allowedBranches) !== []) {
+                    continue;
+                }
+                $out[] = $s;
+                continue;
+            }
+        }
+
+        return $out;
     }
 
     public function getScope(string $scopeId): TenantScope
