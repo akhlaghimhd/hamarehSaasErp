@@ -44,10 +44,15 @@ class HoldingAccessSecurityMatrixTest extends TestCase
     protected TenantRole $roleCompanyOp;
     protected TenantRole $roleCompanyUser;
 
+    private static bool $matrixReporterStarted = false;
+
     protected function setUp(): void
     {
         parent::setUp();
-        SecurityMatrixReporter::reset();
+        if (! self::$matrixReporterStarted) {
+            SecurityMatrixReporter::reset();
+            self::$matrixReporterStarted = true;
+        }
 
         $this->tenant = Tenant::factory()->create([
             'tenant_code' => 'HSM_'.substr((string) Str::uuid(), 0, 8),
